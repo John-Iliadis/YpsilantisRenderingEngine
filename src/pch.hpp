@@ -4,6 +4,8 @@
 
 #include <vector>
 #include <array>
+#include <unordered_map>
 #include <iostream>
 #include <format>
 #include <source_location>
+#include <sstream>
