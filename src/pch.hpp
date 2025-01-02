@@ -9,3 +9,5 @@
 #include <format>
 #include <source_location>
 #include <sstream>
+#include <cstdint>
+#include <optional>

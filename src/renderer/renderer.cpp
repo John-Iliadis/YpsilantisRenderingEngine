@@ -7,6 +7,8 @@
 Renderer::Renderer()
 {
     mInstance.create();
+    mPhysicalDevice.create(mInstance);
+    mDevice.create(mPhysicalDevice);
 }
 
 Renderer::~Renderer()

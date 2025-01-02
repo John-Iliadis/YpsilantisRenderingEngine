@@ -2,11 +2,18 @@
 // Created by Gianni on 2/01/2025.
 //
 
-#include "instance.hpp"
+#include "vulkan_instance.hpp"
 
 void VulkanInstance::create()
 {
-    std::vector<const char*> extensions = instanceExtensions();
+    std::vector<const char*> extensions {
+        "VK_KHR_surface",
+        "VK_KHR_win32_surface"
+    };
+
+#ifdef DEBUG_MODE
+    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
 
     VkApplicationInfo applicationInfo {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -79,20 +86,6 @@ void VulkanInstance::destroy()
 #endif
     vkDestroySurfaceKHR(instance, surface, nullptr);
     vkDestroyInstance(instance, nullptr);
-}
-
-std::vector<const char *> VulkanInstance::instanceExtensions()
-{
-    std::vector<const char*> extensions {
-        "VK_KHR_surface",
-        "VK_KHR_win32_surface"
-    };
-
-#ifdef DEBUG_MODE
-    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-#endif
-
-    return extensions;
 }
 
 VkBool32 VKAPI_CALL VulkanInstance::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,

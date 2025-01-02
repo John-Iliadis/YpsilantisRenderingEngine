@@ -25,9 +25,11 @@ add_executable(${PROJECT_NAME}
         src/utils/utils.hpp
         src/input/input.cpp
         src/input/input.hpp
-        src/vk/instance.cpp
-        src/vk/instance.hpp
+        src/vk/vulkan_instance.cpp
+        src/vk/vulkan_instance.hpp
         src/vk/include.hpp
+        src/vk/vulkan_device.cpp
+        src/vk/vulkan_device.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)

@@ -4,6 +4,11 @@
 
 #include "utils.hpp"
 
+void debugLog(const std::string& logMSG)
+{
+    std::cout << "[Debug Log] : "<< logMSG << std::endl;
+}
+
 void check(bool result, const char* msg, std::source_location location)
 {
     if (!result)

@@ -8,7 +8,10 @@
 #include <vulkan/vulkan.h>
 #include "../pch.hpp"
 
+void debugLog(const std::string& logMSG);
+
 void check(bool result, const char* msg, std::source_location location = std::source_location::current());
 void vulkanCheck(VkResult result, const char* msg, std::source_location location = std::source_location::current())
+
 
 #endif //VULKANRENDERINGENGINE_UTILS_HPP

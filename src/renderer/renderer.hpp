@@ -17,6 +17,8 @@ public:
 
 private:
     VulkanInstance mInstance;
+    VulkanPhysicalDevice mPhysicalDevice;
+    VulkanDevice mDevice;
 };
 
 #endif //VULKANRENDERINGENGINE_RENDERER_HPP
