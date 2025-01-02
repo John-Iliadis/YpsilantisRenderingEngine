@@ -14,3 +14,8 @@ void check(bool result, const char* msg, std::source_location location)
         throw std::runtime_error(errorMSG.str());
     }
 }
+
+void vulkanCheck(VkResult result, const char* msg, std::source_location location)
+{
+    check(result == VK_SUCCESS, msg, location);
+}
