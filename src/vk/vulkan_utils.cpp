@@ -86,3 +86,30 @@ void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkCommand
 
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
+
+VkShaderModule createShaderModule(VkDevice device, const std::string& filename)
+{
+    std::ifstream spirv(filename, std::ios::binary | std::ios::ate);
+
+    check(spirv.is_open(), std::format("Failed to open {}", filename).c_str());
+
+    size_t byteCount = spirv.tellg();
+    char* code = new char[byteCount];
+    spirv.seekg(0);
+    spirv.read(code, byteCount);
+
+    VkShaderModule shaderModule;
+
+    VkShaderModuleCreateInfo shaderModuleCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = byteCount,
+        .pCode = reinterpret_cast<uint32_t*>(code)
+    };
+
+    VkResult result = vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
+    vulkanCheck(result, "Failed to create shader module.");
+
+    delete[] code;
+
+    return shaderModule;
+}

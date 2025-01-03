@@ -25,4 +25,6 @@ std::optional<uint32_t> findSuitableMemoryType(VkPhysicalDeviceMemoryProperties 
 VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
 void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkCommandBuffer commandBuffer, VkQueue queue);
 
+VkShaderModule createShaderModule(VkDevice device, const std::string& filename);
+
 #endif //VULKANRENDERINGENGINE_VULKAN_UTILS_HPP

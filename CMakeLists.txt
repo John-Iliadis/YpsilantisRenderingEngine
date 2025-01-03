@@ -36,6 +36,8 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_buffer.hpp
         src/vk/vulkan_utils.cpp
         src/vk/vulkan_utils.hpp
+        src/vk/vulkan_texture.cpp
+        src/vk/vulkan_texture.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)
