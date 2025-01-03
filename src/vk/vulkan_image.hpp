@@ -7,6 +7,8 @@
 
 #include <vulkan/vulkan.h>
 #include "vulkan_render_device.hpp"
+#include "vulkan_utils.hpp"
+#include "vulkan_buffer.hpp"
 
 struct VulkanImage
 {
@@ -15,6 +17,35 @@ struct VulkanImage
     VkDeviceMemory memory;
 };
 
+VulkanImage createImage(const VulkanRenderDevice& renderDevice,
+                        VkImageViewType viewType,
+                        VkFormat format,
+                        uint32_t width, uint32_t height,
+                        VkImageUsageFlags usage,
+                        VkImageAspectFlags aspectMask,
+                        uint32_t mipLevels = 1,
+                        VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT,
+                        uint32_t layerCount = 1,
+                        VkImageCreateFlags flags = 0);
+
+VulkanImage createImage2D(const VulkanRenderDevice& renderDevice,
+                          VkFormat format,
+                          uint32_t width, uint32_t height,
+                          VkImageUsageFlags usage,
+                          VkImageAspectFlags aspectMask,
+                          uint32_t mipLevels = 1,
+                          VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
+
+VulkanImage createImageCube(const VulkanRenderDevice& renderDevice,
+                            VkFormat format,
+                            uint32_t width, uint32_t height,
+                            VkImageUsageFlags usage,
+                            VkImageAspectFlags aspectMask,
+                            uint32_t mipLevels = 1,
+                            VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
+
+void destroyImage(const VulkanRenderDevice& renderDevice, VulkanImage& image);
+
 VkImageView createImageView(const VulkanRenderDevice& renderDevice,
                             VkImage image,
                             VkImageViewType viewType,
@@ -22,5 +53,16 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
                             VkImageAspectFlags aspectFlags,
                             uint32_t mipLevels = 1,
                             uint32_t layerCount = 1);
+
+void transitionImageLayout(const VulkanRenderDevice& renderDevice,
+                           VulkanImage& image,
+                           VkImageLayout oldLayout,
+                           VkImageLayout newLayout,
+                           uint32_t mipLevels = 1);
+
+void copyBufferToImage(const VulkanRenderDevice& renderDevice,
+                       VulkanBuffer& buffer,
+                       VulkanImage& image,
+                       uint32_t width, uint32_t height);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_IMAGE_HPP
