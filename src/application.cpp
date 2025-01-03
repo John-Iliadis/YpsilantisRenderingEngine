@@ -26,6 +26,8 @@ void Application::run()
     {
         glfwPollEvents();
     }
+
+    vkDeviceWaitIdle(mRenderDevice.device);
 }
 
 void Application::initializeGLFW()

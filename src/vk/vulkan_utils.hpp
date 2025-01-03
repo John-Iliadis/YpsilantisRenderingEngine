@@ -22,4 +22,7 @@ std::optional<uint32_t> findSuitableMemoryType(VkPhysicalDeviceMemoryProperties 
                                                uint32_t resourceSupportedMemoryTypes,
                                                VkMemoryPropertyFlags desiredMemoryProperties);
 
+VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
+void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkCommandBuffer commandBuffer, VkQueue queue);
+
 #endif //VULKANRENDERINGENGINE_VULKAN_UTILS_HPP

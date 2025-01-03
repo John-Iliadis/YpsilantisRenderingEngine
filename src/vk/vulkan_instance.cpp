@@ -6,13 +6,13 @@
 
 void VulkanInstance::create()
 {
-    std::vector<const char*> extensions {
+    std::vector<const char*> instanceExtensions {
         "VK_KHR_surface",
         "VK_KHR_win32_surface"
     };
 
 #ifdef DEBUG_MODE
-    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
     VkApplicationInfo applicationInfo {
@@ -26,8 +26,8 @@ void VulkanInstance::create()
     VkInstanceCreateInfo instanceCreateInfo {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &applicationInfo,
-        .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
-        .ppEnabledExtensionNames = extensions.data()
+        .enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size()),
+        .ppEnabledExtensionNames = instanceExtensions.data()
     };
 
 #ifdef DEBUG_MODE

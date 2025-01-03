@@ -20,4 +20,23 @@ VulkanBuffer createBuffer(const VulkanRenderDevice& renderDevice,
                           VkBufferUsageFlags usage,
                           VkMemoryPropertyFlags memoryProperties);
 
+VulkanBuffer createBufferWithStaging(const VulkanRenderDevice& renderDevice,
+                                     VkDeviceSize size,
+                                     VkBufferUsageFlags usage,
+                                     VkMemoryPropertyFlags memoryProperties,
+                                     void* bufferData);
+
+void destroyBuffer(const VulkanRenderDevice& renderDevice, VulkanBuffer& buffer);
+
+void mapBufferMemory(const VulkanRenderDevice& renderDevice,
+                     VulkanBuffer& buffer,
+                     VkDeviceSize offset,
+                     VkDeviceSize size,
+                     void* data);
+
+void copyBuffer(const VulkanRenderDevice& renderDevice,
+                VulkanBuffer& srcBuffer,
+                VulkanBuffer& dstBuffer,
+                VkDeviceSize size);
+
 #endif //VULKANRENDERINGENGINE_VULKAN_BUFFER_HPP
