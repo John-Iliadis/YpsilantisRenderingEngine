@@ -19,17 +19,19 @@ add_executable(${PROJECT_NAME}
         src/pch.cpp
         src/application.cpp
         src/application.hpp
-        src/renderer/renderer.cpp
-        src/renderer/renderer.hpp
-        src/utils/utils.cpp
-        src/utils/utils.hpp
-        src/input/input.cpp
-        src/input/input.hpp
+        src/utils.cpp
+        src/utils.hpp
+        src/input.cpp
+        src/input.hpp
         src/vk/vulkan_instance.cpp
         src/vk/vulkan_instance.hpp
         src/vk/include.hpp
         src/vk/vulkan_device.cpp
         src/vk/vulkan_device.hpp
+        src/vk/vulkan_swapchain.cpp
+        src/vk/vulkan_swapchain.hpp
+        src/vk/vulkan_image.cpp
+        src/vk/vulkan_image.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)

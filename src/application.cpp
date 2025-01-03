@@ -7,10 +7,17 @@
 Application::Application()
 {
     initializeGLFW();
+    mInstance.create();
+    mPhysicalDevice.create(mInstance);
+    mDevice.create(mPhysicalDevice);
+    mSwapchain.create(mWindow, mInstance, mPhysicalDevice, mDevice);
 }
 
 Application::~Application()
 {
+    mSwapchain.destroy(mInstance, mDevice);
+    mDevice.destroy();
+    mInstance.destroy();
     glfwTerminate();
 }
 
@@ -35,21 +42,27 @@ void Application::initializeGLFW()
     mWindow = glfwCreateWindow(sInitialWindowWidth, sInitialWindowHeight, sWindowTitle, nullptr, nullptr);
     check(mWindow, "Failed to create GLFW window.");
 
-    glfwSetKeyCallback(mWindow, [] (GLFWwindow* window, int key, int scancode, int action, int mods)
-    {
-        std::cout << static_cast<char>(key) << '\n';
-        if (action == GLFW_PRESS || action == GLFW_RELEASE)
-            Input::updateKeyState(key, action);
-    });
+    glfwSetKeyCallback(mWindow, keyCallback);
+    glfwSetMouseButtonCallback(mWindow, mouseButtonCallback);
+    glfwSetCursorPosCallback(mWindow, cursorPosCallback);
+}
 
-    glfwSetMouseButtonCallback(mWindow, [] (GLFWwindow* window, int button, int action, int mods)
-    {
-        if (action == GLFW_PRESS || action == GLFW_RELEASE)
-            Input::updateMouseButtonState(button, action);
-    });
+void Application::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
+{
+    if (key == GLFW_KEY_ESCAPE)
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
 
-    glfwSetCursorPosCallback(mWindow, [] (GLFWwindow* window, double x, double y)
-    {
-        Input::updateMousePosition(static_cast<float>(x), static_cast<float>(y));
-    });
+    if (action == GLFW_PRESS || action == GLFW_RELEASE)
+        Input::updateKeyState(key, action);
+}
+
+void Application::mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
+{
+    if (action == GLFW_PRESS || action == GLFW_RELEASE)
+        Input::updateMouseButtonState(button, action);
+}
+
+void Application::cursorPosCallback(GLFWwindow *window, double x, double y)
+{
+    Input::updateMousePosition(static_cast<float>(x), static_cast<float>(y));
 }

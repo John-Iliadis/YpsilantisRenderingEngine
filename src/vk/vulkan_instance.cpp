@@ -71,10 +71,6 @@ void VulkanInstance::create()
                                             &debugMessenger);
     vulkanCheck(result, "Failed to create debug messenger");
 #endif
-
-    // create surface
-    result = glfwCreateWindowSurface(instance, glfwGetCurrentContext(), nullptr, &surface);
-    vulkanCheck(result, "Failed to create surface");
 }
 
 void VulkanInstance::destroy()
@@ -84,7 +80,6 @@ void VulkanInstance::destroy()
     auto vkDestroyDebugUtilsMessengerEXT = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(funcPtr);
     vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 #endif
-    vkDestroySurfaceKHR(instance, surface, nullptr);
     vkDestroyInstance(instance, nullptr);
 }
 

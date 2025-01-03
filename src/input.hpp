@@ -6,7 +6,6 @@
 #define VULKANRENDERINGENGINE_INPUT_HPP
 
 #include <glfw/glfw3.h>
-#include "../pch.hpp"
 
 class Input
 {

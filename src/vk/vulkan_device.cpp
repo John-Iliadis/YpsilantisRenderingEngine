@@ -41,7 +41,7 @@ void VulkanPhysicalDevice::pickPhysicalDevice(const VulkanInstance& instance)
 
     if (!deviceFound)
     {
-        debugLog("Discrete GPU not found. Selecting first GPU found.");
+        debugLog("Discrete GPU not found.");
         physicalDevice = physicalDevices.at(0);
     }
 }
@@ -105,4 +105,9 @@ void VulkanDevice::create(const VulkanPhysicalDevice &physicalDevice)
     vulkanCheck(result, "Failed to create logical device.");
 
     vkGetDeviceQueue(device, physicalDevice.graphicsQueueFamilyIndex, 0, &graphicsQueue);
+}
+
+void VulkanDevice::destroy()
+{
+    vkDestroyDevice(device, nullptr);
 }

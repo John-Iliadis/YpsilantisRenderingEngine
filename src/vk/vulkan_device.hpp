@@ -7,8 +7,7 @@
 
 #include <vulkan/vulkan.h>
 #include "vulkan_instance.hpp"
-#include "../pch.hpp"
-#include "../utils/utils.hpp"
+#include "../utils.hpp"
 
 class VulkanPhysicalDevice
 {
@@ -36,6 +35,7 @@ public:
 
 public:
     void create(const VulkanPhysicalDevice& physicalDevice);
+    void destroy();
 };
 
 #endif //VULKANRENDERINGENGINE_VULKAN_DEVICE_HPP

@@ -7,13 +7,12 @@
 
 #include <glfw/glfw3.h>
 #include <vulkan/vulkan.h>
-#include "../utils/utils.hpp"
+#include "../utils.hpp"
 
 class VulkanInstance
 {
 public:
     VkInstance instance;
-    VkSurfaceKHR surface;
     VkDebugUtilsMessengerEXT debugMessenger;
 
 public:
