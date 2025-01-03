@@ -19,6 +19,7 @@ public:
 
     VkDevice device;
     VkQueue graphicsQueue;
+    VkCommandPool commandPool;
 
     uint32_t graphicsQueueFamilyIndex;
 
@@ -30,6 +31,7 @@ private:
     void pickPhysicalDevice(const VulkanInstance& instance);
     void createLogicalDevice();
     void findQueueFamilyIndices();
+    void createCommandPool();
 };
 
 #endif //VULKANRENDERINGENGINE_VULKAN_RENDER_DEVICE_HPP

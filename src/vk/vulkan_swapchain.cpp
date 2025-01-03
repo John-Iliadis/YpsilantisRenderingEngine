@@ -11,14 +11,11 @@ void VulkanSwapchain::create(GLFWwindow* window,
     createSurface(window, instance);
     createSwapchain(renderDevice);
     createSwapchainImages(renderDevice);
-    createCommandPool(renderDevice);
     createCommandBuffers(renderDevice);
 }
 
 void VulkanSwapchain::destroy(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice)
 {
-    vkDestroyCommandPool(renderDevice.device, commandPool, nullptr);
-
     for (size_t i = 0; i < swapchainImageCount(); ++i)
     {
         vkDestroyImageView(renderDevice.device, imageViews.at(i), nullptr);
@@ -84,33 +81,21 @@ void VulkanSwapchain::createSwapchainImages(const VulkanRenderDevice& renderDevi
         setDebugVulkanObjectName(renderDevice.device,
                                  VK_OBJECT_TYPE_IMAGE_VIEW,
                                  std::format("Swapchain image view {}", i),
-                                 &imageViews.at(i));
+                                 imageViews.at(i));
     }
-}
-
-void VulkanSwapchain::createCommandPool(const VulkanRenderDevice& renderDevice)
-{
-    VkCommandPoolCreateInfo commandPoolCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = renderDevice.graphicsQueueFamilyIndex
-    };
-
-    VkResult result = vkCreateCommandPool(renderDevice.device, &commandPoolCreateInfo, nullptr, &commandPool);
-    vulkanCheck(result, "Failed to create command pool.");
 }
 
 void VulkanSwapchain::createCommandBuffers(const VulkanRenderDevice& renderDevice)
 {
     commandBuffers.resize(swapchainImageCount());
-    
+
     VkCommandBufferAllocateInfo commandBufferAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = commandPool,
+        .commandPool = renderDevice.commandPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = swapchainImageCount()
     };
-    
+
     VkResult result = vkAllocateCommandBuffers(renderDevice.device, &commandBufferAllocateInfo, commandBuffers.data());
     vulkanCheck(result, "Failed to allocate command buffers.");
 

@@ -22,8 +22,6 @@ public:
 
     std::vector<VkImage> images;
     std::vector<VkImageView> imageViews;
-
-    VkCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
 
 public:
@@ -40,7 +38,6 @@ private:
     void createSurface(GLFWwindow* window, const VulkanInstance& instance);
     void createSwapchain(const VulkanRenderDevice& renderDevice);
     void createSwapchainImages(const VulkanRenderDevice& renderDevice);
-    void createCommandPool(const VulkanRenderDevice& renderDevice);
     void createCommandBuffers(const VulkanRenderDevice& renderDevice);
 };
 

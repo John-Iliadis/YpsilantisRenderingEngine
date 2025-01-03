@@ -9,10 +9,12 @@ void VulkanRenderDevice::create(const VulkanInstance &instance)
     pickPhysicalDevice(instance);
     findQueueFamilyIndices();
     createLogicalDevice();
+    createCommandPool();
 }
 
 void VulkanRenderDevice::destroy()
 {
+    vkDestroyCommandPool(device, commandPool, nullptr);
     vkDestroyDevice(device, nullptr);
 }
 
@@ -53,7 +55,7 @@ void VulkanRenderDevice::pickPhysicalDevice(const VulkanInstance &instance)
 
 void VulkanRenderDevice::createLogicalDevice()
 {
-    std::vector<const char*> extensions {
+    std::vector<const char*> deviceExtensions {
         "VK_KHR_swapchain",
         "VK_EXT_descriptor_indexing"
     };
@@ -78,8 +80,8 @@ void VulkanRenderDevice::createLogicalDevice()
         .pNext = &physicalDeviceDescriptorIndexingFeatures,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queueCreateInfo,
-        .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
-        .ppEnabledExtensionNames = extensions.data(),
+        .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
+        .ppEnabledExtensionNames = deviceExtensions.data(),
         .pEnabledFeatures = nullptr
     };
 
@@ -105,4 +107,16 @@ void VulkanRenderDevice::findQueueFamilyIndices()
             break;
         }
     }
+}
+
+void VulkanRenderDevice::createCommandPool()
+{
+    VkCommandPoolCreateInfo commandPoolCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = graphicsQueueFamilyIndex
+    };
+
+    VkResult result = vkCreateCommandPool(device, &commandPoolCreateInfo, nullptr, &commandPool);
+    vulkanCheck(result, "Failed to create command pool.");
 }
