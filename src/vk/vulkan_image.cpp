@@ -4,7 +4,7 @@
 
 #include "vulkan_image.hpp"
 
-VkImageView createImageView(const VulkanDevice& device,
+VkImageView createImageView(const VulkanRenderDevice& renderDevice,
                             VkImage image,
                             VkImageViewType viewType,
                             VkFormat format,
@@ -29,7 +29,7 @@ VkImageView createImageView(const VulkanDevice& device,
         }
     };
 
-    VkResult result = vkCreateImageView(device.device, &imageViewCreateInfo, nullptr, &imageView);
+    VkResult result = vkCreateImageView(renderDevice.device, &imageViewCreateInfo, nullptr, &imageView);
     vulkanCheck(result, "Failed to create image view.");
 
     return imageView;

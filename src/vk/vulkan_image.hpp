@@ -6,7 +6,7 @@
 #define VULKANRENDERINGENGINE_VULKAN_IMAGE_HPP
 
 #include <vulkan/vulkan.h>
-#include "vulkan_device.hpp"
+#include "vulkan_render_device.hpp"
 
 struct VulkanImage
 {
@@ -15,7 +15,7 @@ struct VulkanImage
     VkDeviceMemory memory;
 };
 
-VkImageView createImageView(const VulkanDevice& device,
+VkImageView createImageView(const VulkanRenderDevice& renderDevice,
                             VkImage image,
                             VkImageViewType viewType,
                             VkFormat format,

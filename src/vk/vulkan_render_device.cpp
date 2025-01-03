@@ -2,22 +2,21 @@
 // Created by Gianni on 2/01/2025.
 //
 
-#include "vulkan_device.hpp"
+#include "vulkan_render_device.hpp"
 
-////////////////////////////////////////////////////////////////////////////////////
-/// Vulkan Physical Device
-////////////////////////////////////////////////////////////////////////////////////
-
-void VulkanPhysicalDevice::create(const VulkanInstance& instance)
+void VulkanRenderDevice::create(const VulkanInstance &instance)
 {
     pickPhysicalDevice(instance);
-    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-    vkGetPhysicalDeviceFeatures(physicalDevice, &features);
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
     findQueueFamilyIndices();
+    createLogicalDevice();
 }
 
-void VulkanPhysicalDevice::pickPhysicalDevice(const VulkanInstance& instance)
+void VulkanRenderDevice::destroy()
+{
+    vkDestroyDevice(device, nullptr);
+}
+
+void VulkanRenderDevice::pickPhysicalDevice(const VulkanInstance &instance)
 {
     uint32_t physicalDeviceCount;
     vkEnumeratePhysicalDevices(instance.instance, &physicalDeviceCount, nullptr);
@@ -44,32 +43,15 @@ void VulkanPhysicalDevice::pickPhysicalDevice(const VulkanInstance& instance)
         debugLog("Discrete GPU not found.");
         physicalDevice = physicalDevices.at(0);
     }
+
+    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+    vkGetPhysicalDeviceFeatures(physicalDevice, &features);
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
+
+    debugLog(std::format("Selected GPU: {}.", properties.deviceName));
 }
 
-void VulkanPhysicalDevice::findQueueFamilyIndices()
-{
-    uint32_t queueFamilyPropertyCount;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyPropertyCount, nullptr);
-
-    std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyPropertyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyPropertyCount, queueFamilyProperties.data());
-
-    for (uint32_t i = 0; i < queueFamilyProperties.size(); ++i)
-    {
-        if (queueFamilyProperties.at(i).queueFlags & VK_QUEUE_GRAPHICS_BIT)
-        {
-            graphicsQueueFamilyIndex = i;
-            break;
-        }
-    }
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////
-/// Vulkan Logical Device
-////////////////////////////////////////////////////////////////////////////////////
-
-void VulkanDevice::create(const VulkanPhysicalDevice &physicalDevice)
+void VulkanRenderDevice::createLogicalDevice()
 {
     std::vector<const char*> extensions {
         "VK_KHR_swapchain",
@@ -86,7 +68,7 @@ void VulkanDevice::create(const VulkanPhysicalDevice &physicalDevice)
     float queuePriority = 1.f;
     VkDeviceQueueCreateInfo queueCreateInfo {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueFamilyIndex = physicalDevice.graphicsQueueFamilyIndex,
+        .queueFamilyIndex = graphicsQueueFamilyIndex,
         .queueCount = 1,
         .pQueuePriorities = &queuePriority
     };
@@ -101,13 +83,26 @@ void VulkanDevice::create(const VulkanPhysicalDevice &physicalDevice)
         .pEnabledFeatures = nullptr
     };
 
-    VkResult result = vkCreateDevice(physicalDevice.physicalDevice, &deviceCreateInfo, nullptr, &device);
+    VkResult result = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
     vulkanCheck(result, "Failed to create logical device.");
 
-    vkGetDeviceQueue(device, physicalDevice.graphicsQueueFamilyIndex, 0, &graphicsQueue);
+    vkGetDeviceQueue(device, graphicsQueueFamilyIndex, 0, &graphicsQueue);
 }
 
-void VulkanDevice::destroy()
+void VulkanRenderDevice::findQueueFamilyIndices()
 {
-    vkDestroyDevice(device, nullptr);
+    uint32_t queueFamilyPropertyCount;
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyPropertyCount, nullptr);
+
+    std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyPropertyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyPropertyCount, queueFamilyProperties.data());
+
+    for (uint32_t i = 0; i < queueFamilyProperties.size(); ++i)
+    {
+        if (queueFamilyProperties.at(i).queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            graphicsQueueFamilyIndex = i;
+            break;
+        }
+    }
 }

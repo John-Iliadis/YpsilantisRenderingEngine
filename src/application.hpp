@@ -27,8 +27,7 @@ private:
 private:
     GLFWwindow* mWindow;
     VulkanInstance mInstance;
-    VulkanPhysicalDevice mPhysicalDevice;
-    VulkanDevice mDevice;
+    VulkanRenderDevice mRenderDevice;
     VulkanSwapchain mSwapchain;
 };
 

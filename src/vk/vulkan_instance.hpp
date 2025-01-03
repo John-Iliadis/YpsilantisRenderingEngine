@@ -7,7 +7,7 @@
 
 #include <glfw/glfw3.h>
 #include <vulkan/vulkan.h>
-#include "../utils.hpp"
+#include "vulkan_utils.hpp"
 
 class VulkanInstance
 {

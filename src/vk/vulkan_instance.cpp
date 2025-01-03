@@ -70,6 +70,9 @@ void VulkanInstance::create()
                                             nullptr,
                                             &debugMessenger);
     vulkanCheck(result, "Failed to create debug messenger");
+
+    // load debug utils function pointers
+    loadDebugUtilsFunctionPointers(instance);
 #endif
 }
 

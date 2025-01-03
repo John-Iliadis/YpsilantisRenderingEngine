@@ -26,12 +26,16 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_instance.cpp
         src/vk/vulkan_instance.hpp
         src/vk/include.hpp
-        src/vk/vulkan_device.cpp
-        src/vk/vulkan_device.hpp
+        src/vk/vulkan_render_device.cpp
+        src/vk/vulkan_render_device.hpp
         src/vk/vulkan_swapchain.cpp
         src/vk/vulkan_swapchain.hpp
         src/vk/vulkan_image.cpp
         src/vk/vulkan_image.hpp
+        src/vk/vulkan_buffer.cpp
+        src/vk/vulkan_buffer.hpp
+        src/vk/vulkan_utils.cpp
+        src/vk/vulkan_utils.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)

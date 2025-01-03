@@ -6,26 +6,25 @@
 
 void VulkanSwapchain::create(GLFWwindow* window,
                              const VulkanInstance& instance,
-                             const VulkanPhysicalDevice& physicalDevice,
-                             const VulkanDevice& device)
+                             const VulkanRenderDevice& renderDevice)
 {
     createSurface(window, instance);
-    createSwapchain(physicalDevice, device);
-    createSwapchainImages(device);
-    createCommandPool(device, physicalDevice.graphicsQueueFamilyIndex);
-    createCommandBuffers(device);
+    createSwapchain(renderDevice);
+    createSwapchainImages(renderDevice);
+    createCommandPool(renderDevice);
+    createCommandBuffers(renderDevice);
 }
 
-void VulkanSwapchain::destroy(const VulkanInstance &instance, const VulkanDevice &device)
+void VulkanSwapchain::destroy(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice)
 {
-    vkDestroyCommandPool(device.device, commandPool, nullptr);
+    vkDestroyCommandPool(renderDevice.device, commandPool, nullptr);
 
     for (size_t i = 0; i < swapchainImageCount(); ++i)
     {
-        vkDestroyImageView(device.device, imageViews.at(i), nullptr);
+        vkDestroyImageView(renderDevice.device, imageViews.at(i), nullptr);
     }
 
-    vkDestroySwapchainKHR(device.device, swapchain, nullptr);
+    vkDestroySwapchainKHR(renderDevice.device, swapchain, nullptr);
     vkDestroySurfaceKHR(instance.instance, surface, nullptr);
 }
 
@@ -35,10 +34,10 @@ void VulkanSwapchain::createSurface(GLFWwindow *window, const VulkanInstance &in
     vulkanCheck(result, "Failed to create Vulkan surface.");
 }
 
-void VulkanSwapchain::createSwapchain(const VulkanPhysicalDevice& physicalDevice, const VulkanDevice& device)
+void VulkanSwapchain::createSwapchain(const VulkanRenderDevice& renderDevice)
 {
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice.physicalDevice, surface, &surfaceCapabilities);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(renderDevice.physicalDevice, surface, &surfaceCapabilities);
 
     format = VK_FORMAT_R8G8B8A8_UNORM;
     extent = surfaceCapabilities.currentExtent;
@@ -62,46 +61,46 @@ void VulkanSwapchain::createSwapchain(const VulkanPhysicalDevice& physicalDevice
         .oldSwapchain = VK_NULL_HANDLE
     };
 
-    VkResult result = vkCreateSwapchainKHR(device.device, &swapchainCreateInfoKhr, nullptr, &swapchain);
+    VkResult result = vkCreateSwapchainKHR(renderDevice.device, &swapchainCreateInfoKhr, nullptr, &swapchain);
     vulkanCheck(result, "Failed to create swapchain.");
 }
 
-void VulkanSwapchain::createSwapchainImages(const VulkanDevice &device)
+void VulkanSwapchain::createSwapchainImages(const VulkanRenderDevice& renderDevice)
 {
     images.resize(swapchainImageCount());
     imageViews.resize(swapchainImageCount());
 
     uint32_t imgCount = swapchainImageCount();
-    vkGetSwapchainImagesKHR(device.device, swapchain, &imgCount, images.data());
+    vkGetSwapchainImagesKHR(renderDevice.device, swapchain, &imgCount, images.data());
 
     for (size_t i = 0; i < swapchainImageCount(); ++i)
     {
-        imageViews.at(i) = createImageView(device,
+        imageViews.at(i) = createImageView(renderDevice,
                                            images.at(i),
                                            VK_IMAGE_VIEW_TYPE_2D,
                                            format,
                                            VK_IMAGE_ASPECT_COLOR_BIT);
 
-        setDebugVulkanObjectName(device.device,
+        setDebugVulkanObjectName(renderDevice.device,
                                  VK_OBJECT_TYPE_IMAGE_VIEW,
                                  std::format("Swapchain image view {}", i),
                                  &imageViews.at(i));
     }
 }
 
-void VulkanSwapchain::createCommandPool(const VulkanDevice &device, uint32_t graphicsQueueFamilyIndex)
+void VulkanSwapchain::createCommandPool(const VulkanRenderDevice& renderDevice)
 {
     VkCommandPoolCreateInfo commandPoolCreateInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = graphicsQueueFamilyIndex
+        .queueFamilyIndex = renderDevice.graphicsQueueFamilyIndex
     };
 
-    VkResult result = vkCreateCommandPool(device.device, &commandPoolCreateInfo, nullptr, &commandPool);
+    VkResult result = vkCreateCommandPool(renderDevice.device, &commandPoolCreateInfo, nullptr, &commandPool);
     vulkanCheck(result, "Failed to create command pool.");
 }
 
-void VulkanSwapchain::createCommandBuffers(const VulkanDevice &device)
+void VulkanSwapchain::createCommandBuffers(const VulkanRenderDevice& renderDevice)
 {
     commandBuffers.resize(swapchainImageCount());
     
@@ -112,12 +111,12 @@ void VulkanSwapchain::createCommandBuffers(const VulkanDevice &device)
         .commandBufferCount = swapchainImageCount()
     };
     
-    VkResult result = vkAllocateCommandBuffers(device.device, &commandBufferAllocateInfo, commandBuffers.data());
+    VkResult result = vkAllocateCommandBuffers(renderDevice.device, &commandBufferAllocateInfo, commandBuffers.data());
     vulkanCheck(result, "Failed to allocate command buffers.");
 
     for (uint32_t i = 0; i < swapchainImageCount(); ++i)
     {
-        setDebugVulkanObjectName(device.device,
+        setDebugVulkanObjectName(renderDevice.device,
                                  VK_OBJECT_TYPE_COMMAND_BUFFER,
                                  std::format("Swapchain command buffer {}", i),
                                  commandBuffers.at(i));

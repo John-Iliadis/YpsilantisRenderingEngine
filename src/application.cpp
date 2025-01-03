@@ -8,15 +8,14 @@ Application::Application()
 {
     initializeGLFW();
     mInstance.create();
-    mPhysicalDevice.create(mInstance);
-    mDevice.create(mPhysicalDevice);
-    mSwapchain.create(mWindow, mInstance, mPhysicalDevice, mDevice);
+    mRenderDevice.create(mInstance);
+    mSwapchain.create(mWindow, mInstance, mRenderDevice);
 }
 
 Application::~Application()
 {
-    mSwapchain.destroy(mInstance, mDevice);
-    mDevice.destroy();
+    mSwapchain.destroy(mInstance, mRenderDevice);
+    mRenderDevice.destroy();
     mInstance.destroy();
     glfwTerminate();
 }
