@@ -24,7 +24,7 @@ bool Input::mouseButtonReleased(int button)
     return mMouseData.contains(button) && mMouseData.at(button) == GLFW_RELEASE;
 }
 
-std::pair<float, float> Input::mousePosition()
+glm::vec2 Input::mousePosition()
 {
     return mMousePosition;
 }

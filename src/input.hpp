@@ -6,6 +6,7 @@
 #define VULKANRENDERINGENGINE_INPUT_HPP
 
 #include <glfw/glfw3.h>
+#include <glm/glm.hpp>
 
 class Input
 {
@@ -15,7 +16,7 @@ public:
 
     static bool mouseButtonPressed(int button);
     static bool mouseButtonReleased(int button);
-    static std::pair<float, float> mousePosition();
+    static glm::vec2 mousePosition();
 
     static void updateKeyState(int key, int state);
     static void updateMouseButtonState(int button, int state);
@@ -24,7 +25,7 @@ public:
 private:
     inline static std::unordered_map<int, int> mKeyData;
     inline static std::unordered_map<int, int> mMouseData;
-    inline static std::pair<float, float> mMousePosition;
+    inline static glm::vec2 mMousePosition;
 };
 
 #endif //VULKANRENDERINGENGINE_INPUT_HPP
