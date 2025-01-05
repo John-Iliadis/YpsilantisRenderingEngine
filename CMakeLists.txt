@@ -38,31 +38,46 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_utils.hpp
         src/vk/vulkan_texture.cpp
         src/vk/vulkan_texture.hpp
+        src/camera/camera.cpp
+        src/camera/camera.hpp
+        src/renderer/vertices.hpp
+        src/renderer/renderer.cpp
+        src/renderer/renderer.hpp
+        src/renderer/cube_renderer.cpp
+        src/renderer/cube_renderer.hpp
+        src/vk/vulkan_shader.cpp
+        src/vk/vulkan_shader.hpp
+        src/vk/vulkan_descriptor.cpp
+        src/vk/vulkan_descriptor.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES DEBUG_POSTFIX -d)
 
-find_package(Vulkan REQUIRED)
+find_package(Vulkan COMPONENTS shaderc_combined REQUIRED)
 message(STATUS "Vulkan include directory: ${Vulkan_INCLUDE_DIR}")
 message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")
+message(STATUS "Shaderc libs")
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${Vulkan_INCLUDE_DIR}
-    ${INCLUDE_DIRS}
+        ${Vulkan_INCLUDE_DIR}
+        ${INCLUDE_DIRS}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    ${Vulkan_LIBRARIES}
-    ${LIBS}
+        ${Vulkan_LIBRARIES}
+        "C:/VulkanSDK/1.3.283.0/Lib/shaderc_shared.lib" # todo: remove absolute path
+        ${LIBS}
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    GLFW_INCLUDE_VULKAN
-    STB_IMAGE_IMPLEMENTATION
-    GLM_FORCE_DEPTH_ZERO_TO_ONE
-    GLM_FORCE_RADIANS
-    GLM_FORCE_LEFT_HANDED
-    $<$<CONFIG:Debug>:DEBUG_MODE>
+        GLFW_INCLUDE_VULKAN
+        STB_IMAGE_IMPLEMENTATION
+        GLM_FORCE_DEPTH_ZERO_TO_ONE
+        GLM_FORCE_RADIANS
+        GLM_FORCE_LEFT_HANDED
+        $<$<CONFIG:Debug>:DEBUG_MODE>
 )
+
+target_link_options(${PROJECT_NAME} PRIVATE -static)
