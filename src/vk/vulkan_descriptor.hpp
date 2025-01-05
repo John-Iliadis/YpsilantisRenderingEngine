@@ -18,9 +18,9 @@ struct DescriptorInfo
 struct BufferAttachment
 {
     DescriptorInfo descriptorInfo;
-    VulkanBuffer buffer;
+    VkBuffer buffer;
     uint32_t offset;
-    uint32_t size;
+    uint32_t range;
 };
 
 struct TextureAttachment
@@ -39,12 +39,12 @@ struct DescriptorSetInfo
 {
     std::vector<BufferAttachment> buffers;
     std::vector<TextureAttachment> textures;
-    std::vector<TextureArrayAttachment> textureArray;
+    std::vector<TextureArrayAttachment> textureArrays;
 };
 
 BufferAttachment createBufferAttachment(VkDescriptorType type,
                                         VkShaderStageFlags shaderStageFlags,
-                                        const VulkanBuffer& buffer,
+                                        VkBuffer buffer,
                                         uint32_t offset, uint32_t size);
 
 TextureAttachment createTextureAttachment(VkDescriptorType type,
@@ -61,6 +61,12 @@ VkDescriptorPool createDescriptorPool(const VulkanRenderDevice& renderDevice,
                                       uint32_t storageBufferCount,
                                       uint32_t inputAttachmentCount,
                                       uint32_t maxSets);
+
+void createDescriptorSet(const VulkanRenderDevice& renderDevice,
+                         const DescriptorSetInfo& descriptorSetInfo,
+                         VkDescriptorPool descriptorPool,
+                         VkDescriptorSetLayout& outDescriptorSetLayout,
+                         VkDescriptorSet& outDescriptorSet);
 
 VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count);
 

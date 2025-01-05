@@ -9,3 +9,4 @@
 #include "vulkan_image.hpp"
 #include "vulkan_shader.hpp"
 #include "vulkan_descriptor.hpp"
+#include "vulkan_pipeline.hpp"

@@ -49,6 +49,8 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_shader.hpp
         src/vk/vulkan_descriptor.cpp
         src/vk/vulkan_descriptor.hpp
+        src/vk/vulkan_pipeline.cpp
+        src/vk/vulkan_pipeline.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)
