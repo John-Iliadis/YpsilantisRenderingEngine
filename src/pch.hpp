@@ -5,6 +5,7 @@
 #include <vector>
 #include <array>
 #include <unordered_map>
+#include <algorithm>
 #include <iostream>
 #include <format>
 #include <source_location>

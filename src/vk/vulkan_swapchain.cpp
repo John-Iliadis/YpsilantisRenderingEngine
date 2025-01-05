@@ -108,7 +108,7 @@ void VulkanSwapchain::createCommandBuffers(const VulkanRenderDevice& renderDevic
     }
 }
 
-constexpr uint32_t VulkanSwapchain::swapchainImageCount()
+uint32_t VulkanSwapchain::swapchainImageCount()
 {
     return 3;
 }

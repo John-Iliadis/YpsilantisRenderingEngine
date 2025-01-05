@@ -32,7 +32,7 @@ public:
 
     // todo: resize()
 
-    static constexpr uint32_t swapchainImageCount();
+    static uint32_t swapchainImageCount();
 
 private:
     void createSurface(GLFWwindow* window, const VulkanInstance& instance);
