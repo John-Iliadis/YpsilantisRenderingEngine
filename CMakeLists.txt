@@ -51,6 +51,7 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_descriptor.hpp
         src/vk/vulkan_pipeline.cpp
         src/vk/vulkan_pipeline.hpp
+        src/vk/vulkan_function_pointers.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)
@@ -81,7 +82,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
         GLM_FORCE_DEPTH_ZERO_TO_ONE
         GLM_FORCE_RADIANS
         GLM_FORCE_LEFT_HANDED
-        SHADER_PATH_DEBUG
 )
 
 target_link_options(${PROJECT_NAME} PRIVATE -static)

@@ -28,8 +28,8 @@ private:
     shaderc_shader_kind getShaderKind(const std::string& shaderPath);
 
 private:
-    VkShaderModule mShaderModule;
     VkDevice mDevice;
+    VkShaderModule mShaderModule;
 };
 
 #endif //VULKANRENDERINGENGINE_VULKAN_SHADER_HPP

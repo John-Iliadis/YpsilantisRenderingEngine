@@ -10,3 +10,4 @@
 #include "vulkan_shader.hpp"
 #include "vulkan_descriptor.hpp"
 #include "vulkan_pipeline.hpp"
+#include "vulkan_function_pointers.hpp"

@@ -6,16 +6,11 @@
 #define VULKANRENDERINGENGINE_VULKAN_UTILS_HPP
 
 #include <vulkan/vulkan.h>
+#include "vulkan_function_pointers.hpp"
 #include "../utils.hpp"
-
-inline PFN_vkSetDebugUtilsObjectNameEXT pfnSetDebugUtilsObjectNameEXT;
-inline PFN_vkCmdBeginDebugUtilsLabelEXT pfnCmdBeginDebugUtilsLabelEXT;
-inline PFN_vkCmdEndDebugUtilsLabelEXT pfnCmdEndDebugUtilsLabelEXT;
-inline PFN_vkCmdInsertDebugUtilsLabelEXT pfnCmdInsertDebugUtilsLabelEXT;
 
 void vulkanCheck(VkResult result, const char* msg, std::source_location location = std::source_location::current());
 
-void loadDebugUtilsFunctionPointers(VkInstance instance);
 void setDebugVulkanObjectName(VkDevice device, VkObjectType type, const std::string& name, const void* handle);
 
 std::optional<uint32_t> findSuitableMemoryType(VkPhysicalDeviceMemoryProperties memoryProperties,

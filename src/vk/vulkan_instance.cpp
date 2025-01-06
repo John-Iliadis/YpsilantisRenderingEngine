@@ -12,7 +12,7 @@ void VulkanInstance::create()
     };
 
 #ifdef DEBUG_MODE
-    instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    instanceExtensions.push_back("VK_EXT_debug_utils");
 #endif
 
     VkApplicationInfo applicationInfo {
@@ -60,28 +60,22 @@ void VulkanInstance::create()
     VkResult result = vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
     vulkanCheck(result, "Failed to create Vulkan instance");
 
+    loadExtFunctionsPointers(instance);
+
 #ifdef DEBUG_MODE
     // create the debug messenger
-    auto funcPtr = vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    auto vkCreateDebugUtilsMessengerEXT = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(funcPtr);
-
-    result = vkCreateDebugUtilsMessengerEXT(instance,
-                                            &debugUtilsMessengerCreateInfo,
-                                            nullptr,
-                                            &debugMessenger);
+    result = pfnCreateDebugUtilsMessengerEXT(instance,
+                                             &debugUtilsMessengerCreateInfo,
+                                             nullptr,
+                                             &debugMessenger);
     vulkanCheck(result, "Failed to create debug messenger");
-
-    // load debug utils function pointers
-    loadDebugUtilsFunctionPointers(instance);
 #endif
 }
 
 void VulkanInstance::destroy()
 {
 #ifdef DEBUG_MODE
-    auto funcPtr = vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    auto vkDestroyDebugUtilsMessengerEXT = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(funcPtr);
-    vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+    pfnDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 #endif
     vkDestroyInstance(instance, nullptr);
 }
