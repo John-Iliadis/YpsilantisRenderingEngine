@@ -60,7 +60,6 @@ set_target_properties(${PROJECT_NAME} PROPERTIES DEBUG_POSTFIX -d)
 find_package(Vulkan COMPONENTS shaderc_combined REQUIRED)
 message(STATUS "Vulkan include directory: ${Vulkan_INCLUDE_DIR}")
 message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")
-message(STATUS "Shaderc libs")
 
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${Vulkan_INCLUDE_DIR}
@@ -74,12 +73,15 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
+        $<$<CONFIG:Debug>:DEBUG_MODE>
+        $<$<CONFIG:Debug>:SHADER_PATH=\"${CMAKE_SOURCE_DIR}/shaders/\">
+        $<$<CONFIG:Release>:SHADER_PATH=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/\">
         GLFW_INCLUDE_VULKAN
         STB_IMAGE_IMPLEMENTATION
         GLM_FORCE_DEPTH_ZERO_TO_ONE
         GLM_FORCE_RADIANS
         GLM_FORCE_LEFT_HANDED
-        $<$<CONFIG:Debug>:DEBUG_MODE>
+        SHADER_PATH_DEBUG
 )
 
 target_link_options(${PROJECT_NAME} PRIVATE -static)

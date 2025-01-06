@@ -85,7 +85,7 @@ void createDescriptorSet(const VulkanRenderDevice& renderDevice,
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     std::vector<VkDescriptorBufferInfo> bufferInfos;
     std::vector<VkDescriptorImageInfo> imageInfos;
-    std::vector<std::vector<VkDescriptorImageInfo>> imageArrayInfos
+    std::vector<std::vector<VkDescriptorImageInfo>> imageArrayInfos;
 
     // buffer infos
     for (const BufferAttachment& bufferAttachment : descriptorSetInfo.buffers)

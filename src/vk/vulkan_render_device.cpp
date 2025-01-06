@@ -142,10 +142,19 @@ bool VulkanRenderDevice::checkExtSupport(VkPhysicalDevice physicalDevice, const 
 
 bool VulkanRenderDevice::checkExtSupport(VkPhysicalDevice physicalDevice, const std::vector<const char *> &extensions)
 {
-    for (auto ext : extensions)
-        if (!checkExtSupport(physicalDevice, ext))
-            return false;
-    return true;
+    std::unordered_set<const char*, cStrHash, cStrCompare> extensionsSet(extensions.begin(), extensions.end());
+
+    uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, nullptr);
+
+    std::vector<VkExtensionProperties> supportedExtensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, supportedExtensions.data());
+
+    for (const auto& ext : supportedExtensions)
+        if (extensionsSet.contains(ext.extensionName))
+            extensionsSet.erase(ext.extensionName);
+
+    return extensionsSet.empty();
 }
 
 std::vector<const char *> VulkanRenderDevice::getRequiredExtensions()
