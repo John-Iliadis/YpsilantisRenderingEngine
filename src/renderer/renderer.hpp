@@ -11,9 +11,11 @@
 class Renderer
 {
 public:
-    Renderer(const VulkanRenderDevice& renderDevice);
-    virtual ~Renderer();
+    Renderer();
+    virtual ~Renderer() = default;
 
+    virtual void init(const VulkanRenderDevice &renderDevice);
+    virtual void terminate();
     virtual void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) = 0;
 
 protected:
@@ -27,11 +29,6 @@ protected:
 
     VkPipelineLayout mPipelineLayout;
     VkPipeline mGraphicsPipeline;
-
-    VkDescriptorPool mDescriptorPool;
-    VkDescriptorSetLayout mDescriptorSetLayout;
-    VkDescriptorSet mDescriptorSet;
 };
-
 
 #endif //VULKANRENDERINGENGINE_RENDERER_HPP
