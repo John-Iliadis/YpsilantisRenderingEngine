@@ -7,21 +7,19 @@
 
 #include <vulkan/vulkan.h>
 #include <shaderc/shaderc.hpp>
-#include "vulkan_render_device.hpp"
 #include "vulkan_utils.hpp"
 #include "../utils.hpp"
 
 class VulkanShaderModule
 {
 public:
-    void create(const VulkanRenderDevice& renderDevice, const std::string& shaderName);
-    void destroy(const VulkanRenderDevice& renderDevice);
+    VulkanShaderModule(VkDevice device, const std::string& shaderName);
+    ~VulkanShaderModule();
 
     operator VkShaderModule() const;
 
 private:
-    void createShaderModule(const VulkanRenderDevice& renderDevice,
-                            const std::vector<uint32_t>& shaderSrc,
+    void createShaderModule(const std::vector<uint32_t>& shaderSrc,
                             const std::string& shaderName);
     std::vector<char> readShaderFileGLSL(const std::string& shaderPath);
     std::vector<uint32_t> readShaderFileSPV(const std::string& shaderPath);
@@ -31,6 +29,7 @@ private:
 
 private:
     VkShaderModule mShaderModule;
+    VkDevice mDevice;
 };
 
 #endif //VULKANRENDERINGENGINE_VULKAN_SHADER_HPP

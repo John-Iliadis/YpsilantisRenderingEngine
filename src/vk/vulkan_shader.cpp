@@ -13,20 +13,39 @@ static std::string sGetShaderPath(const std::string& shaderName)
 #endif
 }
 
-void VulkanShaderModule::create(const VulkanRenderDevice &renderDevice, const std::string &shaderName)
+VulkanShaderModule::VulkanShaderModule(VkDevice device, const std::string &shaderName)
+    : mDevice(device)
 {
     std::string shaderPath = sGetShaderPath(shaderName);
-    createShaderModule(renderDevice, getShaderSrc(shaderPath), shaderName);
+    createShaderModule(getShaderSrc(shaderPath), shaderName);
 }
 
-void VulkanShaderModule::destroy(const VulkanRenderDevice &renderDevice)
+VulkanShaderModule::~VulkanShaderModule()
 {
-    vkDestroyShaderModule(renderDevice.device, mShaderModule, nullptr);
+    vkDestroyShaderModule(mDevice, mShaderModule, nullptr);
 }
 
 VulkanShaderModule::operator VkShaderModule() const
 {
     return mShaderModule;
+}
+
+void VulkanShaderModule::createShaderModule(const std::vector<uint32_t> &shaderSrc,
+                                            const std::string& shaderName)
+{
+    VkShaderModuleCreateInfo shaderModuleCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = shaderSrc.size(),
+        .pCode = shaderSrc.data()
+    };
+
+    VkResult result = vkCreateShaderModule(mDevice, &shaderModuleCreateInfo, nullptr, &mShaderModule);
+    vulkanCheck(result, "Failed to create shader module.");
+
+    setDebugVulkanObjectName(mDevice,
+                             VK_OBJECT_TYPE_SHADER_MODULE,
+                             shaderName.c_str(),
+                             mShaderModule);
 }
 
 std::vector<char> VulkanShaderModule::readShaderFileGLSL(const std::string &shaderPath)
@@ -76,25 +95,6 @@ std::vector<uint32_t> VulkanShaderModule::compileShader(const std::string &shade
     check(result.GetCompilationStatus() == shaderc_compilation_status_success, result.GetErrorMessage().c_str());
 
     return {result.begin(), result.end()};
-}
-
-void VulkanShaderModule::createShaderModule(const VulkanRenderDevice &renderDevice,
-                                            const std::vector<uint32_t> &shaderSrc,
-                                            const std::string& shaderName)
-{
-    VkShaderModuleCreateInfo shaderModuleCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = shaderSrc.size(),
-        .pCode = shaderSrc.data()
-    };
-
-    VkResult result = vkCreateShaderModule(renderDevice.device, &shaderModuleCreateInfo, nullptr, &mShaderModule);
-    vulkanCheck(result, "Failed to create shader module.");
-
-    setDebugVulkanObjectName(renderDevice.device,
-                             VK_OBJECT_TYPE_SHADER_MODULE,
-                             shaderName.c_str(),
-                             mShaderModule);
 }
 
 std::vector<uint32_t> VulkanShaderModule::getShaderSrc(const std::string &shaderPath)
