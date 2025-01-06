@@ -20,4 +20,7 @@ std::optional<uint32_t> findSuitableMemoryType(VkPhysicalDeviceMemoryProperties 
 VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
 void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkCommandBuffer commandBuffer, VkQueue queue);
 
+VkSemaphore createSemaphore(VkDevice device, const char* tag = nullptr);
+VkFence createFence(VkDevice device, bool signaled = false, const char* tag = nullptr);
+
 #endif //VULKANRENDERINGENGINE_VULKAN_UTILS_HPP

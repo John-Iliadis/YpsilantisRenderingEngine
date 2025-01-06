@@ -23,6 +23,10 @@ public:
     std::vector<VulkanImage> images;
     std::vector<VkCommandBuffer> commandBuffers;
 
+    std::vector<VkFence> inFlightFences;
+    std::vector<VkSemaphore> imageReadySemaphores;
+    std::vector<VkSemaphore> renderCompleteSemaphores;
+
 public:
     void create(GLFWwindow* window,
                 const VulkanInstance& instance,
@@ -38,6 +42,7 @@ private:
     void createSwapchain(const VulkanRenderDevice& renderDevice);
     void createSwapchainImages(const VulkanRenderDevice& renderDevice);
     void createCommandBuffers(const VulkanRenderDevice& renderDevice);
+    void createSyncObjects(const VulkanRenderDevice& renderDevice);
 };
 
 #endif //VULKANRENDERINGENGINE_VULKAN_SWAPCHAIN_HPP

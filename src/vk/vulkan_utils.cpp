@@ -9,11 +9,6 @@ void vulkanCheck(VkResult result, const char* msg, std::source_location location
     check(result == VK_SUCCESS, msg, location);
 }
 
-void loadDebugUtilsFunctionPointers(VkInstance instance)
-{
-
-}
-
 void setDebugVulkanObjectName(VkDevice device, VkObjectType type, const std::string& name, const void* handle)
 {
 #ifdef DEBUG_MODE
@@ -80,4 +75,46 @@ void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkCommand
     vkDeviceWaitIdle(device);
 
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+}
+
+VkSemaphore createSemaphore(VkDevice device, const char* tag)
+{
+    VkSemaphore semaphore;
+
+    VkSemaphoreCreateInfo semaphoreCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0
+    };
+
+    VkResult result = vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &semaphore);
+    vulkanCheck(result, "Failed to create semaphore.");
+
+    if (tag)
+    {
+        setDebugVulkanObjectName(device, VK_OBJECT_TYPE_SEMAPHORE, tag, semaphore);
+    }
+
+    return semaphore;
+}
+
+VkFence createFence(VkDevice device, bool signaled, const char* tag)
+{
+    VkFence fence;
+
+    VkFenceCreateInfo fenceCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = static_cast<VkFenceCreateFlags>(signaled? VK_FENCE_CREATE_SIGNALED_BIT : 0)
+    };
+
+    VkResult result = vkCreateFence(device, &fenceCreateInfo, nullptr, &fence);
+    vulkanCheck(result, "Failed to create fence.");
+
+    if (tag)
+    {
+        setDebugVulkanObjectName(device, VK_OBJECT_TYPE_FENCE, tag, fence);
+    }
+
+    return fence;
 }

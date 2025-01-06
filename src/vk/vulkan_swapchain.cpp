@@ -12,12 +12,16 @@ void VulkanSwapchain::create(GLFWwindow* window,
     createSwapchain(renderDevice);
     createSwapchainImages(renderDevice);
     createCommandBuffers(renderDevice);
+    createSyncObjects(renderDevice);
 }
 
 void VulkanSwapchain::destroy(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice)
 {
     for (size_t i = 0; i < swapchainImageCount(); ++i)
     {
+        vkDestroyFence(renderDevice.device, inFlightFences.at(i), nullptr);
+        vkDestroySemaphore(renderDevice.device, imageReadySemaphores.at(i), nullptr);
+        vkDestroySemaphore(renderDevice.device, renderCompleteSemaphores.at(i), nullptr);
         vkDestroyImageView(renderDevice.device, images.at(i).imageView, nullptr);
     }
 
@@ -112,4 +116,18 @@ void VulkanSwapchain::createCommandBuffers(const VulkanRenderDevice& renderDevic
 uint32_t VulkanSwapchain::swapchainImageCount()
 {
     return 3;
+}
+
+void VulkanSwapchain::createSyncObjects(const VulkanRenderDevice &renderDevice)
+{
+    inFlightFences.resize(swapchainImageCount());
+    imageReadySemaphores.resize(swapchainImageCount());
+    renderCompleteSemaphores.resize(swapchainImageCount());
+
+    for (uint32_t i = 0; i < swapchainImageCount(); ++i)
+    {
+        inFlightFences.at(i) = createFence(renderDevice.device, false, std::format("Swapchain in flight fence {}", i).c_str());
+        imageReadySemaphores.at(i) = createSemaphore(renderDevice.device, std::format("Swapchain image ready semaphore {}", i).c_str());
+        renderCompleteSemaphores.at(i) = createSemaphore(renderDevice.device, std::format("Swapchain render complete semaphore {}", i).c_str());
+    }
 }
