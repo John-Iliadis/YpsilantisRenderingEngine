@@ -18,7 +18,7 @@ void VulkanSwapchain::destroy(const VulkanInstance& instance, const VulkanRender
 {
     for (size_t i = 0; i < swapchainImageCount(); ++i)
     {
-        vkDestroyImageView(renderDevice.device, imageViews.at(i), nullptr);
+        vkDestroyImageView(renderDevice.device, images.at(i).imageView, nullptr);
     }
 
     vkDestroySwapchainKHR(renderDevice.device, swapchain, nullptr);
@@ -65,23 +65,24 @@ void VulkanSwapchain::createSwapchain(const VulkanRenderDevice& renderDevice)
 void VulkanSwapchain::createSwapchainImages(const VulkanRenderDevice& renderDevice)
 {
     images.resize(swapchainImageCount());
-    imageViews.resize(swapchainImageCount());
 
+    VkImage swapchainImages[VulkanSwapchain::swapchainImageCount()];
     uint32_t imgCount = swapchainImageCount();
-    vkGetSwapchainImagesKHR(renderDevice.device, swapchain, &imgCount, images.data());
+    vkGetSwapchainImagesKHR(renderDevice.device, swapchain, &imgCount, swapchainImages);
 
     for (size_t i = 0; i < swapchainImageCount(); ++i)
     {
-        imageViews.at(i) = createImageView(renderDevice,
-                                           images.at(i),
-                                           VK_IMAGE_VIEW_TYPE_2D,
-                                           format,
-                                           VK_IMAGE_ASPECT_COLOR_BIT);
+        images.at(i).image = swapchainImages[i];
+        images.at(i).imageView = createImageView(renderDevice,
+                                                    images.at(i).image,
+                                                    VK_IMAGE_VIEW_TYPE_2D,
+                                                    format,
+                                                    VK_IMAGE_ASPECT_COLOR_BIT);
 
         setDebugVulkanObjectName(renderDevice.device,
                                  VK_OBJECT_TYPE_IMAGE_VIEW,
                                  std::format("Swapchain image view {}", i),
-                                 imageViews.at(i));
+                                 images.at(i).imageView);
     }
 }
 

@@ -20,8 +20,7 @@ public:
     VkFormat format;
     VkExtent2D extent;
 
-    std::vector<VkImage> images;
-    std::vector<VkImageView> imageViews;
+    std::vector<VulkanImage> images;
     std::vector<VkCommandBuffer> commandBuffers;
 
 public:

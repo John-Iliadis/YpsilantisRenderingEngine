@@ -35,7 +35,7 @@ void VulkanShaderModule::createShaderModule(const std::vector<uint32_t> &shaderS
 {
     VkShaderModuleCreateInfo shaderModuleCreateInfo {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = shaderSrc.size(),
+        .codeSize = 4 * shaderSrc.size(),
         .pCode = shaderSrc.data()
     };
 
@@ -54,9 +54,11 @@ std::vector<char> VulkanShaderModule::readShaderFileGLSL(const std::string &shad
 
     check(shaderFile.is_open(), std::format("Failed to open {}", shaderPath).c_str());
 
-    std::vector<char> shaderSrc(shaderFile.tellg());
+    std::vector<char> shaderSrc(static_cast<size_t>(shaderFile.tellg()));
     shaderFile.seekg(0);
     shaderFile.read(shaderSrc.data(), shaderSrc.size());
+
+    removeEndNullChars(shaderSrc);
 
     return shaderSrc;
 }
@@ -77,24 +79,24 @@ std::vector<uint32_t> VulkanShaderModule::readShaderFileSPV(const std::string &s
 
 std::vector<uint32_t> VulkanShaderModule::compileShader(const std::string &shaderPath)
 {
-    // todo: check if this expects a null terminated string
     std::vector<char> shaderSrc = readShaderFileGLSL(shaderPath);
+
+    shaderc_shader_kind shaderKind = getShaderKind(shaderPath);
 
     shaderc::Compiler compiler;
     shaderc::CompileOptions compileOptions;
 
-    compileOptions.SetOptimizationLevel(shaderc_optimization_level_performance);
     compileOptions.SetGenerateDebugInfo();
 
-    shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(shaderSrc.data(),
-                                                                     shaderSrc.size(),
-                                                                     getShaderKind(shaderPath),
-                                                                     shaderPath.c_str(),
-                                                                     compileOptions);
+    shaderc::SpvCompilationResult compilationResult = compiler.CompileGlslToSpv(shaderSrc.data(),
+                                                                                shaderSrc.size(),
+                                                                                shaderKind,
+                                                                                shaderPath.c_str(),
+                                                                                compileOptions);
 
-    check(result.GetCompilationStatus() == shaderc_compilation_status_success, result.GetErrorMessage().c_str());
+    check(compilationResult.GetCompilationStatus() == shaderc_compilation_status_success, compilationResult.GetErrorMessage().c_str());
 
-    return {result.begin(), result.end()};
+    return {compilationResult.cbegin(), compilationResult.cend()};
 }
 
 std::vector<uint32_t> VulkanShaderModule::getShaderSrc(const std::string &shaderPath)

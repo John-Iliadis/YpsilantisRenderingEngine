@@ -13,6 +13,8 @@ size_t stringLength(const char* str);
 
 bool endsWidth(const std::string& str, const std::string& end);
 
+void removeEndNullChars(std::vector<char>& vec);
+
 struct cStrHash
 {
     size_t operator()(const char* str) const

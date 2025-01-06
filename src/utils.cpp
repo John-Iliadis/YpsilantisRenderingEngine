@@ -35,5 +35,15 @@ bool endsWidth(const std::string& str, const std::string& end)
     if (str.length() < end.length())
         return false;
 
-    return std::string_view(str.begin() + end.length() - 1, str.end()) == end;
+    return std::string_view(str.end() - end.length(), str.end()) == end;
+}
+
+void removeEndNullChars(std::vector<char>& vec)
+{
+    for (size_t i = vec.size() - 1; i > 0; --i)
+    {
+        if (vec.at(i) != '\0')
+            break;
+        vec.pop_back();
+    }
 }

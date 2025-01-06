@@ -8,21 +8,19 @@ VkDescriptorPool createDescriptorPool(const VulkanRenderDevice& renderDevice,
                                       uint32_t imageSamplerCount,
                                       uint32_t uniformBufferCount,
                                       uint32_t storageBufferCount,
-                                      uint32_t inputAttachmentCount,
                                       uint32_t maxSets)
 {
     VkDescriptorPool descriptorPool;
 
-    std::array<VkDescriptorPoolSize, 4> descriptorPoolSizes {{
+    std::array<VkDescriptorPoolSize, 3> descriptorPoolSizes {{
         descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, imageSamplerCount),
         descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniformBufferCount),
         descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, storageBufferCount),
-        descriptorPoolSize(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, inputAttachmentCount)
     }};
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = 1,
+        .maxSets = maxSets,
         .poolSizeCount = descriptorPoolSizes.size(),
         .pPoolSizes = descriptorPoolSizes.data()
     };
