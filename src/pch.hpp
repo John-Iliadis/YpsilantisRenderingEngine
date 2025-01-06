@@ -5,6 +5,8 @@
 #include <vector>
 #include <array>
 #include <unordered_map>
+#include <string>
+#include <string_view>
 #include <algorithm>
 #include <iostream>
 #include <format>
@@ -13,3 +15,4 @@
 #include <cstdint>
 #include <optional>
 #include <fstream>
+#include <stdexcept>

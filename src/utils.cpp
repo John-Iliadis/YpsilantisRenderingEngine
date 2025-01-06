@@ -19,3 +19,21 @@ void check(bool result, const char* msg, std::source_location location)
         throw std::runtime_error(errorMSG.str());
     }
 }
+
+size_t stringLength(const char* str)
+{
+    size_t length = 0;
+
+    while (str[length])
+        ++length;
+
+    return length;
+}
+
+bool endsWidth(const std::string& str, const std::string& end)
+{
+    if (str.length() < end.length())
+        return false;
+
+    return std::string_view(str.begin() + end.length() - 1, str.end()) == end;
+}

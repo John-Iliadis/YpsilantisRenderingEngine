@@ -4,11 +4,36 @@
 
 #include "vulkan_shader.hpp"
 
-std::vector<char> readShaderFileGLSL(const std::string& filename)
+static std::string sGetShaderPath(const std::string& shaderName)
 {
-    std::ifstream shaderFile(filename, std::ios::ate);
+#ifdef DEBUG_MODE
+    return SHADER_PATH + shaderName;
+#else
+    return SHADER_PATH + shaderName + ".spv";
+#endif
+}
 
-    check(shaderFile.is_open(), std::format("Failed to open {}", filename).c_str());
+void VulkanShaderModule::create(const VulkanRenderDevice &renderDevice, const std::string &shaderName)
+{
+    std::string shaderPath = sGetShaderPath(shaderName);
+    createShaderModule(renderDevice, getShaderSrc(shaderPath), shaderName);
+}
+
+void VulkanShaderModule::destroy(const VulkanRenderDevice &renderDevice)
+{
+    vkDestroyShaderModule(renderDevice.device, mShaderModule, nullptr);
+}
+
+VulkanShaderModule::operator VkShaderModule() const
+{
+    return mShaderModule;
+}
+
+std::vector<char> VulkanShaderModule::readShaderFileGLSL(const std::string &shaderPath)
+{
+    std::ifstream shaderFile(shaderPath, std::ios::ate);
+
+    check(shaderFile.is_open(), std::format("Failed to open {}", shaderPath).c_str());
 
     std::vector<char> shaderSrc(shaderFile.tellg());
     shaderFile.seekg(0);
@@ -17,11 +42,11 @@ std::vector<char> readShaderFileGLSL(const std::string& filename)
     return shaderSrc;
 }
 
-std::vector<uint32_t> readShaderFileSPV(const std::string& filename)
+std::vector<uint32_t> VulkanShaderModule::readShaderFileSPV(const std::string &shaderPath)
 {
-    std::ifstream shaderFile(filename, std::ios::binary | std::ios::ate);
+    std::ifstream shaderFile(shaderPath, std::ios::binary | std::ios::ate);
 
-    check(shaderFile.is_open(), std::format("Failed to open {}", filename).c_str());
+    check(shaderFile.is_open(), std::format("Failed to open {}", shaderPath).c_str());
 
     size_t bufferSize = shaderFile.tellg();
     std::vector<uint32_t> shaderSrc(bufferSize / 4);
@@ -31,28 +56,10 @@ std::vector<uint32_t> readShaderFileSPV(const std::string& filename)
     return shaderSrc;
 }
 
-VkShaderModule createShaderModule(VkDevice device, const std::string& filename)
-{
-    std::vector<uint32_t> shaderSrc = readShaderFileSPV(filename);
-
-    VkShaderModule shaderModule;
-
-    VkShaderModuleCreateInfo shaderModuleCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = shaderSrc.size(),
-        .pCode = shaderSrc.data()
-    };
-
-    VkResult result = vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
-    vulkanCheck(result, std::format("Failed to create shader module {}", filename).c_str());
-
-    return shaderModule;
-}
-
-std::vector<uint32_t> compileShader(const std::string& filename, shaderc_shader_kind shaderKind)
+std::vector<uint32_t> VulkanShaderModule::compileShader(const std::string &shaderPath)
 {
     // todo: check if this expects a null terminated string
-    std::vector<char> shaderSrc = readShaderFileGLSL(filename);
+    std::vector<char> shaderSrc = readShaderFileGLSL(shaderPath);
 
     shaderc::Compiler compiler;
     shaderc::CompileOptions compileOptions;
@@ -62,8 +69,8 @@ std::vector<uint32_t> compileShader(const std::string& filename, shaderc_shader_
 
     shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(shaderSrc.data(),
                                                                      shaderSrc.size(),
-                                                                     shaderKind,
-                                                                     filename.c_str(),
+                                                                     getShaderKind(shaderPath),
+                                                                     shaderPath.c_str(),
                                                                      compileOptions);
 
     check(result.GetCompilationStatus() == shaderc_compilation_status_success, result.GetErrorMessage().c_str());
@@ -71,20 +78,49 @@ std::vector<uint32_t> compileShader(const std::string& filename, shaderc_shader_
     return {result.begin(), result.end()};
 }
 
-VkShaderModule compileAndCreateShaderModule(VkDevice device, const std::string& filename, shaderc_shader_kind shaderKind)
+void VulkanShaderModule::createShaderModule(const VulkanRenderDevice &renderDevice,
+                                            const std::vector<uint32_t> &shaderSrc,
+                                            const std::string& shaderName)
 {
-    std::vector<uint32_t> shaderSrc = compileShader(filename, shaderKind);
-
-    VkShaderModule shaderModule;
-
     VkShaderModuleCreateInfo shaderModuleCreateInfo {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = shaderSrc.size(),
         .pCode = shaderSrc.data()
     };
 
-    VkResult result = vkCreateShaderModule(device, &shaderModuleCreateInfo, nullptr, &shaderModule);
-    vulkanCheck(result, std::format("Failed to create shader module {}", filename).c_str());
+    VkResult result = vkCreateShaderModule(renderDevice.device, &shaderModuleCreateInfo, nullptr, &mShaderModule);
+    vulkanCheck(result, "Failed to create shader module.");
 
-    return shaderModule;
+    setDebugVulkanObjectName(renderDevice.device,
+                             VK_OBJECT_TYPE_SHADER_MODULE,
+                             shaderName.c_str(),
+                             mShaderModule);
+}
+
+std::vector<uint32_t> VulkanShaderModule::getShaderSrc(const std::string &shaderPath)
+{
+#ifdef DEBUG_MODE
+    return compileShader(shaderPath);
+#else
+    return readShaderFileSPV(shaderPath);
+#endif
+}
+
+shaderc_shader_kind VulkanShaderModule::getShaderKind(const std::string &shaderPath)
+{
+    if (endsWidth(shaderPath, "vert"))
+        return shaderc_vertex_shader;
+    else if (endsWidth(shaderPath, "frag"))
+        return shaderc_fragment_shader;
+    else if (endsWidth(shaderPath, "comp"))
+        return shaderc_compute_shader;
+    else if (endsWidth(shaderPath, "geom"))
+        return shaderc_geometry_shader;
+    else if (endsWidth(shaderPath, "tcs"))
+        return shaderc_tess_control_shader;
+    else if (endsWidth(shaderPath, "tes"))
+        return shaderc_tess_evaluation_shader;
+
+    check(false, "Case not implemented.");
+    return shaderc_vertex_shader; // to get rid of warning
 }

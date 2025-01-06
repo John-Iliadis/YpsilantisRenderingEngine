@@ -7,14 +7,30 @@
 
 #include <vulkan/vulkan.h>
 #include <shaderc/shaderc.hpp>
+#include "vulkan_render_device.hpp"
 #include "vulkan_utils.hpp"
 #include "../utils.hpp"
 
-std::vector<char> readShaderFileGLSL(const std::string& filename);
-std::vector<uint32_t> readShaderFileSPV(const std::string& filename);
-std::vector<uint32_t> compileShader(const std::string& filename, shaderc_shader_kind shaderKind);
+class VulkanShaderModule
+{
+public:
+    void create(const VulkanRenderDevice& renderDevice, const std::string& shaderName);
+    void destroy(const VulkanRenderDevice& renderDevice);
 
-VkShaderModule createShaderModule(VkDevice device, const std::string& filename);
-VkShaderModule compileAndCreateShaderModule(VkDevice device, const std::string& filename, shaderc_shader_kind shaderKind);
+    operator VkShaderModule() const;
+
+private:
+    void createShaderModule(const VulkanRenderDevice& renderDevice,
+                            const std::vector<uint32_t>& shaderSrc,
+                            const std::string& shaderName);
+    std::vector<char> readShaderFileGLSL(const std::string& shaderPath);
+    std::vector<uint32_t> readShaderFileSPV(const std::string& shaderPath);
+    std::vector<uint32_t> compileShader(const std::string& shaderPath);
+    std::vector<uint32_t> getShaderSrc(const std::string& shaderPath);
+    shaderc_shader_kind getShaderKind(const std::string& shaderPath);
+
+private:
+    VkShaderModule mShaderModule;
+};
 
 #endif //VULKANRENDERINGENGINE_VULKAN_SHADER_HPP
