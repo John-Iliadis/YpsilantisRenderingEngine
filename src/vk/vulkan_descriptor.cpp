@@ -4,48 +4,6 @@
 
 #include "vulkan_descriptor.hpp"
 
-BufferAttachment createBufferAttachment(VkDescriptorType type,
-                                        VkShaderStageFlags shaderStageFlags,
-                                        VkBuffer buffer,
-                                        uint32_t offset, uint32_t size)
-{
-    return {
-        .descriptorInfo {
-            .descriptorType = type,
-            .shaderStageFlags = shaderStageFlags
-        },
-        .buffer = buffer,
-        .offset = offset,
-        .range = size
-    };
-}
-
-TextureAttachment createTextureAttachment(VkDescriptorType type,
-                                          VkShaderStageFlags shaderStageFlags,
-                                          const VulkanTexture& texture)
-{
-    return {
-        .descriptorInfo {
-            .descriptorType = type,
-            .shaderStageFlags = shaderStageFlags
-        },
-        .texture = texture
-    };
-}
-
-TextureArrayAttachment createTextureArrayAttachment(VkDescriptorType type,
-                                                    VkShaderStageFlags shaderStageFlags,
-                                                    const std::vector<VulkanTexture>& textureArray)
-{
-    return {
-        .descriptorInfo {
-            .descriptorType = type,
-            .shaderStageFlags = shaderStageFlags
-        },
-        .textureArray = textureArray
-    };
-}
-
 VkDescriptorPool createDescriptorPool(const VulkanRenderDevice& renderDevice,
                                       uint32_t imageSamplerCount,
                                       uint32_t uniformBufferCount,
@@ -75,165 +33,122 @@ VkDescriptorPool createDescriptorPool(const VulkanRenderDevice& renderDevice,
     return descriptorPool;
 }
 
-void createDescriptorSet(const VulkanRenderDevice& renderDevice,
-                         const DescriptorSetInfo& descriptorSetInfo,
-                         VkDescriptorPool descriptorPool,
-                         VkDescriptorSetLayout& outDescriptorSetLayout,
-                         VkDescriptorSet& outDescriptorSet)
-{
-    /* -- descriptor set layout -- */
-    std::vector<VkDescriptorSetLayoutBinding> bindings;
-    std::vector<VkDescriptorBufferInfo> bufferInfos;
-    std::vector<VkDescriptorImageInfo> imageInfos;
-    std::vector<std::vector<VkDescriptorImageInfo>> imageArrayInfos;
-
-    // buffer infos
-    for (const BufferAttachment& bufferAttachment : descriptorSetInfo.buffers)
-    {
-        VkDescriptorSetLayoutBinding layoutBinding {
-            .binding = static_cast<uint32_t>(bindings.size()),
-            .descriptorType = bufferAttachment.descriptorInfo.descriptorType,
-            .descriptorCount = 1,
-            .stageFlags = bufferAttachment.descriptorInfo.shaderStageFlags
-        };
-
-        bindings.push_back(layoutBinding);
-
-        VkDescriptorBufferInfo descriptorBufferInfo {
-            .buffer = bufferAttachment.buffer,
-            .offset = bufferAttachment.offset,
-            .range = bufferAttachment.range
-        };
-
-        bufferInfos.push_back(descriptorBufferInfo);
-    }
-
-    // texture infos
-    for (const TextureAttachment& textureAttachment : descriptorSetInfo.textures)
-    {
-        VkDescriptorSetLayoutBinding layoutBinding {
-            .binding = static_cast<uint32_t>(bindings.size()),
-            .descriptorType = textureAttachment.descriptorInfo.descriptorType,
-            .descriptorCount = 1,
-            .stageFlags = textureAttachment.descriptorInfo.shaderStageFlags
-        };
-
-        bindings.push_back(layoutBinding);
-
-        VkDescriptorImageInfo descriptorImageInfo {
-            .sampler = textureAttachment.texture.sampler,
-            .imageView = textureAttachment.texture.image.imageView,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        };
-
-        imageInfos.push_back(descriptorImageInfo);
-    }
-
-    // texture array infos
-    for (const TextureArrayAttachment& textureArrayAttachment : descriptorSetInfo.textureArrays)
-    {
-        VkDescriptorSetLayoutBinding layoutBinding {
-            .binding = static_cast<uint32_t>(bindings.size()),
-            .descriptorType = textureArrayAttachment.descriptorInfo.descriptorType,
-            .descriptorCount = static_cast<uint32_t>(textureArrayAttachment.textureArray.size()),
-            .stageFlags = textureArrayAttachment.descriptorInfo.shaderStageFlags
-        };
-
-        bindings.push_back(layoutBinding);
-
-        std::vector<VkDescriptorImageInfo> lImageInfos;
-        for (const VulkanTexture& texture : textureArrayAttachment.textureArray)
-        {
-            VkDescriptorImageInfo descriptorImageInfo {
-                .sampler = texture.sampler,
-                .imageView = texture.image.imageView,
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-            };
-
-            lImageInfos.push_back(descriptorImageInfo);
-        }
-
-        imageArrayInfos.push_back(std::move(lImageInfos));
-    }
-
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = static_cast<uint32_t>(bindings.size()),
-        .pBindings = bindings.data()
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(renderDevice.device,
-                                                  &descriptorSetLayoutCreateInfo,
-                                                  nullptr,
-                                                  &outDescriptorSetLayout);
-    vulkanCheck(result, "Failed to create descriptor set layout.");
-
-    /* -- descriptor set -- */
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &outDescriptorSetLayout
-    };
-
-    result = vkAllocateDescriptorSets(renderDevice.device, &descriptorSetAllocateInfo, &outDescriptorSet);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-
-    // descriptor writes
-    std::vector<VkWriteDescriptorSet> descriptorWrites;
-
-    for (uint32_t i = 0; i < bufferInfos.size(); ++i)
-    {
-        VkWriteDescriptorSet writeDescriptorSet {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = outDescriptorSet,
-            .dstBinding = i,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = descriptorSetInfo.buffers.at(i).descriptorInfo.descriptorType,
-            .pBufferInfo = &bufferInfos.at(i)
-        };
-
-        descriptorWrites.push_back(writeDescriptorSet);
-    }
-
-    for (uint32_t i = 0, descriptorIndex = bufferInfos.size(); i < imageInfos.size(); ++i, ++descriptorIndex)
-    {
-        VkWriteDescriptorSet writeDescriptorSet {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = outDescriptorSet,
-            .dstBinding = descriptorIndex,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = descriptorSetInfo.textures.at(i).descriptorInfo.descriptorType,
-            .pImageInfo = &imageInfos.at(i)
-        };
-
-        descriptorWrites.push_back(writeDescriptorSet);
-    }
-
-    for (uint32_t i = 0, descriptorIndex = bufferInfos.size() + imageInfos.size(); i < imageArrayInfos.size(); ++i, ++descriptorIndex)
-    {
-        VkWriteDescriptorSet writeDescriptorSet {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = outDescriptorSet,
-            .dstBinding = descriptorIndex,
-            .dstArrayElement = 0,
-            .descriptorCount = static_cast<uint32_t>(imageArrayInfos.at(i).size()),
-            .descriptorType = descriptorSetInfo.textureArrays.at(i).descriptorInfo.descriptorType,
-            .pImageInfo = imageArrayInfos.at(i).data()
-        };
-
-        descriptorWrites.push_back(writeDescriptorSet);
-    }
-
-    vkUpdateDescriptorSets(renderDevice.device, descriptorWrites.size(), descriptorWrites.data(), 0, 0);
-}
-
 VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count)
 {
     return {
         .type = type,
         .descriptorCount = count
     };
+}
+
+DescriptorSetLayoutCreator::DescriptorSetLayoutCreator(VkDevice device)
+    : mDevice(device)
+{
+}
+
+void DescriptorSetLayoutCreator::addLayoutBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages)
+{
+    mLayoutBindings.emplace_back(binding, type, 1, stages);
+}
+
+VkDescriptorSetLayout DescriptorSetLayoutCreator::create() const
+{
+    VkDescriptorSetLayout descriptorSetLayout;
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<uint32_t>(mLayoutBindings.size()),
+        .pBindings = mLayoutBindings.data()
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(mDevice,
+                                                  &descriptorSetLayoutCreateInfo,
+                                                  nullptr,
+                                                  &descriptorSetLayout);
+    vulkanCheck(result, "Failed to create descriptor set layout.");
+
+    return descriptorSetLayout;
+}
+
+DescriptorSetCreator::DescriptorSetCreator(VkDevice device,
+                                           VkDescriptorPool descriptorPool,
+                                           VkDescriptorSetLayout layout)
+    : mDevice(device)
+    , mDescriptorPool(descriptorPool)
+    , mDescriptorSetLayout(layout)
+{
+}
+
+void DescriptorSetCreator::addBuffer(VkDescriptorType type, uint32_t binding, VkBuffer buffer, uint32_t offset, uint32_t range)
+{
+    mBufferInfos.emplace_back(type, binding, buffer, offset, range);
+}
+
+void DescriptorSetCreator::addTexture(VkDescriptorType type, uint32_t binding, const VulkanTexture &texture)
+{
+    mTextureInfos.emplace_back(type, binding, texture);
+}
+
+VkDescriptorSet DescriptorSetCreator::create() const
+{
+    VkDescriptorSet descriptorSet;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mDescriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &mDescriptorSetLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mDevice, &descriptorSetAllocateInfo, &descriptorSet);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    // writes
+    std::vector<VkWriteDescriptorSet> descriptorWrites;
+
+    for (uint32_t i = 0; i < mBufferInfos.size(); ++i)
+    {
+        VkDescriptorBufferInfo bufferInfo {
+            .buffer = mBufferInfos.at(i).buffer,
+            .offset = mBufferInfos.at(i).offset,
+            .range = mBufferInfos.at(i).range
+        };
+
+        VkWriteDescriptorSet writeDescriptorSet {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = descriptorSet,
+            .dstBinding = mBufferInfos.at(i).binding,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = mBufferInfos.at(i).type,
+            .pBufferInfo = &bufferInfo
+        };
+
+        descriptorWrites.push_back(writeDescriptorSet);
+    }
+
+    for (uint32_t i = 0; i < mTextureInfos.size(); ++i)
+    {
+        VkDescriptorImageInfo imageInfo {
+            .sampler = mTextureInfos.at(i).texture.sampler,
+            .imageView = mTextureInfos.at(i).texture.image.imageView,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        };
+
+        VkWriteDescriptorSet writeDescriptorSet {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = descriptorSet,
+            .dstBinding = mTextureInfos.at(i).binding,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = mTextureInfos.at(i).type,
+            .pImageInfo = &imageInfo
+        };
+
+        descriptorWrites.push_back(writeDescriptorSet);
+    }
+
+    vkUpdateDescriptorSets(mDevice, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+
+    return descriptorSet;
 }
