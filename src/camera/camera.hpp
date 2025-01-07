@@ -65,6 +65,7 @@ private:
     glm::vec2 mPreviousMousePos;
     State mState;
     float mSpeed;
+    float mPanSensitivity;
 };
 
 #endif //VULKANRENDERINGENGINE_CAMERA_HPP

@@ -5,7 +5,9 @@
 #include "camera.hpp"
 
 Camera::Camera(glm::vec3 position, float fovY, float width, float height, float nearZ, float farZ)
-    : mPosition(position)
+    : mView()
+    , mBasis()
+    , mPosition(position)
     , mTheta()
     , mPhi()
     , mProjection(glm::perspective(fovY, width / height, nearZ, farZ))
@@ -15,7 +17,8 @@ Camera::Camera(glm::vec3 position, float fovY, float width, float height, float 
     , mFarZ(farZ)
     , mPreviousMousePos()
     , mState(Camera::State::FIRST_PERSON)
-    , mSpeed(1.f)
+    , mSpeed(5.f)
+    , mPanSensitivity(0.8f)
 {
     calculateViewProjection();
 }
@@ -120,9 +123,9 @@ void Camera::updateFirstPerson(float dt)
     if (Input::keyPressed(GLFW_KEY_S))
         --z;
     if (Input::keyPressed(GLFW_KEY_A))
-        --x;
-    if (Input::keyPressed(GLFW_KEY_D))
         ++x;
+    if (Input::keyPressed(GLFW_KEY_D))
+        --x;
 
     glm::vec2 mouseDt{};
     if (Input::mouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT))
@@ -130,13 +133,12 @@ void Camera::updateFirstPerson(float dt)
 
     if (z || x || mouseDt.x || mouseDt.y)
     {
-        debugLog("Update first person");
         float xOffset = mSpeed * dt * static_cast<float>(x);
         float zOffset = mSpeed * dt * static_cast<float>(z);
         mPosition += mBasis[0] * xOffset + mBasis[2] * zOffset;
 
-        mTheta += glm::radians(mouseDt.x);
-        mPhi += glm::radians(mouseDt.y);
+        mTheta += mouseDt.x * dt * mPanSensitivity;
+        mPhi += -mouseDt.y * dt * mPanSensitivity;
 
         calculateViewProjection();
     }
@@ -150,16 +152,15 @@ void Camera::updateViewMode(float dt)
     {
         if (Input::mouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT))
         {
-            // todo: check mouseDt
-            mTheta += glm::radians(mouseDt.x);
-            mPhi += glm::radians(mouseDt.y);
+            mTheta += mouseDt.x * dt * mPanSensitivity;
+            mPhi += -mouseDt.y * dt * mPanSensitivity;
             calculateViewProjection();
         }
         else if (Input::mouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT))
         {
             float xOffset = mSpeed * dt * mouseDt.x;
             float yOffset = mSpeed * dt * mouseDt.y;
-            mPosition += mBasis[0] * xOffset + mBasis[1] * yOffset;
+            mPosition += mBasis[0] * xOffset + mBasis[1] * -yOffset;
             calculateViewProjection();
         }
     }
@@ -173,8 +174,8 @@ void Camera::updateEditorMode(float dt)
 
     if (mouseDt.x || mouseDt.y)
     {
-        mTheta += glm::radians(mouseDt.x);
-        mPhi += glm::radians(mouseDt.y);
+        mTheta += mouseDt.x * dt * mPanSensitivity;
+        mPhi += -mouseDt.y * dt * mPanSensitivity;
         calculateViewProjection();
     }
 }
@@ -204,18 +205,15 @@ void Camera::calculateViewProjection()
     mView[0].x = mBasis[0].x;
     mView[0].y = mBasis[1].x;
     mView[0].z = mBasis[2].x;
-    mView[0].w = 0.f;
     mView[1].x = mBasis[0].y;
     mView[1].y = mBasis[1].y;
     mView[1].z = mBasis[2].y;
-    mView[1].w = 0.f;
     mView[2].x = mBasis[0].z;
     mView[2].y = mBasis[1].z;
     mView[2].z = mBasis[2].z;
-    mView[2].w = 0.f;
-    mView[3].x = -mPosition.x;
-    mView[3].y = -mPosition.y;
-    mView[3].z = -mPosition.z;
+    mView[3].x = -glm::dot(mPosition, mBasis[0]);
+    mView[3].y = -glm::dot(mPosition, mBasis[1]);
+    mView[3].z = -glm::dot(mPosition, mBasis[2]);
     mView[3].w = 1.f;
 
     mViewProjection = mProjection * mView;
