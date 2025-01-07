@@ -47,7 +47,7 @@ VulkanBuffer createBufferWithStaging(const VulkanRenderDevice& renderDevice,
                                      VkDeviceSize size,
                                      VkBufferUsageFlags usage,
                                      VkMemoryPropertyFlags memoryProperties,
-                                     void* bufferData)
+                                     const void* bufferData)
 {
     VkBufferUsageFlags stagingBufferUsage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
@@ -85,7 +85,7 @@ void mapBufferMemory(const VulkanRenderDevice& renderDevice,
                      VulkanBuffer& buffer,
                      VkDeviceSize offset,
                      VkDeviceSize size,
-                     void* data)
+                     const void* data)
 {
     void* dataPtr;
     vkMapMemory(renderDevice.device, buffer.memory, offset, size, 0, &dataPtr);

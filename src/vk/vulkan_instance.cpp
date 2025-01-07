@@ -109,7 +109,8 @@ VkBool32 VKAPI_CALL VulkanInstance::debugCallback(VkDebugUtilsMessageSeverityFla
     std::cerr << "\nMessage: " << pCallbackData->pMessage;
     std::cerr << "\n----------------------------\n\n";
 
-    __debugbreak();
+    if (severity & (VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT))
+        __debugbreak();
 
     return VK_FALSE;
 }

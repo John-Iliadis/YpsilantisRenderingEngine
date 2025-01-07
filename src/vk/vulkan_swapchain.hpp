@@ -33,7 +33,7 @@ public:
                 const VulkanRenderDevice& renderDevice);
     void destroy(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice);
 
-    // todo: resize()
+    void recreate(const VulkanRenderDevice& renderDevice);
 
     static uint32_t swapchainImageCount();
 

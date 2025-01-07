@@ -6,8 +6,11 @@
 #define VULKANRENDERINGENGINE_APPLICATION_HPP
 
 #include <glfw/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include "camera/camera.hpp"
 #include "vk/include.hpp"
+#include "renderer/cube_renderer.hpp"
 #include "input.hpp"
 #include "utils.hpp"
 
@@ -19,12 +22,19 @@ public:
     void run();
 
 private:
-    void update(float dt);
-    void render();
-
     void initializeGLFW();
     void initializeVulkan();
-    void createUBOs();
+    void createDepthImages();
+    void createDescriptorPool();
+    void createViewProjUBOs();
+    void createViewProjDescriptors();
+    void updateUniformBuffers();
+
+    void recreateSwapchain();
+
+    void update(float dt);
+    void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void render();
 
     void countFPS(float dt);
 
@@ -38,9 +48,16 @@ private:
     VulkanInstance mInstance;
     VulkanRenderDevice mRenderDevice;
     VulkanSwapchain mSwapchain;
+    VkDescriptorPool mDescriptorPool;
 
+    std::vector<VulkanImage> mDepthImages;
+
+    VkDescriptorSetLayout mViewProjectionDSLayout;
+    std::vector<VkDescriptorSet> mViewProjectionDS;
     std::vector<VulkanBuffer> mViewProjectionUBOs;
 
+    uint32_t mCurrentFrame;
+    CubeRenderer mCubeRenderer;
     Camera mSceneCamera;
 };
 
