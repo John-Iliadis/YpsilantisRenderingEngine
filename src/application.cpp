@@ -8,7 +8,7 @@ static constexpr int sInitialWindowWidth = 1920;
 static constexpr int sInitialWindowHeight = 1080;
 
 Application::Application()
-    : mWindow()
+    : mWindow(sInitialWindowWidth, sInitialWindowHeight)
     , mInstance()
     , mRenderDevice()
     , mSwapchain()
@@ -25,10 +25,13 @@ Application::Application()
                        mSwapchain.extent,
                        mViewProjectionDSLayout,
                        mViewProjectionDS);
+
+    mRenderFinish.init(mRenderDevice, &mSwapchain.images, mSwapchain.extent);
 }
 
 Application::~Application()
 {
+    mRenderFinish.terminate();
     mCubeRenderer.terminate();
 
     for (size_t i = 0; i < VulkanSwapchain::swapchainImageCount(); ++i)
@@ -49,12 +52,12 @@ void Application::run()
 {
     float currentTime = glfwGetTime();
 
-    while (!glfwWindowShouldClose(mWindow))
+    while (mWindow.opened())
     {
         float dt = glfwGetTime() - currentTime;
         currentTime = glfwGetTime();
 
-        glfwPollEvents();
+        handleEvents();
         update(dt);
         render();
     }
@@ -64,18 +67,7 @@ void Application::run()
 
 void Application::initializeGLFW()
 {
-    glfwInit();
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-    mWindow = glfwCreateWindow(sInitialWindowWidth, sInitialWindowHeight, "VulkanRenderer", nullptr, nullptr);
-    check(mWindow, "Failed to create GLFW window.");
-
-    glfwSetWindowUserPointer(mWindow, this);
-    glfwSetKeyCallback(mWindow, keyCallback);
-    glfwSetMouseButtonCallback(mWindow, mouseButtonCallback);
-    glfwSetCursorPosCallback(mWindow, cursorPosCallback);
-    glfwSetScrollCallback(mWindow, mouseScrollCallback);
 }
 
 void Application::initializeVulkan()
@@ -181,16 +173,8 @@ void Application::updateUniformBuffers()
 
 void Application::recreateSwapchain()
 {
-    int width, height;
-    glfwGetFramebufferSize(mWindow, &width, &height);
-
-    while (width == 0 || height == 0)
-    {
-        glfwGetFramebufferSize(mWindow, &width, &height);
-        glfwWaitEvents();
-    }
-
-    mSceneCamera.resize(static_cast<float>(width), static_cast<float>(height));
+    while (mWindow.width() == 0 || mWindow.height() == 0)
+        mWindow.waitEvents();
 
     vkDeviceWaitIdle(mRenderDevice.device);
 
@@ -203,6 +187,17 @@ void Application::recreateSwapchain()
 
     createDepthImages();
     mCubeRenderer.onSwapchainRecreate(mSwapchain.extent);
+    mRenderFinish.onSwapchainRecreate(mSwapchain.extent);
+}
+
+void Application::handleEvents()
+{
+    mWindow.pollEvents();
+
+    for (const Event& event : mWindow.events())
+    {
+        mSceneCamera.handleEvent(event);
+    }
 }
 
 void Application::update(float dt)
@@ -224,6 +219,7 @@ void Application::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imag
     vulkanCheck(result, "Failed to begin command buffer.");
 
     mCubeRenderer.fillCommandBuffer(commandBuffer, imageIndex);
+    mRenderFinish.fillCommandBuffer(commandBuffer, imageIndex);
 
     vkEndCommandBuffer(commandBuffer);
 }
@@ -300,30 +296,4 @@ void Application::countFPS(float dt)
         frameCount = 0;
         accumulatedTime = 0.f;
     }
-}
-
-void Application::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
-{
-    if (key == GLFW_KEY_ESCAPE)
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-
-    if (action == GLFW_PRESS || action == GLFW_RELEASE)
-        Input::updateKeyState(key, action);
-}
-
-void Application::mouseButtonCallback(GLFWwindow *window, int button, int action, int mods)
-{
-    if (action == GLFW_PRESS || action == GLFW_RELEASE)
-        Input::updateMouseButtonState(button, action);
-}
-
-void Application::cursorPosCallback(GLFWwindow *window, double x, double y)
-{
-    Input::updateMousePosition(static_cast<float>(x), static_cast<float>(y));
-}
-
-void Application::mouseScrollCallback(GLFWwindow *window, double x, double y)
-{
-    Application& app = *reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
-    app.mSceneCamera.scroll(static_cast<float>(x), static_cast<float>(y));
 }

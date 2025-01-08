@@ -46,6 +46,15 @@ void Camera::setState(Camera::State state)
     mState = state;
 }
 
+void Camera::handleEvent(const Event &event)
+{
+    if (event.type == Event::Resized)
+        resize(event.size.width, event.size.height);
+
+    if (event.type == Event::MouseWheelScrolled)
+        scroll(event.mouseWheel.x, event.mouseWheel.y);
+}
+
 void Camera::update(float dt)
 {
     switch (mState)
@@ -62,30 +71,6 @@ void Camera::update(float dt)
     }
 
     mPreviousMousePos = Input::mousePosition();
-}
-
-void Camera::resize(float width, float height)
-{
-    mProjection = glm::perspective(mFovY, width / height, mNearZ, mFarZ);
-    mViewProjection = mProjection * mView;
-}
-
-void Camera::scroll(float x, float y)
-{
-    switch (mState)
-    {
-        case FIRST_PERSON:
-        {
-            mSpeed += y;
-            break;
-        }
-        case VIEW_MODE:
-        {
-            mPosition += mBasis[2] * y; // todo: tweak
-            calculateViewProjection();
-            break;
-        }
-    }
 }
 
 const glm::mat4 &Camera::viewProjection() const
@@ -111,6 +96,30 @@ const glm::vec3 &Camera::position() const
 const glm::vec3 &Camera::front() const
 {
     return mBasis[2];
+}
+
+void Camera::resize(uint32_t width, uint32_t height)
+{
+    mAspectRatio = static_cast<float>(width) / static_cast<float>(height);
+    updateProjection();
+}
+
+void Camera::scroll(float x, float y)
+{
+    switch (mState)
+    {
+        case FIRST_PERSON:
+        {
+            mSpeed += y;
+            break;
+        }
+        case VIEW_MODE:
+        {
+            mPosition += mBasis[2] * y; // todo: tweak
+            calculateViewProjection();
+            break;
+        }
+    }
 }
 
 void Camera::updateFirstPerson(float dt)

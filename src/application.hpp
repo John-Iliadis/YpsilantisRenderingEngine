@@ -5,13 +5,14 @@
 #ifndef VULKANRENDERINGENGINE_APPLICATION_HPP
 #define VULKANRENDERINGENGINE_APPLICATION_HPP
 
-#include <glfw/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include "window/window.hpp"
 #include "camera/camera.hpp"
 #include "vk/include.hpp"
 #include "renderer/cube_renderer.hpp"
-#include "input.hpp"
+#include "renderer/render_finish.hpp"
+#include "window/input.hpp"
 #include "utils.hpp"
 
 class Application
@@ -32,19 +33,15 @@ private:
 
     void recreateSwapchain();
 
+    void handleEvents();
     void update(float dt);
     void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void render();
 
     void countFPS(float dt);
 
-    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-    static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
-    static void cursorPosCallback(GLFWwindow* window, double x, double y);
-    static void mouseScrollCallback(GLFWwindow* window, double x, double y);
-
 private:
-    GLFWwindow* mWindow;
+    Window mWindow;
     VulkanInstance mInstance;
     VulkanRenderDevice mRenderDevice;
     VulkanSwapchain mSwapchain;
@@ -57,8 +54,10 @@ private:
     std::vector<VulkanBuffer> mViewProjectionUBOs;
 
     uint32_t mCurrentFrame;
-    CubeRenderer mCubeRenderer;
     Camera mSceneCamera;
+
+    CubeRenderer mCubeRenderer;
+    RenderFinish mRenderFinish;
 };
 
 #endif //VULKANRENDERINGENGINE_APPLICATION_HPP

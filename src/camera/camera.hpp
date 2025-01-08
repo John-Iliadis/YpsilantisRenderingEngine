@@ -7,9 +7,13 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include "../window/event.hpp"
 #include "../window/input.hpp"
 #include "../utils.hpp"
 
+// todo: clamp speed var
+// todo: modify sensitivity
+// todo: add key shortcuts for changing state
 class Camera
 {
 public:
@@ -29,9 +33,8 @@ public:
     void setFarPlane(float farZ);
     void setState(State state);
 
+    void handleEvent(const Event& event);
     void update(float dt);
-    void resize(float width, float height);
-    void scroll(float x, float y);
 
     const glm::mat4& viewProjection() const;
     const glm::mat4& view() const;
@@ -40,6 +43,8 @@ public:
     const glm::vec3& front() const;
 
 private:
+    void resize(uint32_t width, uint32_t height);
+    void scroll(float x, float y);
     void updateFirstPerson(float dt);
     void updateViewMode(float dt);
     void updateEditorMode(float dt);
