@@ -9,12 +9,11 @@ static constexpr int sInitialWindowHeight = 1080;
 
 Application::Application()
     : mWindow(sInitialWindowWidth, sInitialWindowHeight)
-    , mRenderer(&mRenderDevice, &mSwapchain)
 {
     mInstance.create();
     mRenderDevice.create(mInstance);
     mSwapchain.create(mWindow, mInstance, mRenderDevice);
-    mRenderer.init();
+    mRenderer.init(mWindow, mInstance, mRenderDevice, mSwapchain);
 }
 
 Application::~Application()

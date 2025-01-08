@@ -4,30 +4,43 @@
 
 #include "renderer.hpp"
 
-Renderer::Renderer(VulkanRenderDevice *renderDevice, VulkanSwapchain *swapchain)
-    : mRenderDevice(renderDevice)
-    , mSwapchain(swapchain)
+void Renderer::init(GLFWwindow* window,
+                    const VulkanInstance& instance,
+                    const VulkanRenderDevice& renderDevice,
+                    const VulkanSwapchain& swapchain)
 {
-}
+    mRenderDevice = &renderDevice;
+    mSwapchain = &swapchain;
 
-void Renderer::init()
-{
     createDescriptorPool();
     createDepthImages();
     createViewProjUBOs();
     createViewProjDescriptors();
     createImguiRenderpass();
     createImguiFramebuffers();
+
+    initImGui(window, instance, renderDevice, mDescriptorPool, mImguiRenderpass);
+
+    mSceneCamera = {
+        glm::vec3(0.f, 0.f, -5.f),
+        30.f,
+        static_cast<float>(mSwapchain->extent.width),
+        static_cast<float>(mSwapchain->extent.height)
+    };
 }
 
 void Renderer::terminate()
 {
+    terminateImGui();
+
     for (uint32_t i = 0; i < VulkanSwapchain::swapchainImageCount(); ++i)
     {
         destroyImage(*mRenderDevice, mDepthImages.at(i));
         destroyBuffer(*mRenderDevice, mViewProjUBOs.at(i));
+        vkDestroyFramebuffer(mRenderDevice->device, mImguiFramebuffers.at(i), nullptr);
     }
 
+    vkDestroyRenderPass(mRenderDevice->device, mImguiRenderpass, nullptr);
     vkDestroyDescriptorPool(mRenderDevice->device, mDescriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(mRenderDevice->device, mViewProjDSLayout, nullptr);
 }
@@ -39,12 +52,15 @@ void Renderer::handleEvent(const Event &event)
 
 void Renderer::update(float dt)
 {
+    beginImGui();
     mSceneCamera.update(dt);
+    ImGui::ShowDemoWindow();
 }
 
 void Renderer::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
 {
     updateUniformBuffers(imageIndex);
+    renderImgui(commandBuffer, imageIndex);
 }
 
 void Renderer::createDescriptorPool()
@@ -64,11 +80,11 @@ void Renderer::createDepthImages()
     for (uint32_t i = 0; i < mDepthImages.size(); ++i)
     {
         mDepthImages.at(i) = createImage2D(*mRenderDevice,
-                                           VK_FORMAT_D32_SFLOAT,
-                                           mSwapchain->extent.width,
-                                           mSwapchain->extent.height,
-                                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                           VK_IMAGE_ASPECT_DEPTH_BIT);
+                                              VK_FORMAT_D32_SFLOAT,
+                                              mSwapchain->extent.width,
+                                              mSwapchain->extent.height,
+                                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                              VK_IMAGE_ASPECT_DEPTH_BIT);
 
         setDebugVulkanObjectName(mRenderDevice->device,
                                  VK_OBJECT_TYPE_IMAGE,
@@ -127,6 +143,27 @@ void Renderer::createViewProjDescriptors()
     }
 }
 
+void Renderer::renderImgui(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+{
+    VkClearValue clearValue {.color = {0.2f, 0.2f, 0.2f, 1.f}};
+
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mImguiRenderpass,
+        .framebuffer = mImguiFramebuffers.at(imageIndex),
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = mSwapchain->extent
+        },
+        .clearValueCount = 1,
+        .pClearValues = &clearValue
+    };
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    ::renderImGui(commandBuffer);
+    vkCmdEndRenderPass(commandBuffer);
+}
+
 void Renderer::updateUniformBuffers(uint32_t imageIndex)
 {
     mapBufferMemory(*mRenderDevice,
@@ -140,7 +177,7 @@ void Renderer::createImguiRenderpass()
     VkAttachmentDescription attachmentDescription {
         .format = VK_FORMAT_R8G8B8A8_UNORM,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, // todo: change to VK_ATTACHMENT_LOAD_OP_LOAD once post processing is implemented
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -211,7 +248,9 @@ void Renderer::onSwapchainRecreate()
     for (uint32_t i = 0; i < VulkanSwapchain::swapchainImageCount(); ++i)
     {
         destroyImage(*mRenderDevice, mDepthImages.at(i));
+        vkDestroyFramebuffer(mRenderDevice->device, mImguiFramebuffers.at(i), nullptr);
     }
 
     createDepthImages();
+    createImguiFramebuffers();
 }

@@ -11,7 +11,7 @@ endif()
 
 file(GLOB INCLUDE_DIRS ${DEPENDENCY_DIR}/*/include)
 file(GLOB LIBS ${DEPENDENCY_DIR}/*/lib/*.a)
-file(GLOB IMGUI_SRC ${IMGUI_DIR}/include/imgui/*.cpp)
+file(GLOB IMGUI_SRC ${DEPENDENCY_DIR}/imgui/include/imgui/*.cpp)
 
 add_executable(${PROJECT_NAME}
         ${IMGUI_SRC}
@@ -46,8 +46,6 @@ add_executable(${PROJECT_NAME}
         src/renderer/vertices.hpp
         src/renderer/renderer.cpp
         src/renderer/renderer.hpp
-        src/renderer/cube_renderer.cpp
-        src/renderer/cube_renderer.hpp
         src/vk/vulkan_shader.cpp
         src/vk/vulkan_shader.hpp
         src/vk/vulkan_descriptor.cpp
@@ -55,8 +53,8 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_pipeline.cpp
         src/vk/vulkan_pipeline.hpp
         src/vk/vulkan_function_pointers.hpp
-        src/renderer/render_finish.cpp
-        src/renderer/render_finish.hpp
+        src/vk/vulkan_imgui.cpp
+        src/vk/vulkan_imgui.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)
@@ -84,6 +82,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
         GLM_FORCE_DEPTH_ZERO_TO_ONE
         GLM_FORCE_RADIANS
         GLM_FORCE_LEFT_HANDED
+        IMGUI_DEFINE_MATH_OPERATORS
 )
 
 target_link_options(${PROJECT_NAME} PRIVATE -static)

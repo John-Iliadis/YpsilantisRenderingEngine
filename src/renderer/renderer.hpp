@@ -13,9 +13,10 @@
 class Renderer
 {
 public:
-    Renderer(VulkanRenderDevice* renderDevice, VulkanSwapchain* swapchain);
-
-    void init();
+    void init(GLFWwindow* window,
+              const VulkanInstance& instance,
+              const VulkanRenderDevice& renderDevice,
+              const VulkanSwapchain& swapchain);
     void terminate();
 
     void handleEvent(const Event& event);
@@ -32,11 +33,13 @@ private:
     void createImguiFramebuffers();
     void createImguiRenderpass();
 
+    void renderImgui(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+
     void updateUniformBuffers(uint32_t imageIndex);
 
 private:
-    VulkanRenderDevice* mRenderDevice;
-    VulkanSwapchain* mSwapchain;
+    const VulkanRenderDevice* mRenderDevice;
+    const VulkanSwapchain* mSwapchain;
     VkDescriptorPool mDescriptorPool;
 
     VkRenderPass mImguiRenderpass;
