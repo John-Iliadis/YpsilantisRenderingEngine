@@ -5,14 +5,16 @@
 #ifndef VULKANRENDERINGENGINE_INPUT_HPP
 #define VULKANRENDERINGENGINE_INPUT_HPP
 
-#include <glfw/glfw3.h>
-#include <glm/glm.hpp>
+#include "glfw/glfw3.h"
+#include "glm/glm.hpp"
 
 class Input
 {
 public:
     static bool keyPressed(int key);
     static bool keyReleased(int key);
+    static bool keyPressedCtrl(int key);
+    static bool keyPressedShift(int key);
 
     static bool mouseButtonPressed(int button);
     static bool mouseButtonReleased(int button);

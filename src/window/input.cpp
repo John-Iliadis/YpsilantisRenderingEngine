@@ -14,6 +14,16 @@ bool Input::keyReleased(int key)
     return mKeyData.contains(key) && mKeyData.at(key) == GLFW_RELEASE;
 }
 
+bool Input::keyPressedCtrl(int key)
+{
+    return keyPressed(key) && (keyPressed(GLFW_KEY_LEFT_CONTROL) || keyReleased(GLFW_KEY_RIGHT_CONTROL));
+}
+
+bool Input::keyPressedShift(int key)
+{
+    return keyPressed(key) && (keyPressed(GLFW_KEY_LEFT_SHIFT) || keyReleased(GLFW_KEY_RIGHT_SHIFT));
+}
+
 bool Input::mouseButtonPressed(int button)
 {
     return mMouseData.contains(button) && mMouseData.at(button) == GLFW_PRESS;
