@@ -16,6 +16,8 @@ void Renderer::init()
     createDepthImages();
     createViewProjUBOs();
     createViewProjDescriptors();
+    createImguiRenderpass();
+    createImguiFramebuffers();
 }
 
 void Renderer::terminate()
@@ -133,10 +135,83 @@ void Renderer::updateUniformBuffers(uint32_t imageIndex)
                     glm::value_ptr(mSceneCamera.viewProjection()));
 }
 
+void Renderer::createImguiRenderpass()
+{
+    VkAttachmentDescription attachmentDescription {
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, // todo: change to VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL once post processing is implemented
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    };
+
+    VkAttachmentReference colorAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .inputAttachmentCount = 0,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachmentDescription,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice->device, &renderPassCreateInfo, nullptr, &mImguiRenderpass);
+    vulkanCheck(result, "Failed to create imgui renderpass.");
+
+    setDebugVulkanObjectName(mRenderDevice->device,
+                             VK_OBJECT_TYPE_RENDER_PASS,
+                             "Imgui renderpass",
+                             mImguiRenderpass);
+}
+
+void Renderer::createImguiFramebuffers()
+{
+    mImguiFramebuffers.resize(VulkanSwapchain::swapchainImageCount());
+
+    for (size_t i = 0; i < mImguiFramebuffers.size(); ++i)
+    {
+        VkFramebufferCreateInfo framebufferCreateInfo {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = mImguiRenderpass,
+            .attachmentCount = 1,
+            .pAttachments = &mSwapchain->images.at(i).imageView,
+            .width = mSwapchain->extent.width,
+            .height = mSwapchain->extent.height,
+            .layers = 1
+        };
+
+        VkResult result = vkCreateFramebuffer(mRenderDevice->device,
+                                              &framebufferCreateInfo,
+                                              nullptr,
+                                              &mImguiFramebuffers.at(i));
+        vulkanCheck(result, std::format("Failed to create imgui framebuffer {}", i).c_str());
+
+        setDebugVulkanObjectName(mRenderDevice->device,
+                                 VK_OBJECT_TYPE_FRAMEBUFFER,
+                                 std::format("Imgui framebuffer {}", i),
+                                 mImguiFramebuffers.at(i));
+    }
+}
+
 void Renderer::onSwapchainRecreate()
 {
     for (uint32_t i = 0; i < VulkanSwapchain::swapchainImageCount(); ++i)
     {
         destroyImage(*mRenderDevice, mDepthImages.at(i));
     }
+
+    createDepthImages();
 }

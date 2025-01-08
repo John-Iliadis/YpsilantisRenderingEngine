@@ -29,19 +29,25 @@ private:
     void createViewProjUBOs();
     void createViewProjDescriptors();
 
+    void createImguiFramebuffers();
+    void createImguiRenderpass();
+
     void updateUniformBuffers(uint32_t imageIndex);
 
 private:
     VulkanRenderDevice* mRenderDevice;
     VulkanSwapchain* mSwapchain;
-
     VkDescriptorPool mDescriptorPool;
+
+    VkRenderPass mImguiRenderpass;
+
     VkDescriptorSetLayout mViewProjDSLayout;
     std::vector<VkDescriptorSet> mViewProjDS;
     std::vector<VulkanBuffer> mViewProjUBOs;
 
     Camera mSceneCamera;
 
+    std::vector<VkFramebuffer> mImguiFramebuffers;
     std::vector<VulkanImage> mDepthImages;
 };
 
