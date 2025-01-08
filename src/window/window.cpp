@@ -22,6 +22,7 @@ Window::Window(uint32_t width, uint32_t height)
     glfwSetCursorPosCallback(mWindow, cursorPosCallback);
     glfwSetScrollCallback(mWindow, mouseScrollCallback);
     glfwSetFramebufferSizeCallback(mWindow, framebufferSizeCallback);
+    glfwSetWindowIconifyCallback(mWindow, windowMinificationCallback);
 }
 
 Window::~Window()
@@ -150,4 +151,14 @@ void Window::framebufferSizeCallback(GLFWwindow *glfwWindow, int width, int heig
 const std::vector<Event> &Window::events() const
 {
     return mEventQueue;
+}
+
+void Window::windowMinificationCallback(GLFWwindow *glfwWindow, int minimized)
+{
+    Window& window = *reinterpret_cast<Window*>(glfwGetWindowUserPointer(glfwWindow));
+
+    Event event{};
+    event.type = minimized? Event::WindowMinimized : Event::WindowRestored;
+
+    window.mEventQueue.push_back(event);
 }

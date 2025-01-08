@@ -9,43 +9,20 @@ static constexpr int sInitialWindowHeight = 1080;
 
 Application::Application()
     : mWindow(sInitialWindowWidth, sInitialWindowHeight)
-    , mInstance()
-    , mRenderDevice()
-    , mSwapchain()
-    , mViewProjectionDSLayout()
-    , mCurrentFrame()
-    , mSceneCamera(glm::vec3(0.f, 0.f, -5.f), 30.f, sInitialWindowHeight, sInitialWindowHeight)
+    , mRenderer(&mRenderDevice, &mSwapchain)
 {
-    initializeGLFW();
-    initializeVulkan();
-
-    mCubeRenderer.init(mRenderDevice,
-                       &mSwapchain.images,
-                       &mDepthImages,
-                       mSwapchain.extent,
-                       mViewProjectionDSLayout,
-                       mViewProjectionDS);
-
-    mRenderFinish.init(mRenderDevice, &mSwapchain.images, mSwapchain.extent);
+    mInstance.create();
+    mRenderDevice.create(mInstance);
+    mSwapchain.create(mWindow, mInstance, mRenderDevice);
+    mRenderer.init();
 }
 
 Application::~Application()
 {
-    mRenderFinish.terminate();
-    mCubeRenderer.terminate();
-
-    for (size_t i = 0; i < VulkanSwapchain::swapchainImageCount(); ++i)
-    {
-        destroyImage(mRenderDevice, mDepthImages.at(i));
-        destroyBuffer(mRenderDevice, mViewProjectionUBOs.at(i));
-    }
-
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mViewProjectionDSLayout, nullptr);
-    vkDestroyDescriptorPool(mRenderDevice.device, mDescriptorPool, nullptr);
+    mRenderer.terminate();
     mSwapchain.destroy(mInstance, mRenderDevice);
     mRenderDevice.destroy();
     mInstance.destroy();
-    glfwTerminate();
 }
 
 void Application::run()
@@ -65,112 +42,6 @@ void Application::run()
     vkDeviceWaitIdle(mRenderDevice.device);
 }
 
-void Application::initializeGLFW()
-{
-
-}
-
-void Application::initializeVulkan()
-{
-    mInstance.create();
-    mRenderDevice.create(mInstance);
-    mSwapchain.create(mWindow, mInstance, mRenderDevice);
-    createDepthImages();
-    createDescriptorPool();
-    createViewProjUBOs();
-    createViewProjDescriptors();
-}
-
-void Application::createDepthImages()
-{
-    mDepthImages.resize(VulkanSwapchain::swapchainImageCount());
-
-    for (uint32_t i = 0; i < mDepthImages.size(); ++i)
-    {
-        mDepthImages.at(i) = createImage2D(mRenderDevice,
-                                           VK_FORMAT_D32_SFLOAT,
-                                           mSwapchain.extent.width,
-                                           mSwapchain.extent.height,
-                                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                           VK_IMAGE_ASPECT_DEPTH_BIT);
-
-        setDebugVulkanObjectName(mRenderDevice.device,
-                                 VK_OBJECT_TYPE_IMAGE,
-                                 std::format("Application depth image {}", i),
-                                 mDepthImages.at(i).image);
-    }
-}
-
-void Application::createDescriptorPool()
-{
-    mDescriptorPool = ::createDescriptorPool(mRenderDevice, 1000, 100, 100, 100);
-
-    setDebugVulkanObjectName(mRenderDevice.device,
-                             VK_OBJECT_TYPE_DESCRIPTOR_POOL,
-                             "Application descriptor pool",
-                             mDescriptorPool);
-
-
-}
-
-void Application::createViewProjUBOs()
-{
-    mViewProjectionUBOs.resize(VulkanSwapchain::swapchainImageCount());
-
-    VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-
-    VkMemoryPropertyFlags memoryProperties {
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-    };
-
-    for (size_t i = 0; i < mViewProjectionUBOs.size(); ++i)
-    {
-        mViewProjectionUBOs.at(i) = createBuffer(mRenderDevice, sizeof(glm::mat4), usage, memoryProperties);
-
-        setDebugVulkanObjectName(mRenderDevice.device,
-                                 VK_OBJECT_TYPE_BUFFER,
-                                 std::format("ViewProjection buffer {}", i),
-                                 mViewProjectionUBOs.at(i).buffer);
-    }
-}
-
-void Application::createViewProjDescriptors()
-{
-    mViewProjectionDS.resize(VulkanSwapchain::swapchainImageCount());
-
-    DescriptorSetLayoutCreator DSLayoutCreator(mRenderDevice.device);
-    DSLayoutCreator.addLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-    mViewProjectionDSLayout = DSLayoutCreator.create();
-
-    setDebugVulkanObjectName(mRenderDevice.device,
-                             VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
-                             "ViewProjection descriptor set layout",
-                             mViewProjectionDSLayout);
-
-    for (uint32_t i = 0; i < mViewProjectionDS.size(); ++i)
-    {
-        DescriptorSetCreator descriptorSetCreator(mRenderDevice.device, mDescriptorPool, mViewProjectionDSLayout);
-        descriptorSetCreator.addBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                                       0, mViewProjectionUBOs.at(i).buffer,
-                                       0, sizeof(glm::mat4));
-        mViewProjectionDS.at(i) = descriptorSetCreator.create();
-
-        setDebugVulkanObjectName(mRenderDevice.device,
-                                 VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                                 std::format("ViewProjection descriptor set {}", i),
-                                 mViewProjectionDS.at(i));
-    }
-}
-
-void Application::updateUniformBuffers()
-{
-    mapBufferMemory(mRenderDevice,
-                    mViewProjectionUBOs.at(mCurrentFrame),
-                    0, sizeof(glm::mat4),
-                    glm::value_ptr(mSceneCamera.viewProjection()));
-}
-
 void Application::recreateSwapchain()
 {
     while (mWindow.width() == 0 || mWindow.height() == 0)
@@ -179,15 +50,7 @@ void Application::recreateSwapchain()
     vkDeviceWaitIdle(mRenderDevice.device);
 
     mSwapchain.recreate(mRenderDevice);
-
-    for (size_t i = 0; i < VulkanSwapchain::swapchainImageCount(); ++i)
-    {
-        destroyImage(mRenderDevice, mDepthImages.at(i));
-    }
-
-    createDepthImages();
-    mCubeRenderer.onSwapchainRecreate(mSwapchain.extent);
-    mRenderFinish.onSwapchainRecreate(mSwapchain.extent);
+    mRenderer.onSwapchainRecreate();
 }
 
 void Application::handleEvents()
@@ -195,16 +58,13 @@ void Application::handleEvents()
     mWindow.pollEvents();
 
     for (const Event& event : mWindow.events())
-    {
-        mSceneCamera.handleEvent(event);
-    }
+        mRenderer.handleEvent(event);
 }
 
 void Application::update(float dt)
 {
     countFPS(dt);
-    mSceneCamera.update(dt);
-    updateUniformBuffers();
+    mRenderer.update(dt);
 }
 
 void Application::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
@@ -218,21 +78,22 @@ void Application::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imag
     VkResult result = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
     vulkanCheck(result, "Failed to begin command buffer.");
 
-    mCubeRenderer.fillCommandBuffer(commandBuffer, imageIndex);
-    mRenderFinish.fillCommandBuffer(commandBuffer, imageIndex);
+    mRenderer.fillCommandBuffer(commandBuffer, imageIndex);
 
     vkEndCommandBuffer(commandBuffer);
 }
 
 void Application::render()
 {
-    vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(mCurrentFrame), VK_TRUE, UINT64_MAX);
+    static uint32_t currentFrame = 0;
+
+    vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(currentFrame), VK_TRUE, UINT64_MAX);
 
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(mRenderDevice.device,
                                             mSwapchain.swapchain,
                                            UINT64_MAX,
-                                           mSwapchain.imageReadySemaphores.at(mCurrentFrame),
+                                           mSwapchain.imageReadySemaphores.at(currentFrame),
                                            VK_NULL_HANDLE,
                                            &imageIndex);
 
@@ -242,31 +103,31 @@ void Application::render()
         return;
     }
 
-    vkResetFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(mCurrentFrame));
+    vkResetFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(currentFrame));
 
-    fillCommandBuffer(mSwapchain.commandBuffers.at(mCurrentFrame), imageIndex);
+    fillCommandBuffer(mSwapchain.commandBuffers.at(currentFrame), imageIndex);
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submitInfo {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &mSwapchain.imageReadySemaphores.at(mCurrentFrame),
+        .pWaitSemaphores = &mSwapchain.imageReadySemaphores.at(currentFrame),
         .pWaitDstStageMask = &waitStage,
         .commandBufferCount = 1,
-        .pCommandBuffers = &mSwapchain.commandBuffers.at(mCurrentFrame),
+        .pCommandBuffers = &mSwapchain.commandBuffers.at(currentFrame),
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &mSwapchain.renderCompleteSemaphores.at(mCurrentFrame)
+        .pSignalSemaphores = &mSwapchain.renderCompleteSemaphores.at(currentFrame)
     };
 
     result = vkQueueSubmit(mRenderDevice.graphicsQueue,
                            1, &submitInfo,
-                           mSwapchain.inFlightFences.at(mCurrentFrame));
+                           mSwapchain.inFlightFences.at(currentFrame));
     vulkanCheck(result, "Failed queue submit.");
 
     VkPresentInfoKHR presentInfo {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &mSwapchain.renderCompleteSemaphores.at(mCurrentFrame),
+        .pWaitSemaphores = &mSwapchain.renderCompleteSemaphores.at(currentFrame),
         .swapchainCount = 1,
         .pSwapchains = &mSwapchain.swapchain,
         .pImageIndices = &imageIndex,
@@ -278,7 +139,7 @@ void Application::render()
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         recreateSwapchain();
 
-    mCurrentFrame = (mCurrentFrame + 1) % VulkanSwapchain::swapchainImageCount();
+    currentFrame = (currentFrame + 1) % VulkanSwapchain::swapchainImageCount();
 }
 
 void Application::countFPS(float dt)

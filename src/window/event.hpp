@@ -45,6 +45,8 @@ public:
         MouseWheelScrolled,
         MouseButton,
         MouseMoved,
+        WindowMinimized,
+        WindowRestored
     };
 
     EventType type;

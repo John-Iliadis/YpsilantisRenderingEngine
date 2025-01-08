@@ -57,8 +57,6 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_function_pointers.hpp
         src/renderer/render_finish.cpp
         src/renderer/render_finish.hpp
-        src/renderer/render_begin.cpp
-        src/renderer/render_begin.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)

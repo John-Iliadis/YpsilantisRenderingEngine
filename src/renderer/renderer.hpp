@@ -6,29 +6,43 @@
 #define VULKANRENDERINGENGINE_RENDERER_HPP
 
 #include <vulkan/vulkan.h>
+#include <glm/gtc/type_ptr.hpp>
 #include "../vk/include.hpp"
+#include "../camera/camera.hpp"
 
 class Renderer
 {
 public:
-    Renderer();
-    virtual ~Renderer() = default;
+    Renderer(VulkanRenderDevice* renderDevice, VulkanSwapchain* swapchain);
 
-    virtual void init(const VulkanRenderDevice &renderDevice);
-    virtual void terminate();
-    virtual void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) = 0;
+    void init();
+    void terminate();
 
-protected:
-    virtual void beginRenderpass(VkCommandBuffer commandBuffer, uint32_t imageIndex) = 0;
+    void handleEvent(const Event& event);
+    void update(float dt);
+    void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void onSwapchainRecreate();
 
-protected:
-    VulkanRenderDevice mRenderDevice;
+private:
+    void createDescriptorPool();
+    void createDepthImages();
+    void createViewProjUBOs();
+    void createViewProjDescriptors();
 
-    VkRenderPass mRenderpass;
-    std::vector<VkFramebuffer> mFramebuffers;
+    void updateUniformBuffers(uint32_t imageIndex);
 
-    VkPipelineLayout mPipelineLayout;
-    VkPipeline mGraphicsPipeline;
+private:
+    VulkanRenderDevice* mRenderDevice;
+    VulkanSwapchain* mSwapchain;
+
+    VkDescriptorPool mDescriptorPool;
+    VkDescriptorSetLayout mViewProjDSLayout;
+    std::vector<VkDescriptorSet> mViewProjDS;
+    std::vector<VulkanBuffer> mViewProjUBOs;
+
+    Camera mSceneCamera;
+
+    std::vector<VulkanImage> mDepthImages;
 };
 
 #endif //VULKANRENDERINGENGINE_RENDERER_HPP
