@@ -21,8 +21,11 @@ add_executable(${PROJECT_NAME}
         src/application.hpp
         src/utils.cpp
         src/utils.hpp
-        src/input.cpp
-        src/input.hpp
+        src/window/window.cpp
+        src/window/window.hpp
+        src/window/Event.hpp
+        src/window/input.cpp
+        src/window/input.hpp
         src/vk/vulkan_instance.cpp
         src/vk/vulkan_instance.hpp
         src/vk/include.hpp
@@ -52,24 +55,25 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_pipeline.cpp
         src/vk/vulkan_pipeline.hpp
         src/vk/vulkan_function_pointers.hpp
+        src/renderer/render_finish.cpp
+        src/renderer/render_finish.hpp
+        src/renderer/render_begin.cpp
+        src/renderer/render_begin.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES DEBUG_POSTFIX -d)
 
-find_package(Vulkan COMPONENTS shaderc_combined REQUIRED)
-message(STATUS "Vulkan include directory: ${Vulkan_INCLUDE_DIR}")
-message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")
+find_package(Vulkan REQUIRED)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-        ${Vulkan_INCLUDE_DIR}
         ${INCLUDE_DIRS}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-        ${Vulkan_LIBRARIES}
-        "C:/VulkanSDK/1.3.283.0/Lib/shaderc_shared.lib" # todo: remove absolute path
+        Vulkan::Vulkan
+        $ENV{VULKAN_SDK}/Lib/shaderc_shared.lib
         ${LIBS}
 )
 

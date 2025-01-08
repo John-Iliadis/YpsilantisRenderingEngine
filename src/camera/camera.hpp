@@ -7,7 +7,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "../input.hpp"
+#include "../window/input.hpp"
 #include "../utils.hpp"
 
 class Camera
