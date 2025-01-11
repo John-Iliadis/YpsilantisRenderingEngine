@@ -140,14 +140,12 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
     return imageView;
 }
 
-void transitionImageLayout(const VulkanRenderDevice& renderDevice,
+void transitionImageLayout(VkCommandBuffer commandBuffer,
                            VulkanImage& image,
                            VkImageLayout oldLayout,
                            VkImageLayout newLayout,
                            uint32_t mipLevels)
 {
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice.device, renderDevice.commandPool);
-
     VkImageMemoryBarrier imageMemoryBarrier {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .oldLayout = oldLayout,
@@ -179,6 +177,13 @@ void transitionImageLayout(const VulkanRenderDevice& renderDevice,
         srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
         dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     }
+    else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+    {
+        imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        imageMemoryBarrier.dstAccessMask = 0;
+        srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    }
     else
     {
         check(false, "Operation not supported yet.");
@@ -189,8 +194,6 @@ void transitionImageLayout(const VulkanRenderDevice& renderDevice,
                          dstStageMask,
                          0, 0, nullptr, 0, nullptr,
                          1, &imageMemoryBarrier);
-
-    endSingleTimeCommands(renderDevice.device, renderDevice.commandPool, commandBuffer, renderDevice.graphicsQueue);
 }
 
 void copyBufferToImage(const VulkanRenderDevice& renderDevice,
@@ -221,4 +224,56 @@ void copyBufferToImage(const VulkanRenderDevice& renderDevice,
                            1, &copyRegion);
 
     endSingleTimeCommands(renderDevice.device, renderDevice.commandPool, commandBuffer, renderDevice.graphicsQueue);
+}
+
+void resolveImage(VkCommandBuffer commandBuffer,
+                  VkImage srcImage,
+                  VkImage dstImage,
+                  VkImageAspectFlags aspectMask,
+                  uint32_t width, uint32_t height)
+{
+    VkImageResolve resolve {
+        .srcSubresource {
+            .aspectMask = aspectMask,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        },
+        .srcOffset {.x = 0, .y = 0, .z = 0},
+        .dstSubresource {
+            .aspectMask = aspectMask,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        },
+        .dstOffset {.x = 0, .y = 0, .z = 0},
+        .extent {
+            .width = width,
+            .height = height,
+            .depth = 1
+        }
+    };
+
+    vkCmdResolveImage(commandBuffer,
+                      srcImage,
+                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                      dstImage,
+                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                      1, &resolve);
+}
+
+void setImageDebugName(const VulkanRenderDevice& renderDevice,
+                       const VulkanImage& image,
+                       const char* name,
+                       std::optional<uint32_t> index)
+{
+    setDebugVulkanObjectName(renderDevice.device,
+                             VK_OBJECT_TYPE_IMAGE,
+                             std::format("{} image{}", name,index.has_value()? std::format(" {}", index.value()) : ""),
+                             image.image);
+
+    setDebugVulkanObjectName(renderDevice.device,
+                             VK_OBJECT_TYPE_IMAGE_VIEW,
+                             std::format("{} image view{}", name, index.has_value()? std::format(" {}", index.value()) : ""),
+                             image.imageView);
 }

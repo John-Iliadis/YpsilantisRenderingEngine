@@ -7,6 +7,7 @@
 
 #include <glfw/glfw3.h>
 #include <vulkan/vulkan.h>
+#include <glm/glm.hpp>
 #include "vulkan_render_device.hpp"
 #include "vulkan_image.hpp"
 #include "vulkan_utils.hpp"
@@ -19,6 +20,7 @@ public:
 
     VkFormat format;
     VkExtent2D extent;
+    uint32_t imageCount;
 
     std::vector<VulkanImage> images;
     std::vector<VkCommandBuffer> commandBuffers;
@@ -32,10 +34,7 @@ public:
                 const VulkanInstance& instance,
                 const VulkanRenderDevice& renderDevice);
     void destroy(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice);
-
     void recreate(const VulkanRenderDevice& renderDevice);
-
-    static uint32_t swapchainImageCount();
 
 private:
     void createSurface(GLFWwindow* window, const VulkanInstance& instance);

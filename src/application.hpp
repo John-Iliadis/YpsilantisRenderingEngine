@@ -21,7 +21,7 @@ private:
     void recreateSwapchain();
     void handleEvents();
     void update(float dt);
-    void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex);
     void render();
 
     void countFPS(float dt);

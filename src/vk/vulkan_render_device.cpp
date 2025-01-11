@@ -126,20 +126,6 @@ void VulkanRenderDevice::createCommandPool()
     vulkanCheck(result, "Failed to create command pool.");
 }
 
-bool VulkanRenderDevice::checkExtSupport(VkPhysicalDevice physicalDevice, const char* extension)
-{
-    uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, nullptr);
-
-    std::vector<VkExtensionProperties> extensions(extensionCount);
-    vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, extensions.data());
-
-    for (const auto& ext : extensions)
-        if (std::string(ext.extensionName) == extension)
-            return true;
-    return false;
-}
-
 bool VulkanRenderDevice::checkExtSupport(VkPhysicalDevice physicalDevice, const std::vector<const char *> &extensions)
 {
     std::unordered_set<const char*, cStrHash, cStrCompare> extensionsSet(extensions.begin(), extensions.end());

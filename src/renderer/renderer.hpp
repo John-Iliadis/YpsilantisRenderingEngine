@@ -8,20 +8,20 @@
 #include <vulkan/vulkan.h>
 #include <glm/gtc/type_ptr.hpp>
 #include "../vk/include.hpp"
-#include "../camera/camera.hpp"
+#include "camera.hpp"
 
 class Renderer
 {
 public:
     void init(GLFWwindow* window,
-              const VulkanInstance& instance,
-              const VulkanRenderDevice& renderDevice,
-              const VulkanSwapchain& swapchain);
+              VulkanInstance& instance,
+              VulkanRenderDevice& renderDevice,
+              VulkanSwapchain& swapchain);
     void terminate();
 
     void handleEvent(const Event& event);
     void update(float dt);
-    void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex);
     void onSwapchainRecreate();
 
 private:
@@ -30,27 +30,31 @@ private:
     void createViewProjUBOs();
     void createViewProjDescriptors();
 
-    void createImguiFramebuffers();
+    void createImguiImages();
     void createImguiRenderpass();
+    void createImguiFramebuffers();
+    void blitToSwapchainImage(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex);
 
-    void renderImgui(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void renderImgui(VkCommandBuffer commandBuffer, uint32_t frameIndex);
 
-    void updateUniformBuffers(uint32_t imageIndex);
+    void updateUniformBuffers(uint32_t frameIndex);
 
 private:
-    const VulkanRenderDevice* mRenderDevice;
-    const VulkanSwapchain* mSwapchain;
+    VulkanRenderDevice* mRenderDevice;
+    VulkanSwapchain* mSwapchain;
     VkDescriptorPool mDescriptorPool;
+    VkSampleCountFlagBits mMsaaSampleCount;
 
-    VkRenderPass mImguiRenderpass;
+    Camera mSceneCamera;
 
     VkDescriptorSetLayout mViewProjDSLayout;
     std::vector<VkDescriptorSet> mViewProjDS;
     std::vector<VulkanBuffer> mViewProjUBOs;
 
-    Camera mSceneCamera;
-
+    VkRenderPass mImguiRenderpass;
+    std::vector<VulkanImage> mImguiImages;
     std::vector<VkFramebuffer> mImguiFramebuffers;
+
     std::vector<VulkanImage> mDepthImages;
 };
 

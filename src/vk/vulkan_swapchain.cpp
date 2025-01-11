@@ -17,11 +17,15 @@ void VulkanSwapchain::create(GLFWwindow* window,
 
 void VulkanSwapchain::destroy(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice)
 {
-    for (size_t i = 0; i < swapchainImageCount(); ++i)
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         vkDestroyFence(renderDevice.device, inFlightFences.at(i), nullptr);
         vkDestroySemaphore(renderDevice.device, imageReadySemaphores.at(i), nullptr);
         vkDestroySemaphore(renderDevice.device, renderCompleteSemaphores.at(i), nullptr);
+    }
+
+    for (size_t i = 0; i < imageCount; ++i)
+    {
         vkDestroyImageView(renderDevice.device, images.at(i).imageView, nullptr);
     }
 
@@ -31,7 +35,7 @@ void VulkanSwapchain::destroy(const VulkanInstance& instance, const VulkanRender
 
 void VulkanSwapchain::recreate(const VulkanRenderDevice& renderDevice)
 {
-    for (size_t i = 0; i < swapchainImageCount(); ++i)
+    for (size_t i = 0; i < imageCount; ++i)
         vkDestroyImageView(renderDevice.device, images.at(i).imageView, nullptr);
     vkDestroySwapchainKHR(renderDevice.device, swapchain, nullptr);
 
@@ -52,16 +56,17 @@ void VulkanSwapchain::createSwapchain(const VulkanRenderDevice& renderDevice)
 
     format = VK_FORMAT_R8G8B8A8_UNORM;
     extent = surfaceCapabilities.currentExtent;
+    imageCount = glm::max(glm::min(3u, surfaceCapabilities.maxImageCount), surfaceCapabilities.minImageCount);
 
     VkSwapchainCreateInfoKHR swapchainCreateInfoKhr {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = surface,
-        .minImageCount = swapchainImageCount(),
+        .minImageCount = imageCount,
         .imageFormat = format,
         .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
         .imageExtent = extent,
         .imageArrayLayers = 1,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -78,13 +83,12 @@ void VulkanSwapchain::createSwapchain(const VulkanRenderDevice& renderDevice)
 
 void VulkanSwapchain::createSwapchainImages(const VulkanRenderDevice& renderDevice)
 {
-    images.resize(swapchainImageCount());
+    images.resize(imageCount);
 
-    VkImage swapchainImages[VulkanSwapchain::swapchainImageCount()];
-    uint32_t imgCount = swapchainImageCount();
-    vkGetSwapchainImagesKHR(renderDevice.device, swapchain, &imgCount, swapchainImages);
+    VkImage swapchainImages[imageCount];
+    vkGetSwapchainImagesKHR(renderDevice.device, swapchain, &imageCount, swapchainImages);
 
-    for (size_t i = 0; i < swapchainImageCount(); ++i)
+    for (size_t i = 0; i < imageCount; ++i)
     {
         images.at(i).image = swapchainImages[i];
         images.at(i).imageView = createImageView(renderDevice,
@@ -93,28 +97,25 @@ void VulkanSwapchain::createSwapchainImages(const VulkanRenderDevice& renderDevi
                                                     format,
                                                     VK_IMAGE_ASPECT_COLOR_BIT);
 
-        setDebugVulkanObjectName(renderDevice.device,
-                                 VK_OBJECT_TYPE_IMAGE_VIEW,
-                                 std::format("Swapchain image view {}", i),
-                                 images.at(i).imageView);
+        setImageDebugName(renderDevice, images.at(i), "Swapchain", i);
     }
 }
 
 void VulkanSwapchain::createCommandBuffers(const VulkanRenderDevice& renderDevice)
 {
-    commandBuffers.resize(swapchainImageCount());
+    commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
     VkCommandBufferAllocateInfo commandBufferAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = renderDevice.commandPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = swapchainImageCount()
+        .commandBufferCount = MAX_FRAMES_IN_FLIGHT
     };
 
     VkResult result = vkAllocateCommandBuffers(renderDevice.device, &commandBufferAllocateInfo, commandBuffers.data());
     vulkanCheck(result, "Failed to allocate command buffers.");
 
-    for (uint32_t i = 0; i < swapchainImageCount(); ++i)
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         setDebugVulkanObjectName(renderDevice.device,
                                  VK_OBJECT_TYPE_COMMAND_BUFFER,
@@ -123,18 +124,13 @@ void VulkanSwapchain::createCommandBuffers(const VulkanRenderDevice& renderDevic
     }
 }
 
-uint32_t VulkanSwapchain::swapchainImageCount()
-{
-    return 3;
-}
-
 void VulkanSwapchain::createSyncObjects(const VulkanRenderDevice &renderDevice)
 {
-    inFlightFences.resize(swapchainImageCount());
-    imageReadySemaphores.resize(swapchainImageCount());
-    renderCompleteSemaphores.resize(swapchainImageCount());
+    inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+    imageReadySemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    renderCompleteSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 
-    for (uint32_t i = 0; i < swapchainImageCount(); ++i)
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         inFlightFences.at(i) = createFence(renderDevice.device, true, std::format("Swapchain in flight fence {}", i).c_str());
         imageReadySemaphores.at(i) = createSemaphore(renderDevice.device, std::format("Swapchain image ready semaphore {}", i).c_str());

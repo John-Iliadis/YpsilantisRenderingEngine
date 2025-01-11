@@ -54,7 +54,7 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
                             uint32_t mipLevels = 1,
                             uint32_t layerCount = 1);
 
-void transitionImageLayout(const VulkanRenderDevice& renderDevice,
+void transitionImageLayout(VkCommandBuffer commandBuffer,
                            VulkanImage& image,
                            VkImageLayout oldLayout,
                            VkImageLayout newLayout,
@@ -64,5 +64,16 @@ void copyBufferToImage(const VulkanRenderDevice& renderDevice,
                        VulkanBuffer& buffer,
                        VulkanImage& image,
                        uint32_t width, uint32_t height);
+
+void resolveImage(VkCommandBuffer commandBuffer,
+                  VkImage srcImage,
+                  VkImage dstImage,
+                  VkImageAspectFlags aspectMask,
+                  uint32_t width, uint32_t height);
+
+void setImageDebugName(const VulkanRenderDevice& renderDevice,
+                       const VulkanImage& image,
+                       const char* name,
+                       std::optional<uint32_t> index = {});
 
 #endif //VULKANRENDERINGENGINE_VULKAN_IMAGE_HPP

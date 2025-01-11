@@ -23,4 +23,6 @@ void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkCommand
 VkSemaphore createSemaphore(VkDevice device, const char* tag = nullptr);
 VkFence createFence(VkDevice device, bool signaled = false, const char* tag = nullptr);
 
+VkSampleCountFlagBits getMaxSampleCount(const VkPhysicalDeviceProperties& physicalDeviceProperties);
+
 #endif //VULKANRENDERINGENGINE_VULKAN_UTILS_HPP

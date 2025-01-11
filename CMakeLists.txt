@@ -41,9 +41,8 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_utils.hpp
         src/vk/vulkan_texture.cpp
         src/vk/vulkan_texture.hpp
-        src/camera/camera.cpp
-        src/camera/camera.hpp
-        src/renderer/vertices.hpp
+        src/renderer/camera.cpp
+        src/renderer/camera.hpp
         src/renderer/renderer.cpp
         src/renderer/renderer.hpp
         src/vk/vulkan_shader.cpp
@@ -83,6 +82,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
         GLM_FORCE_RADIANS
         GLM_FORCE_LEFT_HANDED
         IMGUI_DEFINE_MATH_OPERATORS
+        MAX_FRAMES_IN_FLIGHT=2
 )
 
 target_link_options(${PROJECT_NAME} PRIVATE -static)

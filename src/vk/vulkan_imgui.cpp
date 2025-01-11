@@ -25,8 +25,8 @@ void initImGui(GLFWwindow* window,
         .Queue = renderDevice.graphicsQueue,
         .DescriptorPool = descriptorPool,
         .RenderPass = renderPass,
-        .MinImageCount = static_cast<uint32_t>(VulkanSwapchain::swapchainImageCount()),
-        .ImageCount = static_cast<uint32_t>(VulkanSwapchain::swapchainImageCount()),
+        .MinImageCount = MAX_FRAMES_IN_FLIGHT,
+        .ImageCount = MAX_FRAMES_IN_FLIGHT,
         .MSAASamples = VK_SAMPLE_COUNT_1_BIT
     };
 

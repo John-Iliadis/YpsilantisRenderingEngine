@@ -66,7 +66,7 @@ void Application::update(float dt)
     mRenderer.update(dt);
 }
 
-void Application::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+void Application::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex)
 {
     VkCommandBufferBeginInfo commandBufferBeginInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -77,7 +77,7 @@ void Application::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imag
     VkResult result = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
     vulkanCheck(result, "Failed to begin command buffer.");
 
-    mRenderer.fillCommandBuffer(commandBuffer, imageIndex);
+    mRenderer.fillCommandBuffer(commandBuffer, frameIndex, swapchainImageIndex);
 
     vkEndCommandBuffer(commandBuffer);
 }
@@ -88,13 +88,13 @@ void Application::render()
 
     vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(currentFrame), VK_TRUE, UINT64_MAX);
 
-    uint32_t imageIndex;
+    uint32_t swapchainImageIndex;
     VkResult result = vkAcquireNextImageKHR(mRenderDevice.device,
                                             mSwapchain.swapchain,
                                            UINT64_MAX,
                                            mSwapchain.imageReadySemaphores.at(currentFrame),
                                            VK_NULL_HANDLE,
-                                           &imageIndex);
+                                           &swapchainImageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
@@ -104,7 +104,7 @@ void Application::render()
 
     vkResetFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(currentFrame));
 
-    fillCommandBuffer(mSwapchain.commandBuffers.at(currentFrame), imageIndex);
+    fillCommandBuffer(mSwapchain.commandBuffers.at(currentFrame), currentFrame, swapchainImageIndex);
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submitInfo {
@@ -129,7 +129,7 @@ void Application::render()
         .pWaitSemaphores = &mSwapchain.renderCompleteSemaphores.at(currentFrame),
         .swapchainCount = 1,
         .pSwapchains = &mSwapchain.swapchain,
-        .pImageIndices = &imageIndex,
+        .pImageIndices = &swapchainImageIndex,
         .pResults = nullptr
     };
 
@@ -138,7 +138,7 @@ void Application::render()
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         recreateSwapchain();
 
-    currentFrame = (currentFrame + 1) % VulkanSwapchain::swapchainImageCount();
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void Application::countFPS(float dt)

@@ -26,7 +26,6 @@ public:
     void create(const VulkanInstance& instance);
     void destroy();
 
-    static bool checkExtSupport(VkPhysicalDevice physicalDevice, const char* extension);
     static bool checkExtSupport(VkPhysicalDevice physicalDevice, const std::vector<const char*>& extensions);
     static std::vector<const char*> getRequiredExtensions();
 

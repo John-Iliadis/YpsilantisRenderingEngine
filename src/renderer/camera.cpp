@@ -114,6 +114,7 @@ void Camera::scroll(float x, float y)
             break;
         }
         case VIEW_MODE:
+        case EDITOR_MODE:
         {
             mPosition += mBasis[2] * y; // todo: tweak
             calculateViewProjection();

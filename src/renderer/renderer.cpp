@@ -5,20 +5,22 @@
 #include "renderer.hpp"
 
 void Renderer::init(GLFWwindow* window,
-                    const VulkanInstance& instance,
-                    const VulkanRenderDevice& renderDevice,
-                    const VulkanSwapchain& swapchain)
+                    VulkanInstance& instance,
+                    VulkanRenderDevice& renderDevice,
+                    VulkanSwapchain& swapchain)
 {
     mRenderDevice = &renderDevice;
     mSwapchain = &swapchain;
+    mMsaaSampleCount = VkSampleCountFlagBits(glm::min(uint32_t(VK_SAMPLE_COUNT_16_BIT), uint32_t(getMaxSampleCount(mRenderDevice->properties))));
 
     createDescriptorPool();
     createDepthImages();
     createViewProjUBOs();
     createViewProjDescriptors();
+
+    createImguiImages();
     createImguiRenderpass();
     createImguiFramebuffers();
-
     initImGui(window, instance, renderDevice, mDescriptorPool, mImguiRenderpass);
 
     mSceneCamera = {
@@ -33,10 +35,12 @@ void Renderer::terminate()
 {
     terminateImGui();
 
-    for (uint32_t i = 0; i < VulkanSwapchain::swapchainImageCount(); ++i)
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         destroyImage(*mRenderDevice, mDepthImages.at(i));
         destroyBuffer(*mRenderDevice, mViewProjUBOs.at(i));
+
+        destroyImage(*mRenderDevice, mImguiImages.at(i));
         vkDestroyFramebuffer(mRenderDevice->device, mImguiFramebuffers.at(i), nullptr);
     }
 
@@ -57,10 +61,25 @@ void Renderer::update(float dt)
     ImGui::ShowDemoWindow();
 }
 
-void Renderer::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+void Renderer::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex)
 {
-    updateUniformBuffers(imageIndex);
-    renderImgui(commandBuffer, imageIndex);
+    updateUniformBuffers(frameIndex);
+    renderImgui(commandBuffer, frameIndex);
+    blitToSwapchainImage(commandBuffer, frameIndex, swapchainImageIndex);
+}
+
+void Renderer::onSwapchainRecreate()
+{
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        destroyImage(*mRenderDevice, mDepthImages.at(i));
+        destroyImage(*mRenderDevice, mImguiImages.at(i));
+        vkDestroyFramebuffer(mRenderDevice->device, mImguiFramebuffers.at(i), nullptr);
+    }
+
+    createDepthImages();
+    createImguiImages();
+    createImguiFramebuffers();
 }
 
 void Renderer::createDescriptorPool()
@@ -75,7 +94,7 @@ void Renderer::createDescriptorPool()
 
 void Renderer::createDepthImages()
 {
-    mDepthImages.resize(VulkanSwapchain::swapchainImageCount());
+    mDepthImages.resize(MAX_FRAMES_IN_FLIGHT);
 
     for (uint32_t i = 0; i < mDepthImages.size(); ++i)
     {
@@ -95,7 +114,7 @@ void Renderer::createDepthImages()
 
 void Renderer::createViewProjUBOs()
 {
-    mViewProjUBOs.resize(VulkanSwapchain::swapchainImageCount());
+    mViewProjUBOs.resize(MAX_FRAMES_IN_FLIGHT);
 
     VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
@@ -117,7 +136,7 @@ void Renderer::createViewProjUBOs()
 
 void Renderer::createViewProjDescriptors()
 {
-    mViewProjDS.resize(VulkanSwapchain::swapchainImageCount());
+    mViewProjDS.resize(MAX_FRAMES_IN_FLIGHT);
 
     DescriptorSetLayoutCreator DSLayoutCreator(mRenderDevice->device);
     DSLayoutCreator.addLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
@@ -143,14 +162,14 @@ void Renderer::createViewProjDescriptors()
     }
 }
 
-void Renderer::renderImgui(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+void Renderer::renderImgui(VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
-    VkClearValue clearValue {.color = {0.2f, 0.2f, 0.2f, 1.f}};
+    VkClearValue clearValue {{0.2f, 0.2f, 0.2f, 1.f}};
 
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = mImguiRenderpass,
-        .framebuffer = mImguiFramebuffers.at(imageIndex),
+        .framebuffer = mImguiFramebuffers.at(frameIndex),
         .renderArea = {
             .offset = {.x = 0, .y = 0},
             .extent = mSwapchain->extent
@@ -164,12 +183,30 @@ void Renderer::renderImgui(VkCommandBuffer commandBuffer, uint32_t imageIndex)
     vkCmdEndRenderPass(commandBuffer);
 }
 
-void Renderer::updateUniformBuffers(uint32_t imageIndex)
+void Renderer::updateUniformBuffers(uint32_t frameIndex)
 {
     mapBufferMemory(*mRenderDevice,
-                    mViewProjUBOs.at(imageIndex),
+                    mViewProjUBOs.at(frameIndex),
                     0, sizeof(glm::mat4),
                     glm::value_ptr(mSceneCamera.viewProjection()));
+}
+
+void Renderer::createImguiImages()
+{
+    mImguiImages.resize(MAX_FRAMES_IN_FLIGHT);
+
+    for (uint32_t i = 0; i < mImguiImages.size(); ++i)
+    {
+        mImguiImages.at(i) = createImage2D(*mRenderDevice,
+                                           VK_FORMAT_R8G8B8A8_UNORM,
+                                           mSwapchain->extent.width,
+                                           mSwapchain->extent.height,
+                                           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                               VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                                           VK_IMAGE_ASPECT_COLOR_BIT);
+
+        setImageDebugName(*mRenderDevice, mImguiImages.at(i), "Imgui", i);
+    }
 }
 
 void Renderer::createImguiRenderpass()
@@ -177,12 +214,10 @@ void Renderer::createImguiRenderpass()
     VkAttachmentDescription attachmentDescription {
         .format = VK_FORMAT_R8G8B8A8_UNORM,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, // todo: change to VK_ATTACHMENT_LOAD_OP_LOAD once post processing is implemented
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, // todo: change to VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL once post processing is implemented
-        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
     };
 
     VkAttachmentReference colorAttachmentRef {
@@ -192,7 +227,6 @@ void Renderer::createImguiRenderpass()
 
     VkSubpassDescription subpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .inputAttachmentCount = 0,
         .colorAttachmentCount = 1,
         .pColorAttachments = &colorAttachmentRef
     };
@@ -216,7 +250,7 @@ void Renderer::createImguiRenderpass()
 
 void Renderer::createImguiFramebuffers()
 {
-    mImguiFramebuffers.resize(VulkanSwapchain::swapchainImageCount());
+    mImguiFramebuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
     for (size_t i = 0; i < mImguiFramebuffers.size(); ++i)
     {
@@ -224,7 +258,7 @@ void Renderer::createImguiFramebuffers()
             .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
             .renderPass = mImguiRenderpass,
             .attachmentCount = 1,
-            .pAttachments = &mSwapchain->images.at(i).imageView,
+            .pAttachments = &mImguiImages.at(i).imageView,
             .width = mSwapchain->extent.width,
             .height = mSwapchain->extent.height,
             .layers = 1
@@ -243,14 +277,50 @@ void Renderer::createImguiFramebuffers()
     }
 }
 
-void Renderer::onSwapchainRecreate()
+// todo: create a renderpass instead of blit
+void Renderer::blitToSwapchainImage(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex)
 {
-    for (uint32_t i = 0; i < VulkanSwapchain::swapchainImageCount(); ++i)
-    {
-        destroyImage(*mRenderDevice, mDepthImages.at(i));
-        vkDestroyFramebuffer(mRenderDevice->device, mImguiFramebuffers.at(i), nullptr);
-    }
+    transitionImageLayout(commandBuffer,
+                          mSwapchain->images.at(swapchainImageIndex),
+                          VK_IMAGE_LAYOUT_UNDEFINED,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-    createDepthImages();
-    createImguiFramebuffers();
+    int32_t width = mSwapchain->extent.width;
+    int32_t height = mSwapchain->extent.height;
+
+    VkImageBlit blitRegion {
+        .srcSubresource {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        },
+        .srcOffsets {
+            {.x = 0, .y = 0, .z = 0},
+            {.x = width, .y = height, .z = 1}
+        },
+        .dstSubresource {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1
+        },
+        .dstOffsets {
+            {.x = 0, .y = 0, .z = 0},
+            {.x = width, .y = height, .z = 1}
+        }
+    };
+
+    vkCmdBlitImage(commandBuffer,
+                   mImguiImages.at(frameIndex).image,
+                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                   mSwapchain->images.at(swapchainImageIndex).image,
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   1, &blitRegion,
+                   VK_FILTER_NEAREST);
+
+    transitionImageLayout(commandBuffer,
+                          mSwapchain->images.at(swapchainImageIndex),
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 }

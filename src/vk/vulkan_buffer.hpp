@@ -15,6 +15,12 @@ struct VulkanBuffer
     VkDeviceSize size;
 };
 
+struct IndexBuffer
+{
+    VulkanBuffer buffer;
+    uint32_t count;
+};
+
 VulkanBuffer createBuffer(const VulkanRenderDevice& renderDevice,
                           VkDeviceSize size,
                           VkBufferUsageFlags usage,

@@ -5,8 +5,8 @@
 #ifndef VULKANRENDERINGENGINE_CAMERA_HPP
 #define VULKANRENDERINGENGINE_CAMERA_HPP
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 #include "../window/event.hpp"
 #include "../window/input.hpp"
 #include "../utils.hpp"
