@@ -54,6 +54,10 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_function_pointers.hpp
         src/vk/vulkan_imgui.cpp
         src/vk/vulkan_imgui.hpp
+        src/renderer/scene.hpp
+        src/renderer/scene.cpp
+        src/renderer/mesh.hpp
+        src/renderer/mesh.cpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)
