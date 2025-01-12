@@ -128,13 +128,7 @@ void Mesh::render(VkCommandBuffer commandBuffer, uint32_t frameIndex)
     VkDeviceSize offsets[2] {0, 0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, buffers, offsets);
     vkCmdBindIndexBuffer(commandBuffer, mIndexBuffer.buffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-//    void vkCmdDrawIndexed(VkCommandBuffer commandBuffer,
-//                          uint32_t indexCount,
-//                          uint32_t instanceCount,
-//                          uint32_t firstIndex,
-//                          int32_t vertexOffset,
-//                          uint32_t firstInstance);
+    vkCmdDrawIndexed(commandBuffer, mIndexBuffer.count, mInstanceCount, 0, 0, 0);
 }
 
 void Mesh::tag(const VulkanRenderDevice& renderDevice, const char* meshName)
