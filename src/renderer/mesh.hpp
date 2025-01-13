@@ -49,9 +49,9 @@ public:
     Mesh();
 
     void create(const VulkanRenderDevice& renderDevice,
-                VkDeviceSize vertexBufferSize,
+                uint32_t vertexCount,
                 const Vertex* vertexData,
-                VkDeviceSize indexBufferSize,
+                uint32_t indexCount,
                 const uint32_t* indexData);
     void destroy(const VulkanRenderDevice& renderDevice);
 

@@ -10,6 +10,7 @@
 
 enum class ObjectType
 {
+    Empty,
     Mesh,
     DirectionalLight,
     PointLight,
@@ -28,6 +29,7 @@ struct SceneObject
 
 struct MeshObject : SceneObject
 {
+    uint32_t modelIndex;
     uint32_t meshIndex;
     uint32_t materialIndex;
     uint32_t instanceID;

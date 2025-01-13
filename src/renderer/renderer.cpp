@@ -11,7 +11,7 @@ void Renderer::init(GLFWwindow* window,
 {
     mRenderDevice = &renderDevice;
     mSwapchain = &swapchain;
-    mMsaaSampleCount = VkSampleCountFlagBits(glm::min(uint32_t(VK_SAMPLE_COUNT_16_BIT), uint32_t(getMaxSampleCount(mRenderDevice->properties))));
+    mMsaaSampleCount = VkSampleCountFlagBits(glm::min(uint32_t(VK_SAMPLE_COUNT_8_BIT), uint32_t(getMaxSampleCount(mRenderDevice->properties))));
 
     createDescriptorPool();
     createDepthImages();
@@ -29,6 +29,86 @@ void Renderer::init(GLFWwindow* window,
         static_cast<float>(mSwapchain->extent.width),
         static_cast<float>(mSwapchain->extent.height)
     };
+
+    createSceneNodes();
+}
+
+void Renderer::createSceneNodes()
+{
+    mSceneRoot = new SceneNode();
+
+    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
+    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
+    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
+    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
+    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
+    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
+    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
+    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
+}
+
+void Renderer::updateImgui()
+{
+    ImGui::ShowDemoWindow();
+
+    {
+        ImGui::Begin("Scene graph");
+
+        for (SceneNode* child : mSceneRoot->children())
+            drawSceneNodeRecursive(child);
+
+        ImGui::Dummy(ImGui::GetContentRegionAvail());
+        sceneNodeDragDropTarget(mSceneRoot);
+
+        ImGui::End();
+    }
+}
+
+void Renderer::drawSceneNodeRecursive(SceneNode *sceneNode)
+{
+    static constexpr ImGuiTreeNodeFlags treeNodeFlags {
+        ImGuiTreeNodeFlags_OpenOnArrow |
+        ImGuiTreeNodeFlags_OpenOnDoubleClick |
+        ImGuiTreeNodeFlags_SpanAvailWidth
+    };
+
+    if (ImGui::TreeNodeEx((void*)(intptr_t)sceneNode, treeNodeFlags, "Node"))
+    {
+        sceneNodeDragDropSource(sceneNode);
+        sceneNodeDragDropTarget(sceneNode);
+
+        for (SceneNode* child : sceneNode->children())
+            drawSceneNodeRecursive(child);
+
+        ImGui::TreePop();
+    }
+}
+
+void Renderer::sceneNodeDragDropSource(SceneNode *sceneNode)
+{
+    if (ImGui::BeginDragDropSource())
+    {
+        ImGui::SetDragDropPayload("SceneNode", &sceneNode, sizeof(SceneNode*));
+        ImGui::EndDragDropSource();
+    }
+}
+
+void Renderer::sceneNodeDragDropTarget(SceneNode *sceneNode)
+{
+    if (ImGui::BeginDragDropTarget())
+    {
+        const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SceneNode");
+
+        if (payload)
+        {
+            SceneNode* transferNode = *(SceneNode**)payload->Data;
+
+            transferNode->orphan();
+            sceneNode->addChild(transferNode);
+        }
+
+        ImGui::EndDragDropTarget();
+    }
 }
 
 void Renderer::terminate()
@@ -57,8 +137,8 @@ void Renderer::handleEvent(const Event &event)
 void Renderer::update(float dt)
 {
     beginImGui();
+    updateImgui();
     mSceneCamera.update(dt);
-    ImGui::ShowDemoWindow();
 }
 
 void Renderer::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex)

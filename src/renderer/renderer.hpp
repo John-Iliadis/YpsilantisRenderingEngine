@@ -9,6 +9,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include "../vk/include.hpp"
 #include "camera.hpp"
+#include "scene.hpp"
+#include "scene_node.hpp"
 
 class Renderer
 {
@@ -25,6 +27,11 @@ public:
     void onSwapchainRecreate();
 
 private:
+    void createSceneNodes();
+    void drawSceneNodeRecursive(SceneNode* sceneNode);
+    void sceneNodeDragDropSource(SceneNode* sceneNode);
+    void sceneNodeDragDropTarget(SceneNode* sceneNode);
+
     void createDescriptorPool();
     void createDepthImages();
     void createViewProjUBOs();
@@ -35,6 +42,7 @@ private:
     void createImguiFramebuffers();
     void blitToSwapchainImage(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex);
 
+    void updateImgui();
     void renderImgui(VkCommandBuffer commandBuffer, uint32_t frameIndex);
 
     void updateUniformBuffers(uint32_t frameIndex);
@@ -56,6 +64,8 @@ private:
     std::vector<VkFramebuffer> mImguiFramebuffers;
 
     std::vector<VulkanImage> mDepthImages;
+
+    SceneNode* mSceneRoot;
 };
 
 #endif //VULKANRENDERINGENGINE_RENDERER_HPP

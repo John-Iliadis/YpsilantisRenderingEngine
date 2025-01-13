@@ -19,26 +19,26 @@ Mesh::Mesh()
         mInstanceBufferCapacity[i] = sInitialInstanceBufferCapacity;
 }
 
-void Mesh::create(const VulkanRenderDevice &renderDevice,
-                  VkDeviceSize vertexBufferSize,
+void Mesh::create(const VulkanRenderDevice& renderDevice,
+                  uint32_t vertexCount,
                   const Vertex* vertexData,
-                  VkDeviceSize indexBufferSize,
+                  uint32_t indexCount,
                   const uint32_t* indexData)
 {
     mVertexBuffer = createBufferWithStaging(renderDevice,
-                                            vertexBufferSize,
+                                            vertexCount * sizeof(Vertex),
                                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
                                                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                                             vertexData);
 
     mIndexBuffer.buffer = createBufferWithStaging(renderDevice,
-                                                  indexBufferSize,
+                                                  indexCount * sizeof(uint32_t),
                                                  VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
                                                      VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                                                   indexData);
-    mIndexBuffer.count = indexBufferSize / sizeof(uint32_t);
+    mIndexBuffer.count = indexCount;
 
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
