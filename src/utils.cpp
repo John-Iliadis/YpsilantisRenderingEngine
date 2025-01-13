@@ -47,3 +47,40 @@ void removeEndNullChars(std::vector<char>& vec)
         vec.pop_back();
     }
 }
+
+static GLFWwindow* window;
+void setWindow(GLFWwindow* win)
+{
+    window = win;
+}
+
+GLFWwindow* getWindow()
+{
+    return window;
+}
+
+std::string fileDialog()
+{
+    char filename[260] {};
+    OPENFILENAME ofn;
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lpstrFile = filename;
+    ofn.lStructSize = sizeof(OPENFILENAME);
+    ofn.hwndOwner = glfwGetWin32Window(getWindow());
+    ofn.nMaxFile = sizeof(filename);
+    ofn.lpstrFilter = "All Files";
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (GetOpenFileName(&ofn) == TRUE)
+    {
+        std::filesystem::path absPath(filename);
+        std::filesystem::path cwd(std::filesystem::current_path());
+        std::filesystem::path relPath(std::filesystem::relative(absPath, cwd));
+        std::string result = relPath.string();
+        std::replace(result.begin(), result.end(), '\\', '/');
+
+        return result;
+    }
+
+    return {};
+}

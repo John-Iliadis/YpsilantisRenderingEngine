@@ -5,6 +5,9 @@
 #ifndef VULKANRENDERINGENGINE_UTILS_HPP
 #define VULKANRENDERINGENGINE_UTILS_HPP
 
+#include <glfw/glfw3.h>
+#include <glfw/glfw3native.h>
+
 void debugLog(const std::string& logMSG);
 
 void check(bool result, const char* msg, std::source_location location = std::source_location::current());
@@ -14,6 +17,11 @@ size_t stringLength(const char* str);
 bool endsWidth(const std::string& str, const std::string& end);
 
 void removeEndNullChars(std::vector<char>& vec);
+
+void setWindow(GLFWwindow* win);
+GLFWwindow* getWindow();
+
+std::string fileDialog();
 
 struct cStrHash
 {
@@ -45,5 +53,7 @@ struct cStrCompare
         return true;
     }
 };
+
+
 
 #endif //VULKANRENDERINGENGINE_UTILS_HPP

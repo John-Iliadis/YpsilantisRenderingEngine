@@ -29,86 +29,6 @@ void Renderer::init(GLFWwindow* window,
         static_cast<float>(mSwapchain->extent.width),
         static_cast<float>(mSwapchain->extent.height)
     };
-
-    createSceneNodes();
-}
-
-void Renderer::createSceneNodes()
-{
-    mSceneRoot = new SceneNode();
-
-    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
-    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
-    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
-    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
-    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
-    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
-    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
-    mSceneRoot->addChild(new SceneNode(mSceneRoot, nullptr));
-}
-
-void Renderer::updateImgui()
-{
-    ImGui::ShowDemoWindow();
-
-    {
-        ImGui::Begin("Scene graph");
-
-        for (SceneNode* child : mSceneRoot->children())
-            drawSceneNodeRecursive(child);
-
-        ImGui::Dummy(ImGui::GetContentRegionAvail());
-        sceneNodeDragDropTarget(mSceneRoot);
-
-        ImGui::End();
-    }
-}
-
-void Renderer::drawSceneNodeRecursive(SceneNode *sceneNode)
-{
-    static constexpr ImGuiTreeNodeFlags treeNodeFlags {
-        ImGuiTreeNodeFlags_OpenOnArrow |
-        ImGuiTreeNodeFlags_OpenOnDoubleClick |
-        ImGuiTreeNodeFlags_SpanAvailWidth
-    };
-
-    if (ImGui::TreeNodeEx((void*)(intptr_t)sceneNode, treeNodeFlags, "Node"))
-    {
-        sceneNodeDragDropSource(sceneNode);
-        sceneNodeDragDropTarget(sceneNode);
-
-        for (SceneNode* child : sceneNode->children())
-            drawSceneNodeRecursive(child);
-
-        ImGui::TreePop();
-    }
-}
-
-void Renderer::sceneNodeDragDropSource(SceneNode *sceneNode)
-{
-    if (ImGui::BeginDragDropSource())
-    {
-        ImGui::SetDragDropPayload("SceneNode", &sceneNode, sizeof(SceneNode*));
-        ImGui::EndDragDropSource();
-    }
-}
-
-void Renderer::sceneNodeDragDropTarget(SceneNode *sceneNode)
-{
-    if (ImGui::BeginDragDropTarget())
-    {
-        const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SceneNode");
-
-        if (payload)
-        {
-            SceneNode* transferNode = *(SceneNode**)payload->Data;
-
-            transferNode->orphan();
-            sceneNode->addChild(transferNode);
-        }
-
-        ImGui::EndDragDropTarget();
-    }
 }
 
 void Renderer::terminate()
@@ -240,6 +160,102 @@ void Renderer::createViewProjDescriptors()
                                  std::format("ViewProjection descriptor set {}", i),
                                  mViewProjDS.at(i));
     }
+}
+
+void Renderer::imguiMainMenuBar()
+{
+    if (ImGui::BeginMainMenuBar())
+    {
+        if (ImGui::BeginMenu("File"))
+        {
+            if (ImGui::MenuItem("Import"))
+            {
+                debugLog(fileDialog());
+            }
+
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Settings"))
+        {
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("View"))
+        {
+            ImGui::EndMenu();
+        }
+
+        ImGui::EndMainMenuBar();
+    }
+}
+
+// todo: implement selected node
+void Renderer::imguiSceneNodeRecursive(SceneNode *sceneNode)
+{
+    static constexpr ImGuiTreeNodeFlags treeNodeFlags {
+        ImGuiTreeNodeFlags_OpenOnArrow |
+        ImGuiTreeNodeFlags_OpenOnDoubleClick |
+        ImGuiTreeNodeFlags_SpanAvailWidth
+    };
+
+    if (ImGui::TreeNodeEx((void*)(intptr_t)sceneNode, treeNodeFlags, sceneNode->name().c_str()))
+    {
+        imguiSceneNodeDragDropSource(sceneNode);
+        imguiSceneNodeDragDropTarget(sceneNode);
+
+        for (SceneNode* child : sceneNode->children())
+            imguiSceneNodeRecursive(child);
+
+        ImGui::TreePop();
+    }
+}
+
+void Renderer::imguiSceneNodeDragDropSource(SceneNode *sceneNode)
+{
+    if (ImGui::BeginDragDropSource())
+    {
+        ImGui::SetDragDropPayload("SceneNode", &sceneNode, sizeof(SceneNode*));
+        ImGui::EndDragDropSource();
+    }
+}
+
+void Renderer::imguiSceneNodeDragDropTarget(SceneNode *sceneNode)
+{
+    if (ImGui::BeginDragDropTarget())
+    {
+        const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SceneNode");
+
+        if (payload)
+        {
+            SceneNode* transferNode = *(SceneNode**)payload->Data;
+
+            transferNode->orphan();
+            sceneNode->addChild(transferNode);
+        }
+
+        ImGui::EndDragDropTarget();
+    }
+}
+
+void Renderer::imguiSceneGraph()
+{
+    ImGui::Begin("Scene");
+
+    for (SceneNode* child : mSceneRoot.children())
+        imguiSceneNodeRecursive(child);
+
+    ImGui::Dummy(ImGui::GetContentRegionAvail());
+    imguiSceneNodeDragDropTarget(&mSceneRoot);
+
+    ImGui::End();
+}
+
+void Renderer::updateImgui()
+{
+    imguiMainMenuBar();
+    imguiSceneGraph();
+    ImGui::ShowDemoWindow();
 }
 
 void Renderer::renderImgui(VkCommandBuffer commandBuffer, uint32_t frameIndex)

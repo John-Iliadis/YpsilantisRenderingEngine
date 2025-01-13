@@ -86,6 +86,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
         $<$<CONFIG:Debug>:DEBUG_MODE>
         $<$<CONFIG:Debug>:SHADER_PATH=\"${CMAKE_SOURCE_DIR}/shaders/\">
         $<$<CONFIG:Release>:SHADER_PATH=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/\">
+        GLFW_EXPOSE_NATIVE_WIN32
         GLFW_INCLUDE_VULKAN
         STB_IMAGE_IMPLEMENTATION
         GLM_FORCE_DEPTH_ZERO_TO_ONE

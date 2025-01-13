@@ -11,6 +11,8 @@
 #include "camera.hpp"
 #include "scene.hpp"
 #include "scene_node.hpp"
+#include "model.hpp"
+#include "importer.hpp"
 
 class Renderer
 {
@@ -27,11 +29,6 @@ public:
     void onSwapchainRecreate();
 
 private:
-    void createSceneNodes();
-    void drawSceneNodeRecursive(SceneNode* sceneNode);
-    void sceneNodeDragDropSource(SceneNode* sceneNode);
-    void sceneNodeDragDropTarget(SceneNode* sceneNode);
-
     void createDescriptorPool();
     void createDepthImages();
     void createViewProjUBOs();
@@ -42,6 +39,11 @@ private:
     void createImguiFramebuffers();
     void blitToSwapchainImage(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex);
 
+    void imguiMainMenuBar();
+    void imguiSceneNodeRecursive(SceneNode* sceneNode);
+    void imguiSceneNodeDragDropSource(SceneNode* sceneNode);
+    void imguiSceneNodeDragDropTarget(SceneNode* sceneNode);
+    void imguiSceneGraph();
     void updateImgui();
     void renderImgui(VkCommandBuffer commandBuffer, uint32_t frameIndex);
 
@@ -54,6 +56,9 @@ private:
     VkSampleCountFlagBits mMsaaSampleCount;
 
     Camera mSceneCamera;
+    Importer mImporter;
+    SceneNode mSceneRoot;
+    std::vector<Model> mModels;
 
     VkDescriptorSetLayout mViewProjDSLayout;
     std::vector<VkDescriptorSet> mViewProjDS;
@@ -64,8 +69,6 @@ private:
     std::vector<VkFramebuffer> mImguiFramebuffers;
 
     std::vector<VulkanImage> mDepthImages;
-
-    SceneNode* mSceneRoot;
 };
 
 #endif //VULKANRENDERINGENGINE_RENDERER_HPP

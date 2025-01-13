@@ -2,6 +2,7 @@
 // Created by Gianni on 1/01/2025.
 //
 
+#include <windows.h>
 #include <vector>
 #include <array>
 #include <unordered_map>
@@ -20,3 +21,4 @@
 #include <stdexcept>
 #include <future>
 #include <mutex>
+#include <filesystem>

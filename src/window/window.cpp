@@ -16,6 +16,7 @@ Window::Window(uint32_t width, uint32_t height)
     mWindow = glfwCreateWindow(mWidth, mHeight, "VulkanRenderer", nullptr, nullptr);
     check(mWindow, "Failed to create GLFW window.");
 
+    setWindow(mWindow);
     glfwSetWindowUserPointer(mWindow, this);
     glfwSetKeyCallback(mWindow, keyCallback);
     glfwSetMouseButtonCallback(mWindow, mouseButtonCallback);
