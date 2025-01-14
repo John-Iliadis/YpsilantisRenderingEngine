@@ -91,7 +91,7 @@
 
 #ifdef _WIN32
 #undef APIENTRY
-#define GLFW_EXPOSE_NATIVE_WIN32
+//#define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>   // for glfwGetWin32Window()
 #endif
 #ifdef __APPLE__
