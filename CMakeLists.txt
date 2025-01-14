@@ -60,10 +60,11 @@ add_executable(${PROJECT_NAME}
         src/renderer/mesh.cpp
         src/renderer/scene_node.cpp
         src/renderer/scene_node.hpp
-        src/renderer/model.cpp
         src/renderer/model.hpp
         src/renderer/importer.cpp
         src/renderer/importer.hpp
+        src/renderer/material.cpp
+        src/renderer/material.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)

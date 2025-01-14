@@ -52,7 +52,8 @@ public:
                 uint32_t vertexCount,
                 const Vertex* vertexData,
                 uint32_t indexCount,
-                const uint32_t* indexData);
+                const uint32_t* indexData,
+                const std::string& name);
     void destroy(const VulkanRenderDevice& renderDevice);
 
     uint32_t addInstance(const InstanceData& instanceData, uint32_t frameIndex);
@@ -63,7 +64,10 @@ public:
 
     void render(VkCommandBuffer commandBuffer, uint32_t frameIndex);
 
-    void tag(const VulkanRenderDevice& renderDevice, const char* meshName);
+    void tag(const VulkanRenderDevice& renderDevice);
+
+    size_t id() const;
+    const std::string& name() const;
 
     static constexpr std::array<VkVertexInputBindingDescription, 2> bindingDescriptions();
     static constexpr std::array<VkVertexInputAttributeDescription, 15> attributeDescriptions();
@@ -75,6 +79,9 @@ private:
     void resize(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
 
 private:
+    size_t mId;
+    std::string mName;
+
     VulkanBuffer mVertexBuffer;
     IndexBuffer mIndexBuffer;
     VulkanBuffer mInstanceBuffers[MAX_FRAMES_IN_FLIGHT];
@@ -89,9 +96,6 @@ private:
         UpdateInstanceHash,
         UpdateInstanceCompare> mUpdatePending[MAX_FRAMES_IN_FLIGHT];
     std::unordered_set<uint32_t> mRemovePending[MAX_FRAMES_IN_FLIGHT];
-
-    const char* mDebugName;
 };
-
 
 #endif //VULKANRENDERINGENGINE_MESH_HPP

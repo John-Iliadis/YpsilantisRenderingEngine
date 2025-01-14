@@ -13,6 +13,7 @@
 #include "scene_node.hpp"
 #include "model.hpp"
 #include "importer.hpp"
+#include "material.hpp"
 
 class Renderer
 {
@@ -40,6 +41,7 @@ private:
     void blitToSwapchainImage(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex);
 
     void imguiMainMenuBar();
+    void imguiAssetPanel();
     void imguiSceneNodeRecursive(SceneNode* sceneNode);
     void imguiSceneNodeDragDropSource(SceneNode* sceneNode);
     void imguiSceneNodeDragDropTarget(SceneNode* sceneNode);
@@ -49,6 +51,9 @@ private:
 
     void updateUniformBuffers(uint32_t frameIndex);
 
+    void uploadLoadedResources();
+    void importModel(const std::string& filename);
+
 private:
     VulkanRenderDevice* mRenderDevice;
     VulkanSwapchain* mSwapchain;
@@ -56,9 +61,16 @@ private:
     VkSampleCountFlagBits mMsaaSampleCount;
 
     Camera mSceneCamera;
-    Importer mImporter;
     SceneNode mSceneRoot;
-    std::vector<Model> mModels;
+
+    std::unordered_map<size_t, Model> mModels;
+    std::unordered_map<size_t, Mesh> mMeshes;
+    std::unordered_map<size_t, Material> mMaterials;
+
+    std::vector<LoadedMeshData> mLoadedMeshData;
+    std::unordered_set<std::string> mLoadedModels;
+    std::vector<std::future<void>> mImportFutures;
+    std::mutex mLoadedMeshDataMutex;
 
     VkDescriptorSetLayout mViewProjDSLayout;
     std::vector<VkDescriptorSet> mViewProjDS;

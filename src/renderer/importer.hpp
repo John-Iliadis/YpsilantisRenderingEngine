@@ -5,18 +5,24 @@
 #ifndef VULKANRENDERINGENGINE_IMPORTER_HPP
 #define VULKANRENDERINGENGINE_IMPORTER_HPP
 
+#include <glm/glm.hpp>
 #include "model.hpp"
 
-class Importer
+struct LoadedMeshData
 {
-public:
-    void loadModel(std::vector<Model>& models,
-              const VulkanRenderDevice& renderDevice,
-              const std::string& path,
-              uint32_t importFlags);
-
-private:
-    std::vector<std::future<void>> mLoadedModels;
+    size_t modelId;
+    std::string meshName;
+    std::vector<Mesh::Vertex> vertices;
+    std::vector<uint32_t> indices;
+    glm::mat4 transformation;
 };
+
+std::unique_ptr<aiScene> loadScene(const std::string &path);
+
+std::vector<Mesh::Vertex> loadMeshVertices(const aiMesh& mesh);
+
+std::vector<uint32_t> loadMeshIndices(const aiMesh& mesh);
+
+glm::mat4 assimpToGlmMat4(const aiMatrix4x4& mat);
 
 #endif //VULKANRENDERINGENGINE_IMPORTER_HPP

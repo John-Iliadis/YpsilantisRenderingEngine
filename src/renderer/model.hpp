@@ -8,31 +8,21 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include "material.hpp"
 #include "mesh.hpp"
 
-class Model
+struct Model
 {
-public:
     struct MeshNode
     {
+        size_t materialId;
         glm::mat4 transformation;
-        Mesh mesh;
     };
 
-    void create(const VulkanRenderDevice& renderDevice,
-                const std::string& path,
-                uint32_t importFlags);
-    void destroy(const VulkanRenderDevice& renderDevice);
-
-private:
-    void processNode(const VulkanRenderDevice& renderDevice, aiNode* node, const aiScene* scene);
-    Mesh createMesh(const VulkanRenderDevice& renderDevice, aiMesh* mesh, const aiScene* scene);
-    std::vector<Mesh::Vertex> getVertices(aiMesh* mesh);
-    std::vector<uint32_t> getIndices(aiMesh* mesh);
-
-private:
-    std::vector<MeshNode> mMeshNodes;
+    size_t id;
+    std::string name;
+    std::vector<size_t> meshes;
+    std::unordered_map<size_t, MeshNode> meshNodeMap; // mesh id to mesh node graph data
 };
-
 
 #endif //VULKANRENDERINGENGINE_MODEL_HPP

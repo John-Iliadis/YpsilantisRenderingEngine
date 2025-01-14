@@ -33,6 +33,9 @@ void Renderer::init(GLFWwindow* window,
 
 void Renderer::terminate()
 {
+    for (auto& [meshID, mesh] : mMeshes)
+        mesh.destroy(*mRenderDevice);
+
     terminateImGui();
 
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
@@ -56,6 +59,7 @@ void Renderer::handleEvent(const Event &event)
 
 void Renderer::update(float dt)
 {
+    uploadLoadedResources();
     beginImGui();
     updateImgui();
     mSceneCamera.update(dt);
@@ -162,6 +166,7 @@ void Renderer::createViewProjDescriptors()
     }
 }
 
+// todo: finish rest of logic
 void Renderer::imguiMainMenuBar()
 {
     if (ImGui::BeginMainMenuBar())
@@ -170,7 +175,13 @@ void Renderer::imguiMainMenuBar()
         {
             if (ImGui::MenuItem("Import"))
             {
-                debugLog(fileDialog());
+                std::string modelPath = fileDialog();
+
+                if (!modelPath.empty() && !mLoadedModels.contains(modelPath))
+                {
+                    importModel(modelPath);
+                    mLoadedModels.insert(modelPath);
+                }
             }
 
             ImGui::EndMenu();
@@ -188,6 +199,16 @@ void Renderer::imguiMainMenuBar()
 
         ImGui::EndMainMenuBar();
     }
+}
+
+void Renderer::imguiAssetPanel()
+{
+    ImGui::Begin("Assets");
+
+    for (const auto& [modelID, model] : mModels)
+        ImGui::Button(model.name.c_str());
+
+    ImGui::End();
 }
 
 // todo: implement selected node
@@ -255,6 +276,7 @@ void Renderer::updateImgui()
 {
     imguiMainMenuBar();
     imguiSceneGraph();
+    imguiAssetPanel();
     ImGui::ShowDemoWindow();
 }
 
@@ -419,4 +441,75 @@ void Renderer::blitToSwapchainImage(VkCommandBuffer commandBuffer, uint32_t fram
                           mSwapchain->images.at(swapchainImageIndex),
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+}
+
+void Renderer::uploadLoadedResources()
+{
+    if (!mLoadedMeshData.empty())
+    {
+        std::lock_guard<std::mutex> lock(mLoadedMeshDataMutex);
+
+        for (const auto& loadedMeshData : mLoadedMeshData)
+        {
+            Model& model = mModels.at(loadedMeshData.modelId);
+
+            Mesh mesh;
+            mesh.create(*mRenderDevice,
+                        loadedMeshData.vertices.size(),
+                        loadedMeshData.vertices.data(),
+                        loadedMeshData.indices.size(),
+                        loadedMeshData.indices.data(),
+                        loadedMeshData.meshName);
+
+            model.meshes.push_back(mesh.id());
+            model.meshNodeMap.try_emplace(mesh.id(), 0, loadedMeshData.transformation);
+
+            mMeshes.try_emplace(mesh.id(), std::move(mesh));
+        }
+
+        mLoadedMeshData.clear();
+    }
+}
+
+// todo: fix meshes with no name
+void Renderer::importModel(const std::string &filename)
+{
+    std::string modelName = filename.substr(filename.find_last_of('/') + 1);
+    uint32_t modelId = std::hash<std::string>()(modelName);
+
+    mModels.try_emplace(modelId, modelId, std::move(modelName));
+
+    auto future = std::async([this, filename, modelId] () {
+        std::unique_ptr<aiScene> scene = loadScene(filename);
+
+        std::deque<aiNode*> nodes(1, scene->mRootNode);
+
+        while (!nodes.empty())
+        {
+            const aiNode& node = *nodes.back();
+            nodes.pop_back();
+
+            for (uint32_t i = 0; i < node.mNumMeshes; ++i)
+            {
+                const aiMesh& mesh = *scene->mMeshes[node.mMeshes[i]];
+
+                LoadedMeshData loadedMeshData {
+                    .modelId = modelId,
+                    .meshName = mesh.mName.C_Str(),
+                    .vertices = loadMeshVertices(mesh),
+                    .indices = loadMeshIndices(mesh),
+                    .transformation = assimpToGlmMat4(node.mTransformation)
+                };
+
+                mLoadedMeshDataMutex.lock();
+                mLoadedMeshData.push_back(std::move(loadedMeshData));
+                mLoadedMeshDataMutex.unlock();
+            }
+
+            for (uint32_t i = 0; i < node.mNumChildren; ++i)
+                nodes.push_back(node.mChildren[i]);
+        }
+    });
+
+    mImportFutures.push_back(std::move(future));
 }

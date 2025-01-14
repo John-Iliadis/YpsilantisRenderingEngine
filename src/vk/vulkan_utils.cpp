@@ -71,8 +71,9 @@ void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkCommand
         .pCommandBuffers = &commandBuffer,
     };
 
-    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkDeviceWaitIdle(device);
+    VkResult result = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    vulkanCheck(result, "Failed queue submit.");
+    vkQueueWaitIdle(queue);
 
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }

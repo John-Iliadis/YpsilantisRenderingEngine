@@ -13,7 +13,6 @@ Mesh::Mesh()
     , mInstanceCount()
     , mInstanceBufferCapacity(sInitialInstanceBufferCapacity)
     , mInstanceIdCounter()
-    , mDebugName()
 {
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         mInstanceBufferCapacity[i] = sInitialInstanceBufferCapacity;
@@ -23,19 +22,20 @@ void Mesh::create(const VulkanRenderDevice& renderDevice,
                   uint32_t vertexCount,
                   const Vertex* vertexData,
                   uint32_t indexCount,
-                  const uint32_t* indexData)
+                  const uint32_t* indexData,
+                  const std::string& name)
 {
     mVertexBuffer = createBufferWithStaging(renderDevice,
                                             vertexCount * sizeof(Vertex),
-                                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                                               VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                                                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                                             vertexData);
 
     mIndexBuffer.buffer = createBufferWithStaging(renderDevice,
                                                   indexCount * sizeof(uint32_t),
-                                                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-                                                     VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                  VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+                                                      VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                                                   indexData);
     mIndexBuffer.count = indexCount;
@@ -45,10 +45,14 @@ void Mesh::create(const VulkanRenderDevice& renderDevice,
         mInstanceBuffers[i] = createBuffer(renderDevice,
                                               sInitialInstanceBufferCapacity * sizeof(InstanceData),
                                               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                                                 VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                                                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                                  VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                                                  VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     }
+
+    mId = std::hash<std::string>()(name);
+    mName = name;
+    tag(renderDevice);
 }
 
 void Mesh::destroy(const VulkanRenderDevice &renderDevice)
@@ -131,25 +135,23 @@ void Mesh::render(VkCommandBuffer commandBuffer, uint32_t frameIndex)
     vkCmdDrawIndexed(commandBuffer, mIndexBuffer.count, mInstanceCount, 0, 0, 0);
 }
 
-void Mesh::tag(const VulkanRenderDevice& renderDevice, const char* meshName)
+void Mesh::tag(const VulkanRenderDevice& renderDevice)
 {
-    mDebugName = meshName;
-
     setDebugVulkanObjectName(renderDevice.device,
                              VK_OBJECT_TYPE_BUFFER,
-                             std::format("{} vertex buffer", meshName),
+                             std::format("{} mesh vertex buffer", mName),
                              mVertexBuffer.buffer);
 
     setDebugVulkanObjectName(renderDevice.device,
                              VK_OBJECT_TYPE_BUFFER,
-                             std::format("{} index buffer", meshName),
+                             std::format("{} mesh index buffer", mName),
                              mIndexBuffer.buffer.buffer);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         setDebugVulkanObjectName(renderDevice.device,
                                  VK_OBJECT_TYPE_BUFFER,
-                                 std::format("{} instance buffer {}", meshName, i),
+                                 std::format("{} mesh instance buffer {}", mName, i),
                                  mInstanceBuffers[i].buffer);
     }
 }
@@ -369,14 +371,21 @@ void Mesh::resize(const VulkanRenderDevice &renderDevice, VkCommandBuffer comman
 
     mInstanceBuffers[frameIndex] = newBuffer;
 
-    if (mDebugName)
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-        {
-            setDebugVulkanObjectName(renderDevice.device,
-                                     VK_OBJECT_TYPE_BUFFER,
-                                     std::format("{} instance buffer {}", mDebugName, i),
-                                     mInstanceBuffers[i].buffer);
-        }
+        setDebugVulkanObjectName(renderDevice.device,
+                                 VK_OBJECT_TYPE_BUFFER,
+                                 std::format("{} mesh instance buffer {}", mName, i),
+                                 mInstanceBuffers[i].buffer);
     }
+}
+
+size_t Mesh::id() const
+{
+    return mId;
+}
+
+const std::string &Mesh::name() const
+{
+    return mName;
 }
