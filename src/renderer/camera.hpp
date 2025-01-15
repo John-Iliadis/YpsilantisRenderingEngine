@@ -14,7 +14,6 @@
 // todo: clamp speed var
 // todo: modify sensitivity
 // todo: add key shortcuts for changing state
-// todo: handle 0 width/height resize event
 class Camera
 {
 public:

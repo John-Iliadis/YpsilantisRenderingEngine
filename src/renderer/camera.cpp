@@ -100,8 +100,11 @@ const glm::vec3 &Camera::front() const
 
 void Camera::resize(uint32_t width, uint32_t height)
 {
-    mAspectRatio = static_cast<float>(width) / static_cast<float>(height);
-    updateProjection();
+    if (width && height)
+    {
+        mAspectRatio = static_cast<float>(width) / static_cast<float>(height);
+        updateProjection();
+    }
 }
 
 void Camera::scroll(float x, float y)
