@@ -27,6 +27,8 @@ public:
 
     const std::vector<Event>& events() const;
 
+    static GLFWwindow* getGLFWwindowHandle();
+
 private:
     static void keyCallback(GLFWwindow* glfwWindow, int key, int scancode, int action, int mods);
     static void mouseButtonCallback(GLFWwindow* glfwWindow, int button, int action, int mods);
@@ -36,7 +38,7 @@ private:
     static void windowMinificationCallback(GLFWwindow* glfwWindow, int minimized);
 
 private:
-    GLFWwindow* mWindow;
+    static GLFWwindow* sWindow;
     std::vector<Event> mEventQueue;
     uint32_t mWidth;
     uint32_t mHeight;

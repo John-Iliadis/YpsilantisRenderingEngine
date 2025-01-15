@@ -18,9 +18,6 @@ bool endsWidth(const std::string& str, const std::string& end);
 
 void removeEndNullChars(std::vector<char>& vec);
 
-void setWindow(GLFWwindow* win);
-GLFWwindow* getWindow();
-
 std::string fileDialog();
 
 struct cStrHash
@@ -53,7 +50,5 @@ struct cStrCompare
         return true;
     }
 };
-
-
 
 #endif //VULKANRENDERINGENGINE_UTILS_HPP

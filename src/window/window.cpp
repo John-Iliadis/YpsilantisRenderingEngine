@@ -4,26 +4,26 @@
 
 #include "window.hpp"
 
+GLFWwindow* Window::sWindow;
+
 Window::Window(uint32_t width, uint32_t height)
-    : mWindow()
-    , mWidth(width)
+    : mWidth(width)
     , mHeight(height)
 {
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    mWindow = glfwCreateWindow(mWidth, mHeight, "VulkanRenderer", nullptr, nullptr);
-    check(mWindow, "Failed to create GLFW window.");
+    sWindow = glfwCreateWindow(mWidth, mHeight, "VulkanRenderer", nullptr, nullptr);
+    check(sWindow, "Failed to create GLFW window.");
 
-    setWindow(mWindow);
-    glfwSetWindowUserPointer(mWindow, this);
-    glfwSetKeyCallback(mWindow, keyCallback);
-    glfwSetMouseButtonCallback(mWindow, mouseButtonCallback);
-    glfwSetCursorPosCallback(mWindow, cursorPosCallback);
-    glfwSetScrollCallback(mWindow, mouseScrollCallback);
-    glfwSetFramebufferSizeCallback(mWindow, framebufferSizeCallback);
-    glfwSetWindowIconifyCallback(mWindow, windowMinificationCallback);
+    glfwSetWindowUserPointer(sWindow, this);
+    glfwSetKeyCallback(sWindow, keyCallback);
+    glfwSetMouseButtonCallback(sWindow, mouseButtonCallback);
+    glfwSetCursorPosCallback(sWindow, cursorPosCallback);
+    glfwSetScrollCallback(sWindow, mouseScrollCallback);
+    glfwSetFramebufferSizeCallback(sWindow, framebufferSizeCallback);
+    glfwSetWindowIconifyCallback(sWindow, windowMinificationCallback);
 }
 
 Window::~Window()
@@ -54,12 +54,12 @@ uint32_t Window::height() const
 
 bool Window::opened() const
 {
-    return !glfwWindowShouldClose(mWindow);
+    return !glfwWindowShouldClose(sWindow);
 }
 
 Window::operator GLFWwindow*() const
 {
-    return mWindow;
+    return sWindow;
 }
 
 void Window::keyCallback(GLFWwindow *glfwWindow, int key, int scancode, int action, int mods)
@@ -162,4 +162,9 @@ void Window::windowMinificationCallback(GLFWwindow *glfwWindow, int minimized)
     event.type = minimized? Event::WindowMinimized : Event::WindowRestored;
 
     window.mEventQueue.push_back(event);
+}
+
+GLFWwindow *Window::getGLFWwindowHandle()
+{
+    return sWindow;
 }

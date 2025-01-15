@@ -54,10 +54,7 @@ const std::multiset<SceneNode*>& SceneNode::children() const
     return mChildren;
 }
 
-
-// todo: fix when scene objects have values
 bool SceneNode::operator<(const SceneNode* other) const
 {
-    return true;
-//    return std::less<std::string>()(mSceneObject->name, other->mSceneObject->name);
+    return std::less<std::string>()(mSceneObject->name, other->mSceneObject->name);
 }

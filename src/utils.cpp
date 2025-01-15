@@ -3,6 +3,7 @@
 //
 
 #include "utils.hpp"
+#include "window/window.hpp"
 
 void debugLog(const std::string& logMSG)
 {
@@ -48,17 +49,6 @@ void removeEndNullChars(std::vector<char>& vec)
     }
 }
 
-static GLFWwindow* window;
-void setWindow(GLFWwindow* win)
-{
-    window = win;
-}
-
-GLFWwindow* getWindow()
-{
-    return window;
-}
-
 std::string fileDialog()
 {
     char filename[260] {};
@@ -66,7 +56,7 @@ std::string fileDialog()
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lpstrFile = filename;
     ofn.lStructSize = sizeof(OPENFILENAME);
-    ofn.hwndOwner = glfwGetWin32Window(getWindow());
+    ofn.hwndOwner = glfwGetWin32Window(Window::getGLFWwindowHandle());
     ofn.nMaxFile = sizeof(filename);
     ofn.lpstrFilter = "All Files";
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
