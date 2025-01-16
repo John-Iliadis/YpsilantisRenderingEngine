@@ -33,6 +33,16 @@ struct VulkanTexture
     uint32_t height;
 };
 
+// texture contains linear filtering. Mip maps are generated.
+VulkanTexture createTexture2D(const VulkanRenderDevice& renderDevice,
+                              uint32_t width, uint32_t height,
+                              uint8_t* bytes);
+
+void generateMipMaps(const VulkanRenderDevice& renderDevice,
+                     const VulkanImage& image,
+                     uint32_t width, uint32_t height,
+                     uint32_t mipLevels);
+
 VkSampler createSampler(const VulkanRenderDevice& renderDevice,
                         SamplerFilterMode filterMode,
                         SamplerWrapMode wrapMode);
