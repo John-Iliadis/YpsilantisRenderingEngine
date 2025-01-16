@@ -97,9 +97,7 @@ void Renderer::createDescriptorPool()
 
 void Renderer::createDepthImages()
 {
-    mDepthImages.resize(MAX_FRAMES_IN_FLIGHT);
-
-    for (uint32_t i = 0; i < mDepthImages.size(); ++i)
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         mDepthImages.at(i) = createImage2D(*mRenderDevice,
                                               VK_FORMAT_D32_SFLOAT,
@@ -117,8 +115,6 @@ void Renderer::createDepthImages()
 
 void Renderer::createViewProjUBOs()
 {
-    mViewProjUBOs.resize(MAX_FRAMES_IN_FLIGHT);
-
     VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
     VkMemoryPropertyFlags memoryProperties {
@@ -126,7 +122,7 @@ void Renderer::createViewProjUBOs()
         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
     };
 
-    for (size_t i = 0; i < mViewProjUBOs.size(); ++i)
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         mViewProjUBOs.at(i) = createBuffer(*mRenderDevice, sizeof(glm::mat4), usage, memoryProperties);
 
@@ -139,8 +135,6 @@ void Renderer::createViewProjUBOs()
 
 void Renderer::createViewProjDescriptors()
 {
-    mViewProjDS.resize(MAX_FRAMES_IN_FLIGHT);
-
     DescriptorSetLayoutCreator DSLayoutCreator(mRenderDevice->device);
     DSLayoutCreator.addLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
     mViewProjDSLayout = DSLayoutCreator.create();
@@ -150,7 +144,7 @@ void Renderer::createViewProjDescriptors()
                              "ViewProjection descriptor set layout",
                              mViewProjDSLayout);
 
-    for (uint32_t i = 0; i < mViewProjDS.size(); ++i)
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         DescriptorSetCreator descriptorSetCreator(mRenderDevice->device, mDescriptorPool, mViewProjDSLayout);
         descriptorSetCreator.addBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -310,9 +304,7 @@ void Renderer::updateUniformBuffers(uint32_t frameIndex)
 
 void Renderer::createImguiImages()
 {
-    mImguiImages.resize(MAX_FRAMES_IN_FLIGHT);
-
-    for (uint32_t i = 0; i < mImguiImages.size(); ++i)
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         mImguiImages.at(i) = createImage2D(*mRenderDevice,
                                            VK_FORMAT_R8G8B8A8_UNORM,
@@ -367,9 +359,7 @@ void Renderer::createImguiRenderpass()
 
 void Renderer::createImguiFramebuffers()
 {
-    mImguiFramebuffers.resize(MAX_FRAMES_IN_FLIGHT);
-
-    for (size_t i = 0; i < mImguiFramebuffers.size(); ++i)
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         VkFramebufferCreateInfo framebufferCreateInfo {
             .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -392,52 +382,4 @@ void Renderer::createImguiFramebuffers()
                                  std::format("Imgui framebuffer {}", i),
                                  mImguiFramebuffers.at(i));
     }
-}
-
-// todo: create a renderpass instead of blit
-void Renderer::blitToSwapchainImage(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex)
-{
-    transitionImageLayout(commandBuffer,
-                          mSwapchain->images.at(swapchainImageIndex),
-                          VK_IMAGE_LAYOUT_UNDEFINED,
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    int32_t width = mSwapchain->extent.width;
-    int32_t height = mSwapchain->extent.height;
-
-    VkImageBlit blitRegion {
-        .srcSubresource {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1
-        },
-        .srcOffsets {
-            {.x = 0, .y = 0, .z = 0},
-            {.x = width, .y = height, .z = 1}
-        },
-        .dstSubresource {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1
-        },
-        .dstOffsets {
-            {.x = 0, .y = 0, .z = 0},
-            {.x = width, .y = height, .z = 1}
-        }
-    };
-
-    vkCmdBlitImage(commandBuffer,
-                   mImguiImages.at(frameIndex).image,
-                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                   mSwapchain->images.at(swapchainImageIndex).image,
-                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                   1, &blitRegion,
-                   VK_FILTER_NEAREST);
-
-    transitionImageLayout(commandBuffer,
-                          mSwapchain->images.at(swapchainImageIndex),
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                          VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 }

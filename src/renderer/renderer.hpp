@@ -12,7 +12,7 @@
 #include "scene.hpp"
 #include "scene_node.hpp"
 #include "model.hpp"
-#include "importer.hpp"
+#include "importer/importer.hpp"
 #include "material.hpp"
 
 class Renderer
@@ -38,7 +38,6 @@ private:
     void createImguiImages();
     void createImguiRenderpass();
     void createImguiFramebuffers();
-    void blitToSwapchainImage(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex);
 
     void imguiMainMenuBar();
     void imguiAssetPanel();
@@ -68,16 +67,15 @@ private:
     std::vector<Texture> mTextures; // matches descriptor array
     std::unordered_set<std::string> mLoadedModels;
 
-    // todo: make std arrays
     VkDescriptorSetLayout mViewProjDSLayout;
-    std::vector<VkDescriptorSet> mViewProjDS;
-    std::vector<VulkanBuffer> mViewProjUBOs;
+    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> mViewProjDS;
+    std::array<VulkanBuffer, MAX_FRAMES_IN_FLIGHT> mViewProjUBOs;
 
     VkRenderPass mImguiRenderpass;
-    std::vector<VulkanImage> mImguiImages;
-    std::vector<VkFramebuffer> mImguiFramebuffers;
+    std::array<VulkanImage, MAX_FRAMES_IN_FLIGHT> mImguiImages;
+    std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> mImguiFramebuffers;
 
-    std::vector<VulkanImage> mDepthImages;
+    std::array<VulkanImage, MAX_FRAMES_IN_FLIGHT> mDepthImages;
 };
 
 #endif //VULKANRENDERINGENGINE_RENDERER_HPP
