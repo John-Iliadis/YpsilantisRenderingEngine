@@ -65,6 +65,7 @@ add_executable(${PROJECT_NAME}
         src/renderer/importer.hpp
         src/renderer/material.cpp
         src/renderer/material.hpp
+        src/renderer/importer/scene.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)

@@ -64,9 +64,6 @@ public:
 
     void render(VkCommandBuffer commandBuffer, uint32_t frameIndex);
 
-    void tag(const VulkanRenderDevice& renderDevice);
-
-    size_t id() const;
     const std::string& name() const;
 
     static constexpr std::array<VkVertexInputBindingDescription, 2> bindingDescriptions();
@@ -77,9 +74,9 @@ private:
     void updateInstances(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
     void removeInstances(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
     void resize(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
+    void tag(const VulkanRenderDevice& renderDevice);
 
 private:
-    size_t mId;
     std::string mName;
 
     VulkanBuffer mVertexBuffer;

@@ -8,6 +8,12 @@
 #include <glm/glm.hpp>
 #include "mesh.hpp"
 
+struct Texture
+{
+    std::string name;
+    VulkanTexture texture;
+};
+
 enum class ObjectType
 {
     Empty,
@@ -19,7 +25,6 @@ enum class ObjectType
 
 struct SceneObject
 {
-    uint32_t id;
     ObjectType type;
     std::string name;
     glm::mat4 localTransform;
@@ -29,10 +34,11 @@ struct SceneObject
 
 struct MeshObject : SceneObject
 {
-    uint32_t modelIndex;
-    uint32_t meshIndex;
+    uint32_t modelId;
+    uint32_t meshId;
     uint32_t materialIndex;
     uint32_t instanceID;
+    bool modifiedMaterial;
 };
 
 enum class ShadowOption : uint32_t

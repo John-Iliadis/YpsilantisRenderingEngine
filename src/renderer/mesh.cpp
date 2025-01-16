@@ -50,7 +50,6 @@ void Mesh::create(const VulkanRenderDevice& renderDevice,
                                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     }
 
-    mId = std::hash<std::string>()(name);
     mName = name;
     tag(renderDevice);
 }
@@ -313,6 +312,7 @@ void Mesh::updateInstances(const VulkanRenderDevice &renderDevice, VkCommandBuff
                     copyRegions.data());
 }
 
+// todo: handle case when there is only one instance or if the instance removed is the last
 void Mesh::removeInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     uint32_t removeCount = mRemovePending[frameIndex].size();
@@ -378,11 +378,6 @@ void Mesh::resize(const VulkanRenderDevice &renderDevice, VkCommandBuffer comman
                                  std::format("{} mesh instance buffer {}", mName, i),
                                  mInstanceBuffers[i].buffer);
     }
-}
-
-size_t Mesh::id() const
-{
-    return mId;
 }
 
 const std::string &Mesh::name() const

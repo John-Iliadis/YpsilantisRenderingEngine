@@ -51,9 +51,6 @@ private:
 
     void updateUniformBuffers(uint32_t frameIndex);
 
-    void uploadLoadedResources();
-    void importModel(const std::string& filename);
-
 private:
     VulkanRenderDevice* mRenderDevice;
     VulkanSwapchain* mSwapchain;
@@ -63,15 +60,15 @@ private:
     Camera mSceneCamera;
     SceneNode mSceneRoot;
 
-    std::unordered_map<size_t, Model> mModels;
-    std::unordered_map<size_t, Mesh> mMeshes;
-    std::unordered_map<size_t, Material> mMaterials;
-
-    std::vector<LoadedMeshData> mLoadedMeshData;
+    std::unordered_map<std::string_view, Model> mModels;
+    std::unordered_map<std::string_view, Mesh> mMeshes;
+    std::unordered_map<std::string_view, size_t> mMaterialsMapped;
+    std::unordered_map<std::string_view, size_t> mTexturesMapped;
+    std::vector<Material> mMaterials; // matches SSBO
+    std::vector<Texture> mTextures; // matches descriptor array
     std::unordered_set<std::string> mLoadedModels;
-    std::vector<std::future<void>> mImportFutures;
-    std::mutex mLoadedMeshDataMutex;
 
+    // todo: make std arrays
     VkDescriptorSetLayout mViewProjDSLayout;
     std::vector<VkDescriptorSet> mViewProjDS;
     std::vector<VulkanBuffer> mViewProjUBOs;

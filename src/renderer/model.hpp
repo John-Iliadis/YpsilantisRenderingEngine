@@ -11,18 +11,33 @@
 #include "material.hpp"
 #include "mesh.hpp"
 
+//struct Model
+//{
+//    struct MeshNode
+//    {
+//        size_t materialId;
+//        glm::mat4 transformation;
+//    };
+//
+//    size_t id;
+//    std::string name;
+//    std::vector<size_t> meshes;
+//    std::unordered_map<size_t, MeshNode> meshNodeMap; // mesh id to mesh node graph data
+//};
+
 struct Model
 {
     struct MeshNode
     {
-        size_t materialId;
-        glm::mat4 transformation;
+        std::string_view meshName;
+        std::string_view materialName;
+        glm::mat4 localTransform;
+        std::vector<MeshNode> children;
     };
 
-    size_t id;
     std::string name;
-    std::vector<size_t> meshes;
-    std::unordered_map<size_t, MeshNode> meshNodeMap; // mesh id to mesh node graph data
+    MeshNode meshRootNode;
+    std::unordered_map<std::string, std::string_view> mappedMaterials;
 };
 
 #endif //VULKANRENDERINGENGINE_MODEL_HPP
