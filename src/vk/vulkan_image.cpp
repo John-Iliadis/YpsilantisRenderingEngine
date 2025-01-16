@@ -140,12 +140,14 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
     return imageView;
 }
 
-void transitionImageLayout(VkCommandBuffer commandBuffer,
+void transitionImageLayout(const VulkanRenderDevice& renderDevice,
                            VulkanImage& image,
                            VkImageLayout oldLayout,
                            VkImageLayout newLayout,
                            uint32_t mipLevels)
 {
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice.device, renderDevice.commandPool);
+
     VkImageMemoryBarrier imageMemoryBarrier {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .oldLayout = oldLayout,
@@ -194,6 +196,8 @@ void transitionImageLayout(VkCommandBuffer commandBuffer,
                          dstStageMask,
                          0, 0, nullptr, 0, nullptr,
                          1, &imageMemoryBarrier);
+
+    endSingleTimeCommands(renderDevice.device, renderDevice.commandPool, commandBuffer, renderDevice.graphicsQueue);
 }
 
 void copyBufferToImage(const VulkanRenderDevice& renderDevice,
@@ -226,12 +230,14 @@ void copyBufferToImage(const VulkanRenderDevice& renderDevice,
     endSingleTimeCommands(renderDevice.device, renderDevice.commandPool, commandBuffer, renderDevice.graphicsQueue);
 }
 
-void resolveImage(VkCommandBuffer commandBuffer,
+void resolveImage(const VulkanRenderDevice& renderDevice,
                   VkImage srcImage,
                   VkImage dstImage,
                   VkImageAspectFlags aspectMask,
                   uint32_t width, uint32_t height)
 {
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice.device, renderDevice.commandPool);
+
     VkImageResolve resolve {
         .srcSubresource {
             .aspectMask = aspectMask,
@@ -260,6 +266,8 @@ void resolveImage(VkCommandBuffer commandBuffer,
                       dstImage,
                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                       1, &resolve);
+
+    endSingleTimeCommands(renderDevice.device, renderDevice.commandPool, commandBuffer, renderDevice.graphicsQueue);
 }
 
 void setImageDebugName(const VulkanRenderDevice& renderDevice,

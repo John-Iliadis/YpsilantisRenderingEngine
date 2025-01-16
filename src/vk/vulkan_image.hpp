@@ -54,7 +54,7 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
                             uint32_t mipLevels = 1,
                             uint32_t layerCount = 1);
 
-void transitionImageLayout(VkCommandBuffer commandBuffer,
+void transitionImageLayout(const VulkanRenderDevice& renderDevice,
                            VulkanImage& image,
                            VkImageLayout oldLayout,
                            VkImageLayout newLayout,
@@ -65,7 +65,7 @@ void copyBufferToImage(const VulkanRenderDevice& renderDevice,
                        VulkanImage& image,
                        uint32_t width, uint32_t height);
 
-void resolveImage(VkCommandBuffer commandBuffer,
+void resolveImage(const VulkanRenderDevice& renderDevice,
                   VkImage srcImage,
                   VkImage dstImage,
                   VkImageAspectFlags aspectMask,
