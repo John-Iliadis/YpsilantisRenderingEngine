@@ -63,8 +63,7 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
 
 void transitionImageLayout(const VulkanRenderDevice& renderDevice,
                            VulkanImage& image,
-                           VkImageLayout newLayout,
-                           uint32_t mipLevels = 1);
+                           VkImageLayout newLayout);
 
 void copyBufferToImage(const VulkanRenderDevice& renderDevice,
                        const VulkanBuffer& buffer,
