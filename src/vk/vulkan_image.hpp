@@ -17,6 +17,7 @@ struct VulkanImage
     VkDeviceMemory memory;
     VkFormat format;
     VkImageLayout layout;
+    uint32_t mipLevels;
 };
 
 VulkanImage createImage(const VulkanRenderDevice& renderDevice,

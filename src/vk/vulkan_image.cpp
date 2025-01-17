@@ -17,7 +17,8 @@ VulkanImage createImage(const VulkanRenderDevice& renderDevice,
 {
     VulkanImage image {
         .format = format,
-        .layout = VK_IMAGE_LAYOUT_UNDEFINED
+        .layout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .mipLevels = mipLevels
     };
 
     // create image
@@ -27,7 +28,7 @@ VulkanImage createImage(const VulkanRenderDevice& renderDevice,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = image.format,
         .extent = {.width = width, .height = height, .depth = 1},
-        .mipLevels = mipLevels,
+        .mipLevels = image.mipLevels,
         .arrayLayers = layerCount,
         .samples = samples,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -145,8 +146,7 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
 
 void transitionImageLayout(const VulkanRenderDevice& renderDevice,
                            VulkanImage& image,
-                           VkImageLayout newLayout,
-                           uint32_t mipLevels)
+                           VkImageLayout newLayout)
 {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice.device, renderDevice.commandPool);
 
@@ -158,7 +158,7 @@ void transitionImageLayout(const VulkanRenderDevice& renderDevice,
         .subresourceRange {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
-            .levelCount = mipLevels, // transition all mip levels
+            .levelCount = image.mipLevels, // transition all mip levels
             .baseArrayLayer = 0,
             .layerCount = 1
         }
