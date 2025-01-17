@@ -60,7 +60,7 @@ void VulkanInstance::create()
     VkResult result = vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
     vulkanCheck(result, "Failed to create Vulkan instance");
 
-    loadExtFunctionsPointers(instance);
+    loadExtensionFunctionsPointers(instance);
 
 #ifdef DEBUG_MODE
     // create the debug messenger

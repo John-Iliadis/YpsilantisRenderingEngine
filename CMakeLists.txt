@@ -61,8 +61,8 @@ add_executable(${PROJECT_NAME}
         src/renderer/scene_node.cpp
         src/renderer/scene_node.hpp
         src/renderer/model.hpp
-        src/renderer/importer.cpp
-        src/renderer/importer.hpp
+        src/renderer/importer/importer.cpp
+        src/renderer/importer/importer.hpp
         src/renderer/material.cpp
         src/renderer/material.hpp
         src/renderer/importer/scene.hpp

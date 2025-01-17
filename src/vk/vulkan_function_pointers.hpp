@@ -19,7 +19,7 @@ inline PFN_vkCmdInsertDebugUtilsLabelEXT pfnCmdInsertDebugUtilsLabelEXT;
 inline PFN_vkCmdSetCullModeEXT pfnCmdSetCullModeEXT;
 inline PFN_vkCmdSetFrontFaceEXT pfnCmdSetFrontFaceEXT;
 
-inline void loadExtFunctionsPointers(VkInstance instance)
+inline void loadExtensionFunctionsPointers(VkInstance instance)
 {
 #ifdef DEBUG_MODE
     pfnCreateDebugUtilsMessengerEXT = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
