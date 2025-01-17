@@ -35,12 +35,22 @@ void VulkanSwapchain::destroy(const VulkanInstance& instance, const VulkanRender
 
 void VulkanSwapchain::recreate(const VulkanRenderDevice& renderDevice)
 {
+    // swapchain
     for (size_t i = 0; i < imageCount; ++i)
         vkDestroyImageView(renderDevice.device, images.at(i).imageView, nullptr);
     vkDestroySwapchainKHR(renderDevice.device, swapchain, nullptr);
 
     createSwapchain(renderDevice);
     createSwapchainImages(renderDevice);
+
+    // sync objects
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        vkDestroyFence(renderDevice.device, inFlightFences.at(i), nullptr);
+        vkDestroySemaphore(renderDevice.device, imageReadySemaphores.at(i), nullptr);
+        vkDestroySemaphore(renderDevice.device, renderCompleteSemaphores.at(i), nullptr);
+    }
+    createSyncObjects(renderDevice);
 }
 
 void VulkanSwapchain::createSurface(GLFWwindow *window, const VulkanInstance &instance)
@@ -66,7 +76,7 @@ void VulkanSwapchain::createSwapchain(const VulkanRenderDevice& renderDevice)
         .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
         .imageExtent = extent,
         .imageArrayLayers = 1,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -103,8 +113,6 @@ void VulkanSwapchain::createSwapchainImages(const VulkanRenderDevice& renderDevi
 
 void VulkanSwapchain::createCommandBuffers(const VulkanRenderDevice& renderDevice)
 {
-    commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-
     VkCommandBufferAllocateInfo commandBufferAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = renderDevice.commandPool,
@@ -126,10 +134,6 @@ void VulkanSwapchain::createCommandBuffers(const VulkanRenderDevice& renderDevic
 
 void VulkanSwapchain::createSyncObjects(const VulkanRenderDevice &renderDevice)
 {
-    inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-    imageReadySemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    renderCompleteSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         inFlightFences.at(i) = createFence(renderDevice.device, true, std::format("Swapchain in flight fence {}", i).c_str());

@@ -87,6 +87,7 @@ void Application::render()
     static uint32_t currentFrame = 0;
 
     vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(currentFrame), VK_TRUE, UINT64_MAX);
+    vkResetFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(currentFrame));
 
     uint32_t swapchainImageIndex;
     VkResult result = vkAcquireNextImageKHR(mRenderDevice.device,
@@ -96,13 +97,11 @@ void Application::render()
                                            VK_NULL_HANDLE,
                                            &swapchainImageIndex);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
     {
         recreateSwapchain();
         return;
     }
-
-    vkResetFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(currentFrame));
 
     fillCommandBuffer(mSwapchain.commandBuffers.at(currentFrame), currentFrame, swapchainImageIndex);
 

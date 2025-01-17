@@ -23,11 +23,11 @@ public:
     uint32_t imageCount;
 
     std::vector<VulkanImage> images;
-    std::vector<VkCommandBuffer> commandBuffers;
 
-    std::vector<VkFence> inFlightFences;
-    std::vector<VkSemaphore> imageReadySemaphores;
-    std::vector<VkSemaphore> renderCompleteSemaphores;
+    std::array<VkCommandBuffer, MAX_FRAMES_IN_FLIGHT> commandBuffers;
+    std::array<VkFence, MAX_FRAMES_IN_FLIGHT> inFlightFences;
+    std::array<VkSemaphore, MAX_FRAMES_IN_FLIGHT> imageReadySemaphores;
+    std::array<VkSemaphore, MAX_FRAMES_IN_FLIGHT> renderCompleteSemaphores;
 
 public:
     void create(GLFWwindow* window,

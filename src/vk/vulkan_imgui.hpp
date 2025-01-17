@@ -21,6 +21,7 @@ void initImGui(GLFWwindow* window,
                VkRenderPass renderPass);
 void terminateImGui();
 void beginImGui();
-void renderImGui(VkCommandBuffer commandBuffer);
+void endImGui();
+void imGuiFillCommandBuffer(VkCommandBuffer commandBuffer);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_IMGUI_HPP

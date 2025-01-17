@@ -49,8 +49,12 @@ void beginImGui()
     ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 }
 
-void renderImGui(VkCommandBuffer commandBuffer)
+void endImGui()
 {
     ImGui::Render();
+}
+
+void imGuiFillCommandBuffer(VkCommandBuffer commandBuffer)
+{
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 }
