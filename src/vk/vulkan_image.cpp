@@ -290,11 +290,11 @@ void setImageDebugName(const VulkanRenderDevice& renderDevice,
 {
     setDebugVulkanObjectName(renderDevice.device,
                              VK_OBJECT_TYPE_IMAGE,
-                             std::format("{} image{}", name,index.has_value()? std::format(" {}", index.value()) : ""),
+                             std::format("{}.image{}", name,index.has_value()? std::format(" [{}]", index.value()) : ""),
                              image.image);
 
     setDebugVulkanObjectName(renderDevice.device,
                              VK_OBJECT_TYPE_IMAGE_VIEW,
-                             std::format("{} image view{}", name, index.has_value()? std::format(" {}", index.value()) : ""),
+                             std::format("{}.imageView{}", name, index.has_value()? std::format(" [{}]", index.value()) : ""),
                              image.imageView);
 }

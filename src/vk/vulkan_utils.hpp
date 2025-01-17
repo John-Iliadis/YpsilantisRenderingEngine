@@ -12,6 +12,9 @@
 void vulkanCheck(VkResult result, const char* msg, std::source_location location = std::source_location::current());
 
 void setDebugVulkanObjectName(VkDevice device, VkObjectType type, const std::string& name, const void* handle);
+void beginDebugLabel(VkCommandBuffer commandBuffer, const char* name);
+void endDebugLabel(VkCommandBuffer commandBuffer);
+void insertDebugLabel(VkCommandBuffer commandBuffer, const char* name);
 
 std::optional<uint32_t> findSuitableMemoryType(VkPhysicalDeviceMemoryProperties memoryProperties,
                                                uint32_t resourceSupportedMemoryTypes,

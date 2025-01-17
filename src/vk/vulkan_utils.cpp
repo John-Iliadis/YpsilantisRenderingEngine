@@ -24,6 +24,39 @@ void setDebugVulkanObjectName(VkDevice device, VkObjectType type, const std::str
 #endif
 }
 
+void beginDebugLabel(VkCommandBuffer commandBuffer, const char* name)
+{
+#ifdef DEBUG_MODE
+    VkDebugUtilsLabelEXT debugUtilsLabel {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pLabelName = name,
+        .color {0.f, 1.f, 0.f, 1.f}
+    };
+
+    pfnCmdBeginDebugUtilsLabelEXT(commandBuffer, &debugUtilsLabel);
+#endif
+}
+
+void endDebugLabel(VkCommandBuffer commandBuffer)
+{
+#ifdef DEBUG_MODE
+    pfnCmdEndDebugUtilsLabelEXT(commandBuffer);
+#endif
+}
+
+void insertDebugLabel(VkCommandBuffer commandBuffer, const char* name)
+{
+#ifdef DEBUG_MODE
+    VkDebugUtilsLabelEXT debugUtilsLabel {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pLabelName = name,
+        .color {0.f, 1.f, 0.f, 1.f}
+    };
+
+    pfnCmdInsertDebugUtilsLabelEXT(commandBuffer, &debugUtilsLabel);
+#endif
+}
+
 std::optional<uint32_t> findSuitableMemoryType(VkPhysicalDeviceMemoryProperties memoryProperties,
                                                uint32_t resourceSupportedMemoryTypes,
                                                VkMemoryPropertyFlags desiredMemoryProperties)

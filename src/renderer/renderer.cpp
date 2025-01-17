@@ -121,7 +121,7 @@ void Renderer::createDescriptorPool()
 
     setDebugVulkanObjectName(mRenderDevice->device,
                              VK_OBJECT_TYPE_DESCRIPTOR_POOL,
-                             "Renderer descriptor pool",
+                             "Renderer::mDescriptorPool",
                              mDescriptorPool);
 }
 
@@ -138,7 +138,7 @@ void Renderer::createDepthImages()
 
         setDebugVulkanObjectName(mRenderDevice->device,
                                  VK_OBJECT_TYPE_IMAGE,
-                                 std::format("Application depth image {}", i),
+                                 std::format("Renderer::mDepthImages[{}]", i),
                                  mDepthImages.at(i).image);
     }
 }
@@ -158,7 +158,7 @@ void Renderer::createViewProjUBOs()
 
         setDebugVulkanObjectName(mRenderDevice->device,
                                  VK_OBJECT_TYPE_BUFFER,
-                                 std::format("ViewProjection buffer {}", i),
+                                 std::format("Renderer::mViewProjUBOs[{}]", i),
                                  mViewProjUBOs.at(i).buffer);
     }
 }
@@ -171,7 +171,7 @@ void Renderer::createViewProjDescriptors()
 
     setDebugVulkanObjectName(mRenderDevice->device,
                              VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
-                             "ViewProjection descriptor set layout",
+                             "Renderer::mViewProjDSLayout",
                              mViewProjDSLayout);
 
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
@@ -323,9 +323,11 @@ void Renderer::renderImgui(VkCommandBuffer commandBuffer, uint32_t frameIndex)
         .pClearValues = &clearValue
     };
 
+    beginDebugLabel(commandBuffer, "Imgui Render");
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     imGuiFillCommandBuffer(commandBuffer);
     vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
 }
 
 void Renderer::updateUniformBuffers(uint32_t frameIndex)
@@ -350,7 +352,7 @@ void Renderer::createImguiTextures()
                                                   TextureWrap::ClampToEdge,
                                                   TextureFilter::Nearest);
 
-        setImageDebugName(*mRenderDevice, mImguiTextures.at(i).image, "Imgui", i);
+        setImageDebugName(*mRenderDevice, mImguiTextures.at(i).image, "Renderer::mImguiTextures", i);
     }
 }
 
@@ -389,7 +391,7 @@ void Renderer::createImguiRenderpass()
 
     setDebugVulkanObjectName(mRenderDevice->device,
                              VK_OBJECT_TYPE_RENDER_PASS,
-                             "Imgui renderpass",
+                             "Renderer::mImguiRenderpass",
                              mImguiRenderpass);
 }
 
@@ -415,7 +417,7 @@ void Renderer::createImguiFramebuffers()
 
         setDebugVulkanObjectName(mRenderDevice->device,
                                  VK_OBJECT_TYPE_FRAMEBUFFER,
-                                 std::format("Imgui framebuffer {}", i),
+                                 std::format("Renderer::mImguiFramebuffers[{}]", i),
                                  mImguiFramebuffers.at(i));
     }
 }
@@ -455,7 +457,7 @@ void Renderer::createFinalRenderPass()
 
     setDebugVulkanObjectName(mRenderDevice->device,
                              VK_OBJECT_TYPE_RENDER_PASS,
-                             "Present renderpass",
+                             "Renderer::mFinalRenderPass",
                              mFinalRenderPass);
 }
 
@@ -483,7 +485,7 @@ void Renderer::createSwapchainImageFramebuffers()
 
         setDebugVulkanObjectName(mRenderDevice->device,
                                  VK_OBJECT_TYPE_FRAMEBUFFER,
-                                 std::format("Swapchain image framebuffer {}", i),
+                                 std::format("Renderer::mSwapchainImageFramebuffers[{}]", i),
                                  mSwapchainImageFramebuffers.at(i));
     }
 }
@@ -518,7 +520,7 @@ void Renderer::createFinalPipelineLayout()
 
     setDebugVulkanObjectName(mRenderDevice->device,
                              VK_OBJECT_TYPE_PIPELINE_LAYOUT,
-                             "Present pipeline layout",
+                             "Renderer::mFinalPipelineLayout",
                              mFinalPipelineLayout);
 }
 
@@ -620,7 +622,7 @@ void Renderer::createFinalPipeline()
 
     setDebugVulkanObjectName(mRenderDevice->device,
                              VK_OBJECT_TYPE_PIPELINE,
-                             "mPresentPipeline",
+                             "Renderer::mPresentPipeline",
                              mFinalPipeline);
 }
 
@@ -654,6 +656,7 @@ void Renderer::renderToSwapchainImageFinal(VkCommandBuffer commandBuffer, uint32
         .extent = mSwapchain->extent
     };
 
+    beginDebugLabel(commandBuffer, "Final Renderpass");
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mFinalPipeline);
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -665,6 +668,7 @@ void Renderer::renderToSwapchainImageFinal(VkCommandBuffer commandBuffer, uint32
                             0, nullptr);
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
 }
 
 void Renderer::updateFinalDescriptors()

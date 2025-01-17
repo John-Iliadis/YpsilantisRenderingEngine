@@ -127,7 +127,7 @@ void VulkanSwapchain::createCommandBuffers(const VulkanRenderDevice& renderDevic
     {
         setDebugVulkanObjectName(renderDevice.device,
                                  VK_OBJECT_TYPE_COMMAND_BUFFER,
-                                 std::format("Swapchain command buffer {}", i),
+                                 std::format("VulkanSwapchain::commandBuffers[{}]", i),
                                  commandBuffers.at(i));
     }
 }
