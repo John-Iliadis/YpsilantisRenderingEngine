@@ -18,10 +18,16 @@ void Renderer::init(GLFWwindow* window,
     createViewProjUBOs();
     createViewProjDescriptors();
 
-    createImguiImages();
+    createImguiTextures();
     createImguiRenderpass();
     createImguiFramebuffers();
     initImGui(window, instance, renderDevice, mDescriptorPool, mImguiRenderpass);
+
+    createFinalRenderPass();
+    createSwapchainImageFramebuffers();
+    createFinalDescriptorResources();
+    createFinalPipelineLayout();
+    createFinalPipeline();
 
     mSceneCamera = {
         glm::vec3(0.f, 0.f, -5.f),
@@ -33,23 +39,38 @@ void Renderer::init(GLFWwindow* window,
 
 void Renderer::terminate()
 {
+    // meshes
     for (auto& [meshID, mesh] : mMeshes)
         mesh.destroy(*mRenderDevice);
 
-    terminateImGui();
-
+    // viewProj
+    vkDestroyDescriptorSetLayout(mRenderDevice->device, mViewProjDSLayout, nullptr);
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-    {
-        destroyImage(*mRenderDevice, mDepthImages.at(i));
         destroyBuffer(*mRenderDevice, mViewProjUBOs.at(i));
 
-        destroyImage(*mRenderDevice, mImguiImages.at(i));
+    // imgui
+    terminateImGui();
+    vkDestroyRenderPass(mRenderDevice->device, mImguiRenderpass, nullptr);
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        destroyTexture(*mRenderDevice, mImguiTextures.at(i));
         vkDestroyFramebuffer(mRenderDevice->device, mImguiFramebuffers.at(i), nullptr);
     }
 
-    vkDestroyRenderPass(mRenderDevice->device, mImguiRenderpass, nullptr);
+        // final renderpass resources
+    vkDestroyRenderPass(mRenderDevice->device, mFinalRenderPass, nullptr);
+    vkDestroyPipelineLayout(mRenderDevice->device, mFinalPipelineLayout, nullptr);
+    vkDestroyPipeline(mRenderDevice->device, mFinalPipeline, nullptr);
+    vkDestroyDescriptorSetLayout(mRenderDevice->device, mFinalDSLayout, nullptr);
+    for (uint32_t i = 0; i < mSwapchain->imageCount; ++i)
+        vkDestroyFramebuffer(mRenderDevice->device, mSwapchainImageFramebuffers.at(i), nullptr);
+
+    // renderer
     vkDestroyDescriptorPool(mRenderDevice->device, mDescriptorPool, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice->device, mViewProjDSLayout, nullptr);
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        destroyImage(*mRenderDevice, mDepthImages.at(i));
+    }
 }
 
 void Renderer::handleEvent(const Event &event)
@@ -59,30 +80,39 @@ void Renderer::handleEvent(const Event &event)
 
 void Renderer::update(float dt)
 {
-    beginImGui();
     updateImgui();
     mSceneCamera.update(dt);
 }
 
-void Renderer::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex)
+void Renderer::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t imageIndex)
 {
     updateUniformBuffers(frameIndex);
     renderImgui(commandBuffer, frameIndex);
-    blitToSwapchainImage(commandBuffer, frameIndex, swapchainImageIndex);
+    renderToSwapchainImageFinal(commandBuffer, frameIndex, imageIndex);
 }
 
 void Renderer::onSwapchainRecreate()
 {
+    // renderer
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        destroyImage(*mRenderDevice, mDepthImages.at(i));
+    createDepthImages();
+
+    // imgui
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        destroyImage(*mRenderDevice, mDepthImages.at(i));
-        destroyImage(*mRenderDevice, mImguiImages.at(i));
+        destroyTexture(*mRenderDevice, mImguiTextures.at(i));
         vkDestroyFramebuffer(mRenderDevice->device, mImguiFramebuffers.at(i), nullptr);
     }
 
-    createDepthImages();
-    createImguiImages();
+    createImguiTextures();
     createImguiFramebuffers();
+
+    // final renderpass
+    for (uint32_t i = 0; i < mSwapchain->imageCount; ++i)
+        vkDestroyFramebuffer(mRenderDevice->device, mSwapchainImageFramebuffers.at(i), nullptr);
+    createSwapchainImageFramebuffers();
+    updateFinalDescriptors();
 }
 
 void Renderer::createDescriptorPool()
@@ -267,10 +297,14 @@ void Renderer::imguiSceneGraph()
 
 void Renderer::updateImgui()
 {
-    imguiMainMenuBar();
-    imguiSceneGraph();
-    imguiAssetPanel();
-    ImGui::ShowDemoWindow();
+    beginImGui();
+    {
+        imguiMainMenuBar();
+        imguiSceneGraph();
+        imguiAssetPanel();
+        ImGui::ShowDemoWindow();
+    }
+    endImGui();
 }
 
 void Renderer::renderImgui(VkCommandBuffer commandBuffer, uint32_t frameIndex)
@@ -290,7 +324,7 @@ void Renderer::renderImgui(VkCommandBuffer commandBuffer, uint32_t frameIndex)
     };
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    ::renderImGui(commandBuffer);
+    imGuiFillCommandBuffer(commandBuffer);
     vkCmdEndRenderPass(commandBuffer);
 }
 
@@ -302,19 +336,21 @@ void Renderer::updateUniformBuffers(uint32_t frameIndex)
                     glm::value_ptr(mSceneCamera.viewProjection()));
 }
 
-void Renderer::createImguiImages()
+void Renderer::createImguiTextures()
 {
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        mImguiImages.at(i) = createImage2D(*mRenderDevice,
-                                           VK_FORMAT_R8G8B8A8_UNORM,
-                                           mSwapchain->extent.width,
-                                           mSwapchain->extent.height,
-                                           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                                               VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                                           VK_IMAGE_ASPECT_COLOR_BIT);
+        mImguiTextures.at(i) = createTexture2D(*mRenderDevice,
+                                                  mSwapchain->extent.width,
+                                                  mSwapchain->extent.height,
+                                                  VK_FORMAT_R8G8B8A8_UNORM,
+                                                  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                                      VK_IMAGE_USAGE_SAMPLED_BIT,
+                                                  VK_IMAGE_ASPECT_COLOR_BIT,
+                                                  TextureWrap::ClampToEdge,
+                                                  TextureFilter::Nearest);
 
-        setImageDebugName(*mRenderDevice, mImguiImages.at(i), "Imgui", i);
+        setImageDebugName(*mRenderDevice, mImguiTextures.at(i).image, "Imgui", i);
     }
 }
 
@@ -326,7 +362,7 @@ void Renderer::createImguiRenderpass()
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
     VkAttachmentReference colorAttachmentRef {
@@ -365,7 +401,7 @@ void Renderer::createImguiFramebuffers()
             .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
             .renderPass = mImguiRenderpass,
             .attachmentCount = 1,
-            .pAttachments = &mImguiImages.at(i).imageView,
+            .pAttachments = &mImguiTextures.at(i).image.imageView,
             .width = mSwapchain->extent.width,
             .height = mSwapchain->extent.height,
             .layers = 1
@@ -381,5 +417,276 @@ void Renderer::createImguiFramebuffers()
                                  VK_OBJECT_TYPE_FRAMEBUFFER,
                                  std::format("Imgui framebuffer {}", i),
                                  mImguiFramebuffers.at(i));
+    }
+}
+
+void Renderer::createFinalRenderPass()
+{
+    VkAttachmentDescription colorAttachment {
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    };
+
+    VkAttachmentReference colorAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &colorAttachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice->device, &renderPassCreateInfo, nullptr, &mFinalRenderPass);
+    vulkanCheck(result, "Failed to create present renderpass");
+
+    setDebugVulkanObjectName(mRenderDevice->device,
+                             VK_OBJECT_TYPE_RENDER_PASS,
+                             "Present renderpass",
+                             mFinalRenderPass);
+}
+
+void Renderer::createSwapchainImageFramebuffers()
+{
+    mSwapchainImageFramebuffers.resize(mSwapchain->imageCount);
+
+    for (uint32_t i = 0; i < mSwapchain->imageCount; ++i)
+    {
+        VkFramebufferCreateInfo framebufferCreateInfo {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = mFinalRenderPass,
+            .attachmentCount = 1,
+            .pAttachments = &mSwapchain->images.at(i).imageView,
+            .width = mSwapchain->extent.width,
+            .height = mSwapchain->extent.height,
+            .layers = 1
+        };
+
+        VkResult result = vkCreateFramebuffer(mRenderDevice->device,
+                                              &framebufferCreateInfo,
+                                              nullptr,
+                                              &mSwapchainImageFramebuffers.at(i));
+        vulkanCheck(result, std::format("Failed to create swapchain image framebuffer {}", i).c_str());
+
+        setDebugVulkanObjectName(mRenderDevice->device,
+                                 VK_OBJECT_TYPE_FRAMEBUFFER,
+                                 std::format("Swapchain image framebuffer {}", i),
+                                 mSwapchainImageFramebuffers.at(i));
+    }
+}
+
+void Renderer::createFinalDescriptorResources()
+{
+    DescriptorSetLayoutCreator dslCreator(mRenderDevice->device);
+    dslCreator.addLayoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+    mFinalDSLayout = dslCreator.create();
+
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        DescriptorSetCreator dsCreator(mRenderDevice->device, mDescriptorPool, mFinalDSLayout);
+        dsCreator.addTexture(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, mImguiTextures.at(i));
+        mFinalDS.at(i) = dsCreator.create();
+    }
+}
+
+void Renderer::createFinalPipelineLayout()
+{
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &mFinalDSLayout
+    };
+
+    VkResult result = vkCreatePipelineLayout(mRenderDevice->device,
+                                             &pipelineLayoutCreateInfo,
+                                             nullptr,
+                                             &mFinalPipelineLayout);
+    vulkanCheck(result, "Failed to create present pipeline layout");
+
+    setDebugVulkanObjectName(mRenderDevice->device,
+                             VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+                             "Present pipeline layout",
+                             mFinalPipelineLayout);
+}
+
+void Renderer::createFinalPipeline()
+{
+    VulkanShaderModule vertexShaderModule(mRenderDevice->device, "fullScreenQuad.vert");
+    VulkanShaderModule fragmentShaderModule(mRenderDevice->device, "imageToQuad.frag");
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages {
+        shaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertexShaderModule),
+        shaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShaderModule)
+    };
+
+    VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+    };
+
+    VkPipelineTessellationStateCreateInfo tessellationStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO
+    };
+
+    VkPipelineViewportStateCreateInfo viewportStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .scissorCount = 1
+    };
+
+    VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = VK_CULL_MODE_NONE,
+        .lineWidth = 1.f
+    };
+
+    VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
+    };
+
+    VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+    };
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachmentState {
+        .colorWriteMask {
+            VK_COLOR_COMPONENT_R_BIT |
+            VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT |
+            VK_COLOR_COMPONENT_A_BIT
+        }
+    };
+
+    VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &colorBlendAttachmentState
+    };
+
+    std::array<VkDynamicState, 2> dynamicStates {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+        .pDynamicStates = dynamicStates.data()
+    };
+
+    VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = static_cast<uint32_t>(shaderStages.size()),
+        .pStages = shaderStages.data(),
+        .pVertexInputState = &vertexInputStateCreateInfo,
+        .pInputAssemblyState = &inputAssemblyStateCreateInfo,
+        .pTessellationState = &tessellationStateCreateInfo,
+        .pViewportState = &viewportStateCreateInfo,
+        .pRasterizationState = &rasterizationStateCreateInfo,
+        .pMultisampleState = &multisampleStateCreateInfo,
+        .pDepthStencilState = &depthStencilStateCreateInfo,
+        .pColorBlendState = &colorBlendStateCreateInfo,
+        .pDynamicState = &dynamicStateCreateInfo,
+        .layout = mFinalPipelineLayout,
+        .renderPass = mFinalRenderPass,
+        .subpass = 0
+    };
+
+    VkResult result = vkCreateGraphicsPipelines(mRenderDevice->device,
+                                                VK_NULL_HANDLE,
+                                                1, &graphicsPipelineCreateInfo,
+                                                nullptr,
+                                                &mFinalPipeline);
+    vulkanCheck(result, "Failed to create present pipeline.");
+
+    setDebugVulkanObjectName(mRenderDevice->device,
+                             VK_OBJECT_TYPE_PIPELINE,
+                             "mPresentPipeline",
+                             mFinalPipeline);
+}
+
+void Renderer::renderToSwapchainImageFinal(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t imageIndex)
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mFinalRenderPass,
+        .framebuffer = mSwapchainImageFramebuffers.at(imageIndex),
+        .renderArea {
+            .offset {.x = 0, .y = 0},
+            .extent {
+                .width = mSwapchain->extent.width,
+                .height = mSwapchain->extent.height
+            },
+        },
+        .clearValueCount = 0
+    };
+
+    VkViewport viewport {
+        .x = 0,
+        .y = 0,
+        .width = static_cast<float>(mSwapchain->extent.width),
+        .height = static_cast<float>(mSwapchain->extent.height),
+        .minDepth = 0.f,
+        .maxDepth = 1.f
+    };
+
+    VkRect2D scissor {
+        .offset = {0, 0},
+        .extent = mSwapchain->extent
+    };
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mFinalPipeline);
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mFinalPipelineLayout,
+                            0, 1, &mFinalDS.at(frameIndex),
+                            0, nullptr);
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
+}
+
+void Renderer::updateFinalDescriptors()
+{
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        VkDescriptorImageInfo imageInfo {
+            .sampler = mImguiTextures.at(i).sampler,
+            .imageView = mImguiTextures.at(i).image.imageView,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        };
+
+        VkWriteDescriptorSet writeDescriptorSet {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mFinalDS.at(i),
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &imageInfo
+        };
+
+        vkUpdateDescriptorSets(mRenderDevice->device, 1, &writeDescriptorSet, 0, nullptr);
     }
 }

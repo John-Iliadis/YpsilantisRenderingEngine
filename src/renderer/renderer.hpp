@@ -26,7 +26,7 @@ public:
 
     void handleEvent(const Event& event);
     void update(float dt);
-    void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex);
+    void fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t imageIndex);
     void onSwapchainRecreate();
 
 private:
@@ -35,9 +35,17 @@ private:
     void createViewProjUBOs();
     void createViewProjDescriptors();
 
-    void createImguiImages();
+    void createImguiTextures();
     void createImguiRenderpass();
     void createImguiFramebuffers();
+
+    void createFinalRenderPass();
+    void createSwapchainImageFramebuffers();
+    void createFinalDescriptorResources();
+    void createFinalPipelineLayout();
+    void createFinalPipeline();
+    void updateFinalDescriptors();
+    void renderToSwapchainImageFinal(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t imageIndex);
 
     void imguiMainMenuBar();
     void imguiAssetPanel();
@@ -67,12 +75,20 @@ private:
     std::vector<Texture> mTextures; // matches descriptor array
     std::unordered_set<std::string> mLoadedModels;
 
+    // final renderpass for writing imgui image to swapchain image.
+    VkRenderPass mFinalRenderPass;
+    VkPipelineLayout mFinalPipelineLayout;
+    VkPipeline mFinalPipeline;
+    VkDescriptorSetLayout mFinalDSLayout;
+    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> mFinalDS;
+    std::vector<VkFramebuffer> mSwapchainImageFramebuffers;
+
     VkDescriptorSetLayout mViewProjDSLayout;
     std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> mViewProjDS;
     std::array<VulkanBuffer, MAX_FRAMES_IN_FLIGHT> mViewProjUBOs;
 
     VkRenderPass mImguiRenderpass;
-    std::array<VulkanImage, MAX_FRAMES_IN_FLIGHT> mImguiImages;
+    std::array<VulkanTexture, MAX_FRAMES_IN_FLIGHT> mImguiTextures;
     std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> mImguiFramebuffers;
 
     std::array<VulkanImage, MAX_FRAMES_IN_FLIGHT> mDepthImages;
