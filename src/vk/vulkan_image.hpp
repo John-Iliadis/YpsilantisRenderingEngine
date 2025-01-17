@@ -15,6 +15,10 @@ struct VulkanImage
     VkImage image;
     VkImageView imageView;
     VkDeviceMemory memory;
+
+    uint32_t width;
+    uint32_t height;
+
     VkFormat format;
     VkImageLayout layout;
     uint32_t mipLevels;
@@ -63,9 +67,8 @@ void transitionImageLayout(const VulkanRenderDevice& renderDevice,
                            uint32_t mipLevels = 1);
 
 void copyBufferToImage(const VulkanRenderDevice& renderDevice,
-                       VulkanBuffer& buffer,
-                       VulkanImage& image,
-                       uint32_t width, uint32_t height);
+                       const VulkanBuffer& buffer,
+                       const VulkanImage& image);
 
 void resolveImage(const VulkanRenderDevice& renderDevice,
                   VkImage srcImage,

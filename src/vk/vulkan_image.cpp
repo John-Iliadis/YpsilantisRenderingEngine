@@ -16,6 +16,8 @@ VulkanImage createImage(const VulkanRenderDevice& renderDevice,
                         VkImageCreateFlags flags)
 {
     VulkanImage image {
+        .width = width,
+        .height = height,
         .format = format,
         .layout = VK_IMAGE_LAYOUT_UNDEFINED,
         .mipLevels = mipLevels
@@ -27,7 +29,11 @@ VulkanImage createImage(const VulkanRenderDevice& renderDevice,
         .flags = flags,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = image.format,
-        .extent = {.width = width, .height = height, .depth = 1},
+        .extent {
+            .width = image.width,
+            .height = image.height,
+            .depth = 1
+        },
         .mipLevels = image.mipLevels,
         .arrayLayers = layerCount,
         .samples = samples,
@@ -62,7 +68,7 @@ VulkanImage createImage(const VulkanRenderDevice& renderDevice,
     vkBindImageMemory(renderDevice.device, image.image, image.memory, 0);
 
     // create image view
-    image.imageView = createImageView(renderDevice, image.image, viewType, format, aspectMask, mipLevels);
+    image.imageView = createImageView(renderDevice, image.image, viewType, image.format, aspectMask, image.mipLevels);
 
     return image;
 }
@@ -205,16 +211,15 @@ void transitionImageLayout(const VulkanRenderDevice& renderDevice,
 }
 
 void copyBufferToImage(const VulkanRenderDevice& renderDevice,
-                       VulkanBuffer& buffer,
-                       VulkanImage& image,
-                       uint32_t width, uint32_t height)
+                       const VulkanBuffer& buffer,
+                       const VulkanImage& image)
 {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice.device, renderDevice.commandPool);
 
     VkBufferImageCopy copyRegion {
         .bufferOffset = 0,
-        .bufferRowLength = width,
-        .bufferImageHeight = height,
+        .bufferRowLength = image.width,
+        .bufferImageHeight = image.height,
         .imageSubresource {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
             .mipLevel = 0,
@@ -222,7 +227,11 @@ void copyBufferToImage(const VulkanRenderDevice& renderDevice,
             .layerCount = 1,
         },
         .imageOffset {0, 0, 0},
-        .imageExtent {.width = width, .height = height, .depth = 1},
+        .imageExtent {
+            .width = image.width,
+            .height = image.height,
+            .depth = 1
+        }
     };
 
     vkCmdCopyBufferToImage(commandBuffer,
