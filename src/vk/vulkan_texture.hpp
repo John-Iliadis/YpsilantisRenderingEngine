@@ -40,6 +40,8 @@ VulkanTexture createTexture2D(const VulkanRenderDevice& renderDevice,
                               TextureFilter filterMode,
                               bool enableMipsMaps = false);
 
+void destroyTexture(const VulkanRenderDevice& renderDevice, VulkanTexture& texture);
+
 void uploadTextureData(const VulkanRenderDevice& renderDevice,
                        VulkanTexture& texture,
                        const void* data);

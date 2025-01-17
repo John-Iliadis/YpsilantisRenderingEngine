@@ -43,6 +43,12 @@ VulkanTexture createTexture2D(const VulkanRenderDevice& renderDevice,
     return texture;
 }
 
+void destroyTexture(const VulkanRenderDevice& renderDevice, VulkanTexture& texture)
+{
+    destroyImage(renderDevice, texture.image);
+    vkDestroySampler(renderDevice.device, texture.sampler, nullptr);
+}
+
 void uploadTextureData(const VulkanRenderDevice& renderDevice,
                        VulkanTexture& texture,
                        const void* data)
