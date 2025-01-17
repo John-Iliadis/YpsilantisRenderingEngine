@@ -39,6 +39,7 @@ public:
     void addBuffer(VkDescriptorType type, uint32_t binding, VkBuffer buffer, uint32_t offset, uint32_t range);
     void addTexture(VkDescriptorType type, uint32_t binding, const VulkanTexture& texture);
 
+    void clear();
     VkDescriptorSet create() const;
 
 private:

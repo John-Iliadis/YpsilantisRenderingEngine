@@ -87,6 +87,12 @@ void DescriptorSetCreator::addTexture(VkDescriptorType type, uint32_t binding, c
     mTextureInfos.emplace_back(type, binding, texture);
 }
 
+void DescriptorSetCreator::clear()
+{
+    mBufferInfos.clear();
+    mTextureInfos.clear();
+}
+
 VkDescriptorSet DescriptorSetCreator::create() const
 {
     VkDescriptorSet descriptorSet;
