@@ -15,14 +15,17 @@ VulkanImage createImage(const VulkanRenderDevice& renderDevice,
                         uint32_t layerCount,
                         VkImageCreateFlags flags)
 {
-    VulkanImage image;
+    VulkanImage image {
+        .format = format,
+        .layout = VK_IMAGE_LAYOUT_UNDEFINED
+    };
 
     // create image
     VkImageCreateInfo imageCreateInfo {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .flags = flags,
         .imageType = VK_IMAGE_TYPE_2D,
-        .format = format,
+        .format = image.format,
         .extent = {.width = width, .height = height, .depth = 1},
         .mipLevels = mipLevels,
         .arrayLayers = layerCount,
@@ -30,7 +33,7 @@ VulkanImage createImage(const VulkanRenderDevice& renderDevice,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+        .initialLayout = image.layout
     };
 
     VkResult result = vkCreateImage(renderDevice.device, &imageCreateInfo, nullptr, &image.image);
@@ -142,7 +145,6 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
 
 void transitionImageLayout(const VulkanRenderDevice& renderDevice,
                            VulkanImage& image,
-                           VkImageLayout oldLayout,
                            VkImageLayout newLayout,
                            uint32_t mipLevels)
 {
@@ -150,7 +152,7 @@ void transitionImageLayout(const VulkanRenderDevice& renderDevice,
 
     VkImageMemoryBarrier imageMemoryBarrier {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .oldLayout = oldLayout,
+        .oldLayout = image.layout,
         .newLayout = newLayout,
         .image = image.image,
         .subresourceRange {
@@ -165,21 +167,21 @@ void transitionImageLayout(const VulkanRenderDevice& renderDevice,
     VkPipelineStageFlags srcStageMask {};
     VkPipelineStageFlags dstStageMask {};
 
-    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+    if (image.layout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
     {
         imageMemoryBarrier.srcAccessMask = 0;
         imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
         dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
     }
-    else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+    else if (image.layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
     {
         imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
         dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     }
-    else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+    else if (image.layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
     {
         imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         imageMemoryBarrier.dstAccessMask = 0;
@@ -196,6 +198,8 @@ void transitionImageLayout(const VulkanRenderDevice& renderDevice,
                          dstStageMask,
                          0, 0, nullptr, 0, nullptr,
                          1, &imageMemoryBarrier);
+
+    image.layout = newLayout;
 
     endSingleTimeCommands(renderDevice.device, renderDevice.commandPool, commandBuffer, renderDevice.graphicsQueue);
 }

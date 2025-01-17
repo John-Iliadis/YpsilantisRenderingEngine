@@ -15,6 +15,8 @@ struct VulkanImage
     VkImage image;
     VkImageView imageView;
     VkDeviceMemory memory;
+    VkFormat format;
+    VkImageLayout layout;
 };
 
 VulkanImage createImage(const VulkanRenderDevice& renderDevice,
@@ -56,7 +58,6 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
 
 void transitionImageLayout(const VulkanRenderDevice& renderDevice,
                            VulkanImage& image,
-                           VkImageLayout oldLayout,
                            VkImageLayout newLayout,
                            uint32_t mipLevels = 1);
 
