@@ -2,11 +2,11 @@
 // Created by Gianni on 11/01/2025.
 //
 
-#include "mesh.hpp"
+#include "instancedMesh.hpp"
 
 static constexpr uint32_t sInitialInstanceBufferCapacity = 32;
 
-Mesh::Mesh()
+InstancedMesh::InstancedMesh()
     : mVertexBuffer()
     , mIndexBuffer()
     , mInstanceBuffers()
@@ -18,12 +18,12 @@ Mesh::Mesh()
         mInstanceBufferCapacity[i] = sInitialInstanceBufferCapacity;
 }
 
-void Mesh::create(const VulkanRenderDevice& renderDevice,
-                  uint32_t vertexCount,
-                  const Vertex* vertexData,
-                  uint32_t indexCount,
-                  const uint32_t* indexData,
-                  const std::string& name)
+void InstancedMesh::create(const VulkanRenderDevice& renderDevice,
+                           uint32_t vertexCount,
+                           const Vertex* vertexData,
+                           uint32_t indexCount,
+                           const uint32_t* indexData,
+                           const std::string& name)
 {
     mVertexBuffer = createBufferWithStaging(renderDevice,
                                             vertexCount * sizeof(Vertex),
@@ -54,7 +54,7 @@ void Mesh::create(const VulkanRenderDevice& renderDevice,
     tag(renderDevice);
 }
 
-void Mesh::destroy(const VulkanRenderDevice &renderDevice)
+void InstancedMesh::destroy(const VulkanRenderDevice &renderDevice)
 {
     destroyBuffer(renderDevice, mVertexBuffer);
     destroyBuffer(renderDevice, mIndexBuffer.buffer);
@@ -63,7 +63,7 @@ void Mesh::destroy(const VulkanRenderDevice &renderDevice)
 }
 
 // add to all
-uint32_t Mesh::addInstance(const Mesh::InstanceData &instanceData, uint32_t frameIndex)
+uint32_t InstancedMesh::addInstance(const InstancedMesh::InstanceData &instanceData, uint32_t frameIndex)
 {
     uint32_t instanceID = mInstanceIdCounter++;
     ++mInstanceCount;
@@ -78,7 +78,7 @@ uint32_t Mesh::addInstance(const Mesh::InstanceData &instanceData, uint32_t fram
     return instanceID;
 }
 
-void Mesh::updateInstance(const Mesh::InstanceData &instanceData, uint32_t instanceID, uint32_t frameIndex)
+void InstancedMesh::updateInstance(const InstancedMesh::InstanceData &instanceData, uint32_t instanceID, uint32_t frameIndex)
 {
     std::pair<InstanceData, uint32_t> pair(instanceData, instanceID);
 
@@ -93,7 +93,7 @@ void Mesh::updateInstance(const Mesh::InstanceData &instanceData, uint32_t insta
     }
 }
 
-void Mesh::removeInstance(uint32_t instanceID, uint32_t frameIndex)
+void InstancedMesh::removeInstance(uint32_t instanceID, uint32_t frameIndex)
 {
     --mInstanceCount;
 
@@ -106,7 +106,7 @@ void Mesh::removeInstance(uint32_t instanceID, uint32_t frameIndex)
     assert(mInstanceCount >= 0);
 }
 
-void Mesh::updateInstanceData(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::updateInstanceData(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     if (mInstanceBufferCapacity[frameIndex] < mInstanceCount)
         resize(renderDevice, commandBuffer, frameIndex);
@@ -121,7 +121,7 @@ void Mesh::updateInstanceData(const VulkanRenderDevice& renderDevice, VkCommandB
     mRemovePending[nextFrame].clear();
 }
 
-void Mesh::render(VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::render(VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     VkBuffer buffers[2] {
         mVertexBuffer.buffer,
@@ -134,7 +134,7 @@ void Mesh::render(VkCommandBuffer commandBuffer, uint32_t frameIndex)
     vkCmdDrawIndexed(commandBuffer, mIndexBuffer.count, mInstanceCount, 0, 0, 0);
 }
 
-void Mesh::tag(const VulkanRenderDevice& renderDevice)
+void InstancedMesh::tag(const VulkanRenderDevice& renderDevice)
 {
     setDebugVulkanObjectName(renderDevice.device,
                              VK_OBJECT_TYPE_BUFFER,
@@ -155,17 +155,17 @@ void Mesh::tag(const VulkanRenderDevice& renderDevice)
     }
 }
 
-std::array<VkVertexInputBindingDescription, 2> constexpr Mesh::bindingDescriptions()
+std::array<VkVertexInputBindingDescription, 2> constexpr InstancedMesh::bindingDescriptions()
 {
     VkVertexInputBindingDescription vertexBindingDescription {
         .binding = 0,
-        .stride = sizeof(Mesh::Vertex),
+        .stride = sizeof(InstancedMesh::Vertex),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
     };
 
     VkVertexInputBindingDescription instanceBindingDescription {
         .binding = 1,
-        .stride = sizeof(Mesh::InstanceData),
+        .stride = sizeof(InstancedMesh::InstanceData),
         .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE
     };
 
@@ -175,7 +175,7 @@ std::array<VkVertexInputBindingDescription, 2> constexpr Mesh::bindingDescriptio
     };
 }
 
-std::array<VkVertexInputAttributeDescription, 15> constexpr Mesh::attributeDescriptions()
+std::array<VkVertexInputAttributeDescription, 15> constexpr InstancedMesh::attributeDescriptions()
 {
     std::array<VkVertexInputAttributeDescription, 15> attributeDescriptions;
 
@@ -183,31 +183,31 @@ std::array<VkVertexInputAttributeDescription, 15> constexpr Mesh::attributeDescr
     attributeDescriptions.at(0).location = 0;
     attributeDescriptions.at(0).binding = 0;
     attributeDescriptions.at(0).format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions.at(0).offset = offsetof(Mesh::Vertex, position);
+    attributeDescriptions.at(0).offset = offsetof(InstancedMesh::Vertex, position);
 
     // Vertex::texCoords
     attributeDescriptions.at(1).location = 1;
     attributeDescriptions.at(1).binding = 0;
     attributeDescriptions.at(1).format = VK_FORMAT_R32G32_SFLOAT;
-    attributeDescriptions.at(1).offset = offsetof(Mesh::Vertex, texCoords);
+    attributeDescriptions.at(1).offset = offsetof(InstancedMesh::Vertex, texCoords);
 
     // Vertex::normal
     attributeDescriptions.at(2).location = 2;
     attributeDescriptions.at(2).binding = 0;
     attributeDescriptions.at(2).format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions.at(2).offset = offsetof(Mesh::Vertex, normal);
+    attributeDescriptions.at(2).offset = offsetof(InstancedMesh::Vertex, normal);
 
     // Vertex::tangent
     attributeDescriptions.at(3).location = 3;
     attributeDescriptions.at(3).binding = 0;
     attributeDescriptions.at(3).format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions.at(3).offset = offsetof(Mesh::Vertex, tangent);
+    attributeDescriptions.at(3).offset = offsetof(InstancedMesh::Vertex, tangent);
 
     // Vertex::bitangent
     attributeDescriptions.at(4).location = 4;
     attributeDescriptions.at(4).binding = 0;
     attributeDescriptions.at(4).format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions.at(4).offset = offsetof(Mesh::Vertex, bitangent);
+    attributeDescriptions.at(4).offset = offsetof(InstancedMesh::Vertex, bitangent);
 
     for (size_t i = 0; i < 4; ++i)
     {
@@ -215,31 +215,31 @@ std::array<VkVertexInputAttributeDescription, 15> constexpr Mesh::attributeDescr
         attributeDescriptions.at(5 + i).location = 5 + i;
         attributeDescriptions.at(5 + i).binding = 1;
         attributeDescriptions.at(5 + i).format = VK_FORMAT_R32G32B32A32_SFLOAT;
-        attributeDescriptions.at(5 + i).offset = offsetof(Mesh::InstanceData, modelMatrix) + i * sizeof(glm::vec4);
+        attributeDescriptions.at(5 + i).offset = offsetof(InstancedMesh::InstanceData, modelMatrix) + i * sizeof(glm::vec4);
 
         // PerInstanceData::normalMatrix
         attributeDescriptions.at(5 + 4 + i).location = 5 + 4 + i;
         attributeDescriptions.at(5 + 4 + i).binding = 1;
         attributeDescriptions.at(5 + 4 + i).format = VK_FORMAT_R32G32B32A32_SFLOAT;
-        attributeDescriptions.at(5 + 4 + i).offset = offsetof(Mesh::InstanceData, normalMatrix) + i * sizeof(glm::vec4);
+        attributeDescriptions.at(5 + 4 + i).offset = offsetof(InstancedMesh::InstanceData, normalMatrix) + i * sizeof(glm::vec4);
     }
 
     // PerInstanceData::id
     attributeDescriptions.at(13).location = 13;
     attributeDescriptions.at(13).binding = 1;
     attributeDescriptions.at(13).format = VK_FORMAT_R32_UINT;
-    attributeDescriptions.at(13).offset = offsetof(Mesh::InstanceData, id);
+    attributeDescriptions.at(13).offset = offsetof(InstancedMesh::InstanceData, id);
 
     // PerInstanceData::materialIndex
     attributeDescriptions.at(14).location = 14;
     attributeDescriptions.at(14).binding = 1;
     attributeDescriptions.at(14).format = VK_FORMAT_R32_UINT;
-    attributeDescriptions.at(14).offset = offsetof(Mesh::InstanceData, materialIndex);
+    attributeDescriptions.at(14).offset = offsetof(InstancedMesh::InstanceData, materialIndex);
 
     return attributeDescriptions;
 }
 
-void Mesh::addInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::addInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     uint32_t addCount = mAddPending[frameIndex].size();
 
@@ -267,7 +267,7 @@ void Mesh::addInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer 
     destroyBuffer(renderDevice, stagingBuffer);
 }
 
-void Mesh::updateInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::updateInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     uint32_t updateCount = mUpdatePending[frameIndex].size();
 
@@ -313,7 +313,7 @@ void Mesh::updateInstances(const VulkanRenderDevice &renderDevice, VkCommandBuff
 }
 
 // todo: handle case when there is only one instance or if the instance removed is the last
-void Mesh::removeInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::removeInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     uint32_t removeCount = mRemovePending[frameIndex].size();
 
@@ -348,7 +348,7 @@ void Mesh::removeInstances(const VulkanRenderDevice &renderDevice, VkCommandBuff
                     copyRegions.data());
 }
 
-void Mesh::resize(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::resize(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     assert(mInstanceCount <= mInstanceBufferCapacity[frameIndex]);
 
@@ -380,7 +380,7 @@ void Mesh::resize(const VulkanRenderDevice &renderDevice, VkCommandBuffer comman
     }
 }
 
-const std::string &Mesh::name() const
+const std::string &InstancedMesh::name() const
 {
     return mName;
 }

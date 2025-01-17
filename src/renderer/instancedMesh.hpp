@@ -2,13 +2,13 @@
 // Created by Gianni on 11/01/2025.
 //
 
-#ifndef VULKANRENDERINGENGINE_MESH_HPP
-#define VULKANRENDERINGENGINE_MESH_HPP
+#ifndef VULKANRENDERINGENGINE_INSTANCEDMESH_HPP
+#define VULKANRENDERINGENGINE_INSTANCEDMESH_HPP
 
 #include <glm/glm.hpp>
 #include "../vk/include.hpp"
 
-class Mesh
+class InstancedMesh
 {
 public:
     struct Vertex
@@ -46,7 +46,7 @@ public:
     };
 
 public:
-    Mesh();
+    InstancedMesh();
 
     void create(const VulkanRenderDevice& renderDevice,
                 uint32_t vertexCount,
@@ -95,4 +95,4 @@ private:
     std::unordered_set<uint32_t> mRemovePending[MAX_FRAMES_IN_FLIGHT];
 };
 
-#endif //VULKANRENDERINGENGINE_MESH_HPP
+#endif //VULKANRENDERINGENGINE_INSTANCEDMESH_HPP

@@ -56,8 +56,8 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_imgui.hpp
         src/renderer/scene.hpp
         src/renderer/scene.cpp
-        src/renderer/mesh.hpp
-        src/renderer/mesh.cpp
+        src/renderer/instancedMesh.hpp
+        src/renderer/instancedMesh.cpp
         src/renderer/scene_node.cpp
         src/renderer/scene_node.hpp
         src/renderer/model.hpp
