@@ -9,7 +9,7 @@
 #include <vulkan/vulkan.h>
 #include "vulkan_image.hpp"
 
-enum class SamplerWrapMode
+enum class TextureWrap
 {
     Repeat,
     MirroredRepeat,
@@ -17,7 +17,7 @@ enum class SamplerWrapMode
     ClampToBorder
 };
 
-enum class SamplerFilterMode
+enum class TextureFilter
 {
     Nearest,
     Bilinear,
@@ -29,22 +29,25 @@ struct VulkanTexture
 {
     VulkanImage image;
     VkSampler sampler;
-    uint32_t width;
-    uint32_t height;
 };
 
-// texture contains linear filtering. Mip maps are generated.
 VulkanTexture createTexture2D(const VulkanRenderDevice& renderDevice,
                               uint32_t width, uint32_t height,
-                              uint8_t* bytes);
+                              VkFormat format,
+                              VkImageUsageFlags usage,
+                              VkImageAspectFlags imageAspect,
+                              TextureWrap wrapMode,
+                              TextureFilter filterMode,
+                              bool enableMipsMaps = false);
 
-void generateMipMaps(const VulkanRenderDevice& renderDevice,
-                     const VulkanImage& image,
-                     uint32_t width, uint32_t height,
-                     uint32_t mipLevels);
+void uploadTextureData(const VulkanRenderDevice& renderDevice,
+                       VulkanTexture& texture,
+                       const void* data);
+
+void generateMipMaps(const VulkanRenderDevice& renderDevice, const VulkanImage& image);
 
 VkSampler createSampler(const VulkanRenderDevice& renderDevice,
-                        SamplerFilterMode filterMode,
-                        SamplerWrapMode wrapMode);
+                        TextureFilter filterMode,
+                        TextureWrap wrapMode);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_TEXTURE_HPP
