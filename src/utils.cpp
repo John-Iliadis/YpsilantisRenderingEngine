@@ -15,7 +15,7 @@ void check(bool result, const char* msg, std::source_location location)
     if (!result)
     {
         std::stringstream errorMSG;
-        errorMSG << '`' << location.function_name() << "`: " << msg << '\n';
+        errorMSG << '`' << location.function_name() << "`: " << msg;
 
         throw std::runtime_error(errorMSG.str());
     }

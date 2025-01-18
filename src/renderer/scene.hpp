@@ -6,7 +6,7 @@
 #define VULKANRENDERINGENGINE_SCENE_HPP
 
 #include <glm/glm.hpp>
-#include "mesh.hpp"
+#include "instancedMesh.hpp"
 
 struct Texture
 {

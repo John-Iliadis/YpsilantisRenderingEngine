@@ -9,9 +9,9 @@ static VkDeviceSize formatSize(VkFormat format)
     switch (format)
     {
         case VK_FORMAT_R8G8B8A8_UNORM:
-            return 32;
+            return 4;
         case VK_FORMAT_R16G16B16A16_SFLOAT:
-            return 64;
+            return 8;
         default:
             assert(false);
     }
@@ -53,7 +53,7 @@ void uploadTextureData(const VulkanRenderDevice& renderDevice,
                        VulkanTexture& texture,
                        const void* data)
 {
-    assert(texture.image.layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    assert(texture.image.layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
     VkDeviceSize size = texture.image.width * texture.image.height * formatSize(texture.image.format);
 
@@ -71,7 +71,7 @@ void uploadTextureData(const VulkanRenderDevice& renderDevice,
 
 void generateMipMaps(const VulkanRenderDevice& renderDevice, const VulkanImage& image)
 {
-    assert(image.layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    assert(image.layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice.device, renderDevice.commandPool);
 
@@ -92,11 +92,12 @@ void generateMipMaps(const VulkanRenderDevice& renderDevice, const VulkanImage& 
 
     for (uint32_t i = 0; i < image.mipLevels - 1; ++i)
     {
+        // transition mip i + 1 to transfer dst layout
         imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        imageMemoryBarrier.subresourceRange.baseMipLevel = i;
+        imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        imageMemoryBarrier.subresourceRange.baseMipLevel = i + 1;
 
         vkCmdPipelineBarrier(commandBuffer,
                              VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -136,10 +137,11 @@ void generateMipMaps(const VulkanRenderDevice& renderDevice, const VulkanImage& 
                        1, &blitRegion,
                        VK_FILTER_LINEAR);
 
+        // transition mip i + 1 to transfer src layout
         imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
         imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
         vkCmdPipelineBarrier(commandBuffer,
                              VK_PIPELINE_STAGE_TRANSFER_BIT,

@@ -6,7 +6,7 @@
 #define VULKANRENDERINGENGINE_MODEL_HPP
 
 #include "material.hpp"
-#include "mesh.hpp"
+#include "instancedMesh.hpp"
 
 struct Model
 {
