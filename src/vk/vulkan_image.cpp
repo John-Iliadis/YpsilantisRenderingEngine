@@ -152,7 +152,8 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
 
 void transitionImageLayout(const VulkanRenderDevice& renderDevice,
                            VulkanImage& image,
-                           VkImageLayout newLayout)
+                           VkImageLayout newLayout,
+                           uint32_t layerCount)
 {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice.device, renderDevice.commandPool);
 
@@ -166,7 +167,7 @@ void transitionImageLayout(const VulkanRenderDevice& renderDevice,
             .baseMipLevel = 0,
             .levelCount = image.mipLevels, // transition all mip levels
             .baseArrayLayer = 0,
-            .layerCount = 1
+            .layerCount = layerCount
         }
     };
 

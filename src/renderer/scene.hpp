@@ -8,7 +8,7 @@
 #include <glm/glm.hpp>
 #include "instancedMesh.hpp"
 
-struct Texture
+struct NamedTexture
 {
     std::string name;
     VulkanTexture texture;

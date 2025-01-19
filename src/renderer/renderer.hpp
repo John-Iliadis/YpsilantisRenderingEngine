@@ -12,7 +12,6 @@
 #include "scene.hpp"
 #include "scene_node.hpp"
 #include "model.hpp"
-#include "importer/importer.hpp"
 #include "material.hpp"
 
 class Renderer
@@ -67,13 +66,12 @@ private:
     Camera mSceneCamera;
     SceneNode mSceneRoot;
 
-    std::unordered_map<std::string_view, Model> mModels;
-    std::unordered_map<std::string_view, Mesh> mMeshes;
-    std::unordered_map<std::string_view, size_t> mMaterialsMapped;
-    std::unordered_map<std::string_view, size_t> mTexturesMapped;
-    std::vector<Material> mMaterials; // matches SSBO
-    std::vector<Texture> mTextures; // matches descriptor array
-    std::unordered_set<std::string> mLoadedModels;
+    // scene resources
+    std::vector<Model> mModels;
+    std::vector<std::shared_ptr<InstancedMesh>> mMeshes;
+    std::vector<std::shared_ptr<NamedMaterial>> mNamedMaterials;
+    std::vector<GpuMaterial> mMaterials;
+    std::vector<NamedTexture> mTextures;
 
     // final renderpass for writing imgui image to swapchain image.
     VkRenderPass mFinalRenderPass;
@@ -83,10 +81,12 @@ private:
     std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> mFinalDS;
     std::vector<VkFramebuffer> mSwapchainImageFramebuffers;
 
+    // view projection descriptors and buffer
     VkDescriptorSetLayout mViewProjDSLayout;
     std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> mViewProjDS;
     std::array<VulkanBuffer, MAX_FRAMES_IN_FLIGHT> mViewProjUBOs;
 
+    // imgui renderpass
     VkRenderPass mImguiRenderpass;
     std::array<VulkanTexture, MAX_FRAMES_IN_FLIGHT> mImguiTextures;
     std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> mImguiFramebuffers;

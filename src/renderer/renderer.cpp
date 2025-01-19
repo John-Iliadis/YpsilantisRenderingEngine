@@ -80,6 +80,7 @@ void Renderer::handleEvent(const Event &event)
 
 void Renderer::update(float dt)
 {
+    mModelImporter.processMainThread();
     updateImgui();
     mSceneCamera.update(dt);
 }
@@ -189,6 +190,7 @@ void Renderer::createViewProjDescriptors()
     }
 }
 
+// todo: error handling
 // todo: finish rest of logic
 void Renderer::imguiMainMenuBar()
 {
@@ -200,10 +202,9 @@ void Renderer::imguiMainMenuBar()
             {
                 std::string modelPath = fileDialog();
 
-                if (!modelPath.empty() && !mLoadedModels.contains(modelPath))
+                if (!modelPath.empty())
                 {
-
-                    mLoadedModels.insert(modelPath);
+                    mModelImporter.importModel(modelPath, *mRenderDevice);
                 }
             }
 

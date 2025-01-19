@@ -1,0 +1,60 @@
+//
+// Created by Gianni on 19/01/2025.
+//
+
+#ifndef VULKANRENDERINGENGINE_LOADED_RESOURCE_HPP
+#define VULKANRENDERINGENGINE_LOADED_RESOURCE_HPP
+
+#include <assimp/scene.h>
+#include "../material.hpp"
+#include "../model.hpp"
+
+void stbi_image_free(void*);
+
+template <typename PixelFormat>
+struct LoadedTexture
+{
+    std::string name;
+    TextureType type;
+    uint32_t width;
+    uint32_t height;
+    std::shared_ptr<PixelFormat> pixels;
+
+    LoadedTexture()
+        : LoadedTexture("", TextureType::None, 0, 0, nullptr)
+    {
+    }
+
+    LoadedTexture(const std::string& name, TextureType type, uint32_t width, uint32_t height, PixelFormat* pixels)
+        : name(name)
+        , type(type)
+        , width(width)
+        , height(height)
+        , pixels(pixels, [] (PixelFormat* pixels) {stbi_image_free(reinterpret_cast<void*>(pixels));})
+    {
+    }
+};
+
+struct LoadedModel
+{
+    struct Mesh
+    {
+        std::shared_ptr<InstancedMesh> mesh;
+        size_t materialIndex;
+    };
+
+    struct Material
+    {
+        std::array<TextureName> textures;
+        glm::vec3 albedoColor;
+        glm::vec3 emissionColor;
+    };
+
+    std::string name;
+    ModelNode rootNode;
+    std::vector<LoadedModel::Mesh> meshes;
+    std::vector<LoadedModel::Material> materials;
+    std::unordered_map<TextureName, NamedTexture> textures;
+};
+
+#endif //VULKANRENDERINGENGINE_LOADED_RESOURCE_HPP

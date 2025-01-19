@@ -3,6 +3,8 @@
 //
 
 #include <windows.h>
+
+#include <algorithm>
 #include <vector>
 #include <array>
 #include <unordered_map>
@@ -11,15 +13,19 @@
 #include <set>
 #include <string>
 #include <string_view>
-#include <algorithm>
-#include <iostream>
-#include <format>
-#include <source_location>
-#include <sstream>
+#include <memory>
 #include <cstdint>
 #include <optional>
+
+#include <iostream>
+#include <format>
+#include <sstream>
 #include <fstream>
-#include <stdexcept>
+
+#include <filesystem>
+#include <source_location>
+
 #include <future>
 #include <mutex>
-#include <filesystem>
+
+#include <stdexcept>
