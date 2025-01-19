@@ -26,14 +26,16 @@ void InstancedMesh::create(const VulkanRenderDevice& renderDevice,
                            const uint32_t* indexData,
                            const std::string& name)
 {
-    mVertexBuffer = createBufferWithStaging(renderDevice,
+    mRenderDevice = &renderDevice;
+
+    mVertexBuffer = createBufferWithStaging(*mRenderDevice,
                                             vertexCount * sizeof(Vertex),
                                             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
                                                 VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                                             vertexData);
 
-    mIndexBuffer.buffer = createBufferWithStaging(renderDevice,
+    mIndexBuffer.buffer = createBufferWithStaging(*mRenderDevice,
                                                   indexCount * sizeof(uint32_t),
                                                   VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
                                                       VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -43,24 +45,24 @@ void InstancedMesh::create(const VulkanRenderDevice& renderDevice,
 
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        mInstanceBuffers[i] = createBuffer(renderDevice,
-                                              sInitialInstanceBufferCapacity * sizeof(InstanceData),
-                                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-                                                  VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                                                  VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                              VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        mInstanceBuffers[i] = createBuffer(*mRenderDevice,
+                                           sInitialInstanceBufferCapacity * sizeof(InstanceData),
+                                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+                                               VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     }
 
     mName = name;
-    tag(renderDevice);
+    tag();
 }
 
-void InstancedMesh::destroy(const VulkanRenderDevice &renderDevice)
+void InstancedMesh::destroy()
 {
-    destroyBuffer(renderDevice, mVertexBuffer);
-    destroyBuffer(renderDevice, mIndexBuffer.buffer);
+    destroyBuffer(*mRenderDevice, mVertexBuffer);
+    destroyBuffer(*mRenderDevice, mIndexBuffer.buffer);
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-        destroyBuffer(renderDevice, mInstanceBuffers[i]);
+        destroyBuffer(*mRenderDevice, mInstanceBuffers[i]);
 }
 
 // add to all
@@ -107,14 +109,14 @@ void InstancedMesh::removeInstance(uint32_t instanceID, uint32_t frameIndex)
     assert(mInstanceCount >= 0);
 }
 
-void InstancedMesh::updateInstanceData(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::updateInstanceData(VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     if (mInstanceBufferCapacity[frameIndex] < mInstanceCount)
-        resize(renderDevice, commandBuffer, frameIndex);
+        resize(commandBuffer, frameIndex);
 
-    addInstances(renderDevice, commandBuffer, frameIndex);
-    updateInstances(renderDevice, commandBuffer, frameIndex);
-    removeInstances(renderDevice, commandBuffer, frameIndex);
+    addInstances(commandBuffer, frameIndex);
+    updateInstances(commandBuffer, frameIndex);
+    removeInstances(commandBuffer, frameIndex);
 
     uint32_t nextFrame = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
     mAddPending[nextFrame].clear();
@@ -135,21 +137,21 @@ void InstancedMesh::render(VkCommandBuffer commandBuffer, uint32_t frameIndex)
     vkCmdDrawIndexed(commandBuffer, mIndexBuffer.count, mInstanceCount, 0, 0, 0);
 }
 
-void InstancedMesh::tag(const VulkanRenderDevice& renderDevice)
+void InstancedMesh::tag()
 {
-    setDebugVulkanObjectName(renderDevice.device,
+    setDebugVulkanObjectName(mRenderDevice->device,
                              VK_OBJECT_TYPE_BUFFER,
                              std::format("{} mesh vertex buffer", mName),
                              mVertexBuffer.buffer);
 
-    setDebugVulkanObjectName(renderDevice.device,
+    setDebugVulkanObjectName(mRenderDevice->device,
                              VK_OBJECT_TYPE_BUFFER,
                              std::format("{} mesh index buffer", mName),
                              mIndexBuffer.buffer.buffer);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        setDebugVulkanObjectName(renderDevice.device,
+        setDebugVulkanObjectName(mRenderDevice->device,
                                  VK_OBJECT_TYPE_BUFFER,
                                  std::format("{} mesh instance buffer {}", mName, i),
                                  mInstanceBuffers[i].buffer);
@@ -242,6 +244,7 @@ std::array<VkVertexInputAttributeDescription, 15> constexpr InstancedMesh::attri
 
 void InstancedMesh::init()
 {
+    mRenderDevice = nullptr;
     mVertexBuffer = {};
     mIndexBuffer = {};
     mInstanceBuffers = {};
@@ -252,7 +255,7 @@ void InstancedMesh::init()
         mInstanceBufferCapacity[i] = sInitialInstanceBufferCapacity;
 }
 
-void InstancedMesh::addInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::addInstances(VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     uint32_t addCount = mAddPending[frameIndex].size();
 
@@ -261,13 +264,12 @@ void InstancedMesh::addInstances(const VulkanRenderDevice &renderDevice, VkComma
 
     uint32_t stagingBufferSize = addCount * sizeof(InstanceData);
 
-    VulkanBuffer stagingBuffer = createBuffer(renderDevice,
+    VulkanBuffer stagingBuffer = createBuffer(*mRenderDevice,
                                              stagingBufferSize,
                                              VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                                  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    mapBufferMemory(renderDevice, stagingBuffer, 0, stagingBufferSize, mAddPending[frameIndex].data());
-
+    mapBufferMemory(*mRenderDevice, stagingBuffer, 0, stagingBufferSize, mAddPending[frameIndex].data());
 
     VkBufferCopy copyRegion {
         .srcOffset {},
@@ -277,10 +279,10 @@ void InstancedMesh::addInstances(const VulkanRenderDevice &renderDevice, VkComma
 
     vkCmdCopyBuffer(commandBuffer, mInstanceBuffers[frameIndex].buffer, stagingBuffer.buffer, 1, &copyRegion);
 
-    destroyBuffer(renderDevice, stagingBuffer);
+    destroyBuffer(*mRenderDevice, stagingBuffer);
 }
 
-void InstancedMesh::updateInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::updateInstances(VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     uint32_t updateCount = mUpdatePending[frameIndex].size();
 
@@ -311,12 +313,12 @@ void InstancedMesh::updateInstances(const VulkanRenderDevice &renderDevice, VkCo
     }
 
     VkDeviceSize size = updateCount * sizeof(InstanceData);
-    VulkanBuffer stagingBuffer = createBuffer(renderDevice,
+    VulkanBuffer stagingBuffer = createBuffer(*mRenderDevice,
                                               size,
                                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                                   VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    mapBufferMemory(renderDevice, stagingBuffer, 0, size, data.data());
+    mapBufferMemory(*mRenderDevice, stagingBuffer, 0, size, data.data());
 
     vkCmdCopyBuffer(commandBuffer,
                     stagingBuffer.buffer,
@@ -326,7 +328,7 @@ void InstancedMesh::updateInstances(const VulkanRenderDevice &renderDevice, VkCo
 }
 
 // todo: handle case when there is only one instance or if the instance removed is the last
-void InstancedMesh::removeInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::removeInstances(VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     uint32_t removeCount = mRemovePending[frameIndex].size();
 
@@ -361,11 +363,11 @@ void InstancedMesh::removeInstances(const VulkanRenderDevice &renderDevice, VkCo
                     copyRegions.data());
 }
 
-void InstancedMesh::resize(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)
+void InstancedMesh::resize(VkCommandBuffer commandBuffer, uint32_t frameIndex)
 {
     assert(mInstanceCount <= mInstanceBufferCapacity[frameIndex]);
 
-    VulkanBuffer newBuffer = createBuffer(renderDevice,
+    VulkanBuffer newBuffer = createBuffer(*mRenderDevice,
                                           sizeof(InstanceData) * glm::ceil(glm::log2(static_cast<float>(mInstanceCount))),
                                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
                                               VK_BUFFER_USAGE_TRANSFER_DST_BIT |
@@ -380,13 +382,13 @@ void InstancedMesh::resize(const VulkanRenderDevice &renderDevice, VkCommandBuff
 
     vkCmdCopyBuffer(commandBuffer, mInstanceBuffers[frameIndex].buffer, newBuffer.buffer, 1, &copyRegion);
 
-    destroyBuffer(renderDevice, mInstanceBuffers[frameIndex]);
+    destroyBuffer(*mRenderDevice, mInstanceBuffers[frameIndex]);
 
     mInstanceBuffers[frameIndex] = newBuffer;
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        setDebugVulkanObjectName(renderDevice.device,
+        setDebugVulkanObjectName(mRenderDevice->device,
                                  VK_OBJECT_TYPE_BUFFER,
                                  std::format("{} mesh instance buffer {}", mName, i),
                                  mInstanceBuffers[i].buffer);

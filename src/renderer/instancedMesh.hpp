@@ -56,13 +56,13 @@ public:
                 uint32_t vertexCount, const Vertex* vertexData,
                 uint32_t indexCount, const uint32_t* indexData,
                 const std::string& name);
-    void destroy(const VulkanRenderDevice& renderDevice);
+    void destroy();
 
     uint32_t addInstance(const InstanceData& instanceData, uint32_t frameIndex);
     void updateInstance(const InstanceData& instanceData, uint32_t instanceID, uint32_t frameIndex);
     void removeInstance(uint32_t instanceID, uint32_t frameIndex);
 
-    void updateInstanceData(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
+    void updateInstanceData(VkCommandBuffer commandBuffer, uint32_t frameIndex);
 
     void render(VkCommandBuffer commandBuffer, uint32_t frameIndex);
 
@@ -73,13 +73,14 @@ public:
 
 private:
     void init();
-    void addInstances(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
-    void updateInstances(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
-    void removeInstances(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
-    void resize(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
-    void tag(const VulkanRenderDevice& renderDevice);
+    void addInstances(VkCommandBuffer commandBuffer, uint32_t frameIndex);
+    void updateInstances(VkCommandBuffer commandBuffer, uint32_t frameIndex);
+    void removeInstances(VkCommandBuffer commandBuffer, uint32_t frameIndex);
+    void resize(VkCommandBuffer commandBuffer, uint32_t frameIndex);
+    void tag();
 
 private:
+    const VulkanRenderDevice* mRenderDevice;
     std::string mName;
 
     VulkanBuffer mVertexBuffer;
