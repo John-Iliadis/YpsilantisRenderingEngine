@@ -4,13 +4,21 @@
 
 #include "camera.hpp"
 
+static constexpr glm::mat4 sRightHandedBasis
+{
+    1.f, 0.f, 0.f, 0.f,
+    0.f, -1.f, 0.f, 0.f,
+    0.f, 0.f, 1.f, 0.f,
+    0.f, 0.f, 0.f, 1.f
+};
+
 Camera::Camera(glm::vec3 position, float fovY, float width, float height, float nearZ, float farZ)
     : mView()
     , mBasis()
     , mPosition(position)
     , mTheta()
     , mPhi()
-    , mProjection(glm::perspective(fovY, width / height, nearZ, farZ))
+    , mProjection(sRightHandedBasis * glm::perspective(fovY, width / height, nearZ, farZ))
     , mFovY(fovY)
     , mAspectRatio(width / height)
     , mNearZ(nearZ)
@@ -132,13 +140,13 @@ void Camera::updateFirstPerson(float dt)
     int x = 0;
 
     if (Input::keyPressed(GLFW_KEY_W))
-        ++z;
-    if (Input::keyPressed(GLFW_KEY_S))
         --z;
+    if (Input::keyPressed(GLFW_KEY_S))
+        ++z;
     if (Input::keyPressed(GLFW_KEY_A))
-        ++x;
-    if (Input::keyPressed(GLFW_KEY_D))
         --x;
+    if (Input::keyPressed(GLFW_KEY_D))
+        ++x;
 
     glm::vec2 mouseDt{};
     if (Input::mouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT))
@@ -195,7 +203,7 @@ void Camera::updateEditorMode(float dt)
 
 void Camera::updateProjection()
 {
-    mProjection = glm::perspective(mFovY, mAspectRatio, mNearZ, mFarZ);
+    mProjection = sRightHandedBasis * glm::perspective(mFovY, mAspectRatio, mNearZ, mFarZ);
     mViewProjection = mProjection * mView;
 }
 
@@ -207,8 +215,9 @@ void Camera::calculateBasis()
         glm::cos(mTheta) * glm::cos(mPhi)
     };
 
+    mBasis[2] *= -1.f;
     mBasis[0] = glm::normalize(glm::cross(glm::vec3(0.f, 1.f, 0.f), mBasis[2]));
-    mBasis[1] = glm::normalize(glm::cross(mBasis[2], mBasis[0]));
+    mBasis[1] = glm::normalize(glm::cross(mBasis[0], -mBasis[2]));
 }
 
 void Camera::calculateViewProjection()
