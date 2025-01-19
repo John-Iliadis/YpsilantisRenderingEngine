@@ -7,15 +7,16 @@
 static constexpr uint32_t sInitialInstanceBufferCapacity = 32;
 
 InstancedMesh::InstancedMesh()
-    : mVertexBuffer()
-    , mIndexBuffer()
-    , mInstanceBuffers()
-    , mInstanceCount()
-    , mInstanceBufferCapacity(sInitialInstanceBufferCapacity)
-    , mInstanceIdCounter()
 {
-    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-        mInstanceBufferCapacity[i] = sInitialInstanceBufferCapacity;
+    init();
+}
+
+InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice, uint32_t vertexCount,
+                             const InstancedMesh::Vertex *vertexData, uint32_t indexCount,
+                             const uint32_t *indexData, const std::string &name)
+{
+    init();
+    create(renderDevice, vertexCount, vertexData, indexCount, indexData, name);
 }
 
 void InstancedMesh::create(const VulkanRenderDevice& renderDevice,
@@ -237,6 +238,18 @@ std::array<VkVertexInputAttributeDescription, 15> constexpr InstancedMesh::attri
     attributeDescriptions.at(14).offset = offsetof(InstancedMesh::InstanceData, materialIndex);
 
     return attributeDescriptions;
+}
+
+void InstancedMesh::init()
+{
+    mVertexBuffer = {};
+    mIndexBuffer = {};
+    mInstanceBuffers = {};
+
+    mInstanceCount = 0;
+    mInstanceIdCounter = 0;
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+        mInstanceBufferCapacity[i] = sInitialInstanceBufferCapacity;
 }
 
 void InstancedMesh::addInstances(const VulkanRenderDevice &renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex)

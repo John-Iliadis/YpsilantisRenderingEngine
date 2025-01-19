@@ -47,12 +47,14 @@ public:
 
 public:
     InstancedMesh();
+    InstancedMesh(const VulkanRenderDevice& renderDevice,
+                  uint32_t vertexCount, const Vertex* vertexData,
+                  uint32_t indexCount, const uint32_t* indexData,
+                  const std::string& name);
 
     void create(const VulkanRenderDevice& renderDevice,
-                uint32_t vertexCount,
-                const Vertex* vertexData,
-                uint32_t indexCount,
-                const uint32_t* indexData,
+                uint32_t vertexCount, const Vertex* vertexData,
+                uint32_t indexCount, const uint32_t* indexData,
                 const std::string& name);
     void destroy(const VulkanRenderDevice& renderDevice);
 
@@ -70,6 +72,7 @@ public:
     static constexpr std::array<VkVertexInputAttributeDescription, 15> attributeDescriptions();
 
 private:
+    void init();
     void addInstances(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
     void updateInstances(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
     void removeInstances(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer, uint32_t frameIndex);
@@ -81,18 +84,17 @@ private:
 
     VulkanBuffer mVertexBuffer;
     IndexBuffer mIndexBuffer;
-    VulkanBuffer mInstanceBuffers[MAX_FRAMES_IN_FLIGHT];
+    std::array<VulkanBuffer, MAX_FRAMES_IN_FLIGHT> mInstanceBuffers;
 
     std::unordered_map<uint32_t, uint32_t> mInstanceIdMap; // instanceID to instanceIndex
     uint32_t mInstanceCount;
     uint32_t mInstanceIdCounter;
 
-    uint32_t mInstanceBufferCapacity[MAX_FRAMES_IN_FLIGHT];
-    std::vector<InstanceData> mAddPending[MAX_FRAMES_IN_FLIGHT];
-    std::unordered_set<std::pair<InstanceData, uint32_t>,
-        UpdateInstanceHash,
-        UpdateInstanceCompare> mUpdatePending[MAX_FRAMES_IN_FLIGHT];
-    std::unordered_set<uint32_t> mRemovePending[MAX_FRAMES_IN_FLIGHT];
+    std::array<uint32_t, MAX_FRAMES_IN_FLIGHT> mInstanceBufferCapacity;
+    std::array<std::vector<InstanceData>, MAX_FRAMES_IN_FLIGHT> mAddPending;
+    std::array<std::unordered_set<std::pair<InstanceData, uint32_t>, UpdateInstanceHash, UpdateInstanceCompare>,
+               MAX_FRAMES_IN_FLIGHT> mUpdatePending;
+    std::array<std::unordered_set<uint32_t>, MAX_FRAMES_IN_FLIGHT> mRemovePending;
 };
 
 #endif //VULKANRENDERINGENGINE_INSTANCEDMESH_HPP
