@@ -15,7 +15,7 @@ enum class Workflow : uint32_t
 
 enum TextureType
 {
-    None,
+    None = 0,
     Albedo,
     Roughness,
     Metallic,

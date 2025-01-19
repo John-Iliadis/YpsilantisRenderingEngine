@@ -35,6 +35,14 @@ struct LoadedTexture
     }
 };
 
+struct LoadedMesh
+{
+    std::string name;
+    std::vector<InstancedMesh::Vertex> vertices;
+    std::vector<uint32_t> indices;
+    size_t materialIndex;
+};
+
 struct LoadedModel
 {
     struct Mesh
@@ -45,9 +53,10 @@ struct LoadedModel
 
     struct Material
     {
-        std::array<TextureName> textures;
-        glm::vec3 albedoColor;
-        glm::vec3 emissionColor;
+        std::string name;
+        std::array<TextureName, TextureType::Count> textures;
+        glm::vec3 albedoColor = glm::vec3(1.f);
+        glm::vec3 emissionColor = glm::vec3(0.f);
     };
 
     std::string name;

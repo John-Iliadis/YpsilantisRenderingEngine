@@ -40,10 +40,14 @@ void Renderer::init(GLFWwindow* window,
 void Renderer::terminate()
 {
     // meshes
-    for (auto& [meshID, mesh] : mMeshes)
-        mesh.destroy(*mRenderDevice);
+    for (auto& meshPtr : mMeshes)
+        meshPtr->destroy(*mRenderDevice);
 
-    // viewProj
+    // textures
+    for (auto& texture : mTextures)
+        destroyTexture(*mRenderDevice, texture.texture);
+
+    // viewProj buffer and descriptor
     vkDestroyDescriptorSetLayout(mRenderDevice->device, mViewProjDSLayout, nullptr);
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
         destroyBuffer(*mRenderDevice, mViewProjUBOs.at(i));
@@ -80,7 +84,6 @@ void Renderer::handleEvent(const Event &event)
 
 void Renderer::update(float dt)
 {
-    mModelImporter.processMainThread();
     updateImgui();
     mSceneCamera.update(dt);
 }
@@ -204,7 +207,7 @@ void Renderer::imguiMainMenuBar()
 
                 if (!modelPath.empty())
                 {
-                    mModelImporter.importModel(modelPath, *mRenderDevice);
+                    assert(false);
                 }
             }
 
@@ -228,9 +231,6 @@ void Renderer::imguiMainMenuBar()
 void Renderer::imguiAssetPanel()
 {
     ImGui::Begin("Assets");
-
-    for (const auto& [modelID, model] : mModels)
-        ImGui::Button(model.name.c_str());
 
     ImGui::End();
 }
