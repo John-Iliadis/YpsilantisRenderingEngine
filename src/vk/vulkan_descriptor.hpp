@@ -9,7 +9,7 @@
 #include "vulkan_buffer.hpp"
 #include "vulkan_texture.hpp"
 
-VkDescriptorPool createDescriptorPool(const VulkanRenderDevice& renderDevice,
+VkDescriptorPool createDescriptorPool(VkDevice device,
                                       uint32_t imageSamplerCount,
                                       uint32_t uniformBufferCount,
                                       uint32_t storageBufferCount,

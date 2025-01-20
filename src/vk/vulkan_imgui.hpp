@@ -17,7 +17,6 @@
 void initImGui(GLFWwindow* window,
                const VulkanInstance& instance,
                const VulkanRenderDevice& renderDevice,
-               VkDescriptorPool descriptorPool,
                VkRenderPass renderPass);
 void terminateImGui();
 void beginImGui();

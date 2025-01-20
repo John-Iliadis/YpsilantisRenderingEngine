@@ -7,7 +7,6 @@
 void initImGui(GLFWwindow* window,
                const VulkanInstance& instance,
                const VulkanRenderDevice& renderDevice,
-               VkDescriptorPool descriptorPool,
                VkRenderPass renderPass)
 {
     ImGui::CreateContext();
@@ -23,7 +22,7 @@ void initImGui(GLFWwindow* window,
         .Device = renderDevice.device,
         .QueueFamily = renderDevice.graphicsQueueFamilyIndex,
         .Queue = renderDevice.graphicsQueue,
-        .DescriptorPool = descriptorPool,
+        .DescriptorPool = renderDevice.descriptorPool,
         .RenderPass = renderPass,
         .MinImageCount = MAX_FRAMES_IN_FLIGHT,
         .ImageCount = MAX_FRAMES_IN_FLIGHT,

@@ -12,10 +12,8 @@ void Renderer::init(GLFWwindow* window,
     mRenderDevice = &renderDevice;
     mSwapchain = &swapchain;
     mMsaaSampleCount = VkSampleCountFlagBits(glm::min(uint32_t(VK_SAMPLE_COUNT_8_BIT), uint32_t(getMaxSampleCount(mRenderDevice->properties))));
-
-    createDescriptorPool();
     dslBuilder.init(mRenderDevice->device);
-    dsBuilder.init(mRenderDevice->device, mDescriptorPool);
+    dsBuilder.init(mRenderDevice->device, mRenderDevice->descriptorPool);
 
     createDepthImages();
     createViewProjUBOs();
@@ -24,7 +22,7 @@ void Renderer::init(GLFWwindow* window,
     createImguiTextures();
     createImguiRenderpass();
     createImguiFramebuffers();
-    initImGui(window, instance, renderDevice, mDescriptorPool, mImguiRenderpass);
+    initImGui(window, instance, renderDevice, mImguiRenderpass);
 
     createFinalRenderPass();
     createSwapchainImageFramebuffers();
@@ -49,6 +47,7 @@ void Renderer::terminate()
     for (auto& meshPtr : mMeshes)
         meshPtr->destroy();
 
+    destroyTexture()
     // textures
     for (auto& texture : mTextures)
         destroyTexture(*mRenderDevice, texture.texture);
@@ -76,7 +75,6 @@ void Renderer::terminate()
         vkDestroyFramebuffer(mRenderDevice->device, mSwapchainImageFramebuffers.at(i), nullptr);
 
     // renderer
-    vkDestroyDescriptorPool(mRenderDevice->device, mDescriptorPool, nullptr);
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         destroyImage(*mRenderDevice, mDepthImages.at(i));
@@ -204,16 +202,6 @@ void Renderer::addModel(const LoadedModel& loadedModel)
     mModels.push_back(std::move(model));
 }
 
-void Renderer::createDescriptorPool()
-{
-    mDescriptorPool = ::createDescriptorPool(*mRenderDevice, 1000, 100, 100, 100);
-
-    setDebugVulkanObjectName(mRenderDevice->device,
-                             VK_OBJECT_TYPE_DESCRIPTOR_POOL,
-                             "Renderer::mDescriptorPool",
-                             mDescriptorPool);
-}
-
 void Renderer::createDepthImages()
 {
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
@@ -270,12 +258,8 @@ void Renderer::createViewProjDescriptors()
     }
 }
 
-void Renderer::createTexturesDescriptorResources()
-{
-
-}
-
 // todo: error handling
+// todo: add caching
 // todo: finish rest of logic
 void Renderer::imguiMainMenuBar()
 {

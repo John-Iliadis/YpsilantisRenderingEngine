@@ -4,7 +4,7 @@
 
 #include "vulkan_descriptor.hpp"
 
-VkDescriptorPool createDescriptorPool(const VulkanRenderDevice& renderDevice,
+VkDescriptorPool createDescriptorPool(VkDevice device,
                                       uint32_t imageSamplerCount,
                                       uint32_t uniformBufferCount,
                                       uint32_t storageBufferCount,
@@ -25,7 +25,7 @@ VkDescriptorPool createDescriptorPool(const VulkanRenderDevice& renderDevice,
         .pPoolSizes = descriptorPoolSizes.data()
     };
 
-    VkResult result = vkCreateDescriptorPool(renderDevice.device, &descriptorPoolCreateInfo, nullptr, &descriptorPool);
+    VkResult result = vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, nullptr, &descriptorPool);
     vulkanCheck(result, "Failed to create descriptor pool.");
 
     return descriptorPool;

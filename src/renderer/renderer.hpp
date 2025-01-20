@@ -32,12 +32,9 @@ public:
 private:
     void addModel(const LoadedModel& loadedModel);
 
-    void createDescriptorPool();
     void createDepthImages();
     void createViewProjUBOs();
     void createViewProjDescriptors();
-
-    void createTexturesDescriptorResources();
 
     void createImguiTextures();
     void createImguiRenderpass();
@@ -65,7 +62,6 @@ private:
 private:
     VulkanRenderDevice* mRenderDevice;
     VulkanSwapchain* mSwapchain;
-    VkDescriptorPool mDescriptorPool;
     VkSampleCountFlagBits mMsaaSampleCount;
 
     Camera mSceneCamera;

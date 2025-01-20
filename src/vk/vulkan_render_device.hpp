@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.h>
 #include "vulkan_instance.hpp"
 #include "vulkan_utils.hpp"
+#include "vulkan_descriptor.hpp"
 
 class VulkanRenderDevice
 {
@@ -19,6 +20,7 @@ public:
     VkDevice device;
     VkQueue graphicsQueue;
     VkCommandPool commandPool;
+    VkDescriptorPool descriptorPool;
 
     uint32_t graphicsQueueFamilyIndex;
 
@@ -34,6 +36,7 @@ private:
     void createLogicalDevice();
     void findQueueFamilyIndices();
     void createCommandPool();
+    void createDescriptorPool();
 };
 
 #endif //VULKANRENDERINGENGINE_VULKAN_RENDER_DEVICE_HPP

@@ -10,11 +10,13 @@ void VulkanRenderDevice::create(const VulkanInstance &instance)
     findQueueFamilyIndices();
     createLogicalDevice();
     createCommandPool();
+    createDescriptorPool();
 }
 
 void VulkanRenderDevice::destroy()
 {
     vkDestroyCommandPool(device, commandPool, nullptr);
+    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
     vkDestroyDevice(device, nullptr);
 }
 
@@ -152,4 +154,14 @@ std::vector<const char *> VulkanRenderDevice::getRequiredExtensions()
         "VK_EXT_descriptor_indexing",
         "VK_EXT_extended_dynamic_state"
     };
+}
+
+void VulkanRenderDevice::createDescriptorPool()
+{
+    descriptorPool = ::createDescriptorPool(device, 1000, 100, 100, 100);
+
+    setDebugVulkanObjectName(device,
+                             VK_OBJECT_TYPE_DESCRIPTOR_POOL,
+                             "VulkanRenderDevice::mDescriptorPool",
+                             descriptorPool);
 }
