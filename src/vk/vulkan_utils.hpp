@@ -23,6 +23,14 @@ std::optional<uint32_t> findSuitableMemoryType(VkPhysicalDeviceMemoryProperties 
 VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
 void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkCommandBuffer commandBuffer, VkQueue queue);
 
+VkDescriptorPool createDescriptorPool(VkDevice device,
+                                      uint32_t imageSamplerCount,
+                                      uint32_t uniformBufferCount,
+                                      uint32_t storageBufferCount,
+                                      uint32_t maxSets);
+
+VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count);
+
 VkSemaphore createSemaphore(VkDevice device, const char* tag = nullptr);
 VkFence createFence(VkDevice device, bool signaled = false, const char* tag = nullptr);
 

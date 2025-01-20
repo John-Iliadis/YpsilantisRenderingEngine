@@ -4,41 +4,6 @@
 
 #include "vulkan_descriptor.hpp"
 
-VkDescriptorPool createDescriptorPool(VkDevice device,
-                                      uint32_t imageSamplerCount,
-                                      uint32_t uniformBufferCount,
-                                      uint32_t storageBufferCount,
-                                      uint32_t maxSets)
-{
-    VkDescriptorPool descriptorPool;
-
-    std::array<VkDescriptorPoolSize, 3> descriptorPoolSizes {{
-        descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, imageSamplerCount),
-        descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniformBufferCount),
-        descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, storageBufferCount),
-    }};
-
-    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = maxSets,
-        .poolSizeCount = descriptorPoolSizes.size(),
-        .pPoolSizes = descriptorPoolSizes.data()
-    };
-
-    VkResult result = vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, nullptr, &descriptorPool);
-    vulkanCheck(result, "Failed to create descriptor pool.");
-
-    return descriptorPool;
-}
-
-VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count)
-{
-    return {
-        .type = type,
-        .descriptorCount = count
-    };
-}
-
 DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder()
     : mDevice()
 {

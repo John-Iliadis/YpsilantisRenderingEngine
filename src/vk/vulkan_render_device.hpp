@@ -8,7 +8,6 @@
 #include <vulkan/vulkan.h>
 #include "vulkan_instance.hpp"
 #include "vulkan_utils.hpp"
-#include "vulkan_descriptor.hpp"
 
 class VulkanRenderDevice
 {

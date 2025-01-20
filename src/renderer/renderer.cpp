@@ -47,7 +47,6 @@ void Renderer::terminate()
     for (auto& meshPtr : mMeshes)
         meshPtr->destroy();
 
-    destroyTexture()
     // textures
     for (auto& texture : mTextures)
         destroyTexture(*mRenderDevice, texture.texture);
