@@ -30,16 +30,16 @@ enum TextureType
 struct GpuMaterial
 {
     Workflow workflow;
-    uint32_t albedoMapIndex;
-    uint32_t roughnessMapIndex;
-    uint32_t metallicMapIndex;
-    uint32_t normalMapIndex;
-    uint32_t displacementMapIndex;
-    uint32_t aoMapIndex;
-    uint32_t emissionMapIndex;
-    uint32_t specularMapIndex;
-    glm::vec4 albedoColor;
-    glm::vec4 emissionColor;
+    uint32_t albedoMapIndex = 0;
+    uint32_t roughnessMapIndex = 0;
+    uint32_t metallicMapIndex = 0;
+    uint32_t normalMapIndex = 0;
+    uint32_t displacementMapIndex = 0;
+    uint32_t aoMapIndex = 0;
+    uint32_t emissionMapIndex = 0;
+    uint32_t specularMapIndex = 0;
+    glm::vec4 albedoColor = glm::vec4(1.f);
+    glm::vec4 emissionColor = glm::vec4(0.f);
     glm::vec2 tiling = glm::vec2(1.f);
     glm::vec2 offset = glm::vec2(0.f);
 };

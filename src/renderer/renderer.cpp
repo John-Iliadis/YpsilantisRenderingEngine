@@ -29,6 +29,11 @@ void Renderer::init(GLFWwindow* window,
     createFinalPipelineLayout();
     createFinalPipeline();
 
+    mModelImporter.create(*mRenderDevice);
+    mModelImporter.setImportFinishedCallback([this] (LoadedModel&& loadedModel) {
+        addModel(std::move(loadedModel));
+    });
+
     mSceneCamera = {
         glm::vec3(0.f, 0.f, -5.f),
         30.f,
@@ -84,6 +89,7 @@ void Renderer::handleEvent(const Event &event)
 
 void Renderer::update(float dt)
 {
+    mModelImporter.processMainThreadTasks();
     updateImgui();
     mSceneCamera.update(dt);
 }
@@ -126,7 +132,76 @@ void Renderer::addModel(LoadedModel&& loadedModel)
         .root = std::move(loadedModel.root)
     };
 
+    // add textures to renderer
+    // todo: check if it's a reference
+    std::unordered_map<TexturePath, uint32_t> texturePathToIndex;
+    for (auto& [texturePath, namedTexture] : loadedModel.textures)
+    {
+        mTextures.push_back(std::move(namedTexture));
+        texturePathToIndex[texturePath] = mTextures.size() - 1;
+    }
 
+    // add materials to renderer
+    for (auto& material : loadedModel.materials)
+    {
+        Workflow workflow = Workflow::Metallic;
+
+        if (!material.textures.at(TextureType::Specular).empty())
+            workflow = Workflow::Specular;
+
+        GpuMaterial gpuMaterial {
+            .workflow = workflow,
+            .albedoColor = glm::vec4(material.albedoColor, 1.f),
+            .emissionColor = glm::vec4(material.emissionColor, 0.f)
+        };
+
+        if (const TexturePath& texturePath = material.textures.at(TextureType::Albedo);
+            !texturePath.empty())
+            gpuMaterial.albedoMapIndex = texturePathToIndex.at(texturePath);
+
+        if (const TexturePath& texturePath = material.textures.at(TextureType::Roughness);
+                !texturePath.empty())
+            gpuMaterial.roughnessMapIndex = texturePathToIndex.at(texturePath);
+
+        if (const TexturePath& texturePath = material.textures.at(TextureType::Metallic);
+                !texturePath.empty())
+            gpuMaterial.metallicMapIndex = texturePathToIndex.at(texturePath);
+
+        if (const TexturePath& texturePath = material.textures.at(TextureType::Normal);
+                !texturePath.empty())
+            gpuMaterial.normalMapIndex = texturePathToIndex.at(texturePath);
+
+        if (const TexturePath& texturePath = material.textures.at(TextureType::Displacement);
+                !texturePath.empty())
+            gpuMaterial.displacementMapIndex = texturePathToIndex.at(texturePath);
+
+        if (const TexturePath& texturePath = material.textures.at(TextureType::Ao);
+                !texturePath.empty())
+            gpuMaterial.aoMapIndex = texturePathToIndex.at(texturePath);
+
+        if (const TexturePath& texturePath = material.textures.at(TextureType::Emission);
+                !texturePath.empty())
+            gpuMaterial.emissionMapIndex = texturePathToIndex.at(texturePath);
+
+        if (const TexturePath& texturePath = material.textures.at(TextureType::Specular);
+                !texturePath.empty())
+            gpuMaterial.specularMapIndex = texturePathToIndex.at(texturePath);
+
+        mMaterials.push_back(gpuMaterial);
+
+        auto namedMaterial = std::make_shared<NamedMaterial>(material.name, &mMaterials.back());
+        mNamedMaterials.push_back(namedMaterial);
+        model.materialsMapped.emplace(material.name, namedMaterial);
+    }
+
+    // create meshes
+    for (auto& mesh : loadedModel.meshes)
+    {
+        mMeshes.push_back(mesh.mesh);
+        model.meshes.emplace_back(mesh.mesh, loadedModel.materials.at(mesh.materialIndex).name);
+    }
+
+    mModels.push_back(std::move(model));
 }
 
 void Renderer::createDescriptorPool()
@@ -203,6 +278,14 @@ void Renderer::createViewProjDescriptors()
     }
 }
 
+void Renderer::createTexturesDescriptorResources()
+{
+    DescriptorSetLayoutCreator dslCreator(mRenderDevice->device);
+    dslCreator.addLayoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+    mTexturesDSLayout = dslCreator.crate();
+
+}
+
 // todo: error handling
 // todo: finish rest of logic
 void Renderer::imguiMainMenuBar()
@@ -211,13 +294,13 @@ void Renderer::imguiMainMenuBar()
     {
         if (ImGui::BeginMenu("File"))
         {
-            if (ImGui::MenuItem("Import"))
+            if (ImGui::MenuItem("ImportModel"))
             {
                 std::string modelPath = fileDialog();
 
                 if (!modelPath.empty())
                 {
-                    assert(false);
+                    mModelImporter.importModel(modelPath);
                 }
             }
 

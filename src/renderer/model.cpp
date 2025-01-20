@@ -4,17 +4,6 @@
 
 #include "model.hpp"
 
-ModelMesh::ModelMesh()
-    : ModelMesh("")
-{
-}
-
-ModelMesh::ModelMesh(const MappedMaterialName &materialName)
-    : mesh()
-    , mappedMaterialName(materialName)
-{
-}
-
 ModelNode::ModelNode()
     : ModelNode("", glm::identity<glm::mat4>())
 {

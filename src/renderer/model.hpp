@@ -18,9 +18,6 @@ struct ModelMesh
 {
     std::shared_ptr<InstancedMesh> mesh;
     MappedMaterialName mappedMaterialName;
-
-    ModelMesh();
-    ModelMesh(const MappedMaterialName& materialName);
 };
 
 struct ModelNode

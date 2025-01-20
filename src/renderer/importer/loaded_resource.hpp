@@ -64,7 +64,7 @@ struct LoadedModel
     std::vector<LoadedModel::Mesh> meshes;
     std::vector<LoadedModel::Material> materials;
 
-    // todo fix: some textures may be misses due to failed load
+    // todo fix: some textures may be missing due to failed load
     std::unordered_map<TexturePath, NamedTexture> textures;
 };
 

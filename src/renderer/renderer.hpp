@@ -37,6 +37,8 @@ private:
     void createViewProjUBOs();
     void createViewProjDescriptors();
 
+    void createTexturesDescriptorResources();
+
     void createImguiTextures();
     void createImguiRenderpass();
     void createImguiFramebuffers();
@@ -68,6 +70,7 @@ private:
 
     Camera mSceneCamera;
     SceneNode mSceneRoot;
+    ModelImporter mModelImporter;
 
     // scene resources
     std::vector<Model> mModels;
@@ -75,6 +78,9 @@ private:
     std::vector<std::shared_ptr<NamedMaterial>> mNamedMaterials;
     std::vector<GpuMaterial> mMaterials;
     std::vector<NamedTexture> mTextures;
+
+    // textures descriptor
+    VkDescriptorSetLayout mTexturesDSLayout;
 
     // final renderpass for writing imgui image to swapchain image.
     VkRenderPass mFinalRenderPass;

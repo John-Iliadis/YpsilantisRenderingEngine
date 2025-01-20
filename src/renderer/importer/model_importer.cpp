@@ -63,7 +63,6 @@ void ModelImporter::processMainThreadTasks()
         if (itr->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
         {
             mOnModelImportFinished(itr->get());
-
             itr = mLoadedModelFutures.erase(itr);
         }
         else
@@ -157,9 +156,6 @@ std::future<LoadedModel> ModelImporter::loadModel(const fs::path& path)
             enqueue([this, model = &model, loadedMesh = loadedMesh.get()] () {
                 model->meshes.push_back(this->createMesh(loadedMesh));
             });
-
-            // todo: check if loaded mesh was moved
-            __debugbreak();
         }
 
         // load materials
@@ -249,12 +245,12 @@ std::future<std::optional<LoadedTexture<uint8_t>>> ModelImporter::createLoadedTe
     debugLog(std::format("ModelImporter::createLoadedTexture: Loading {}", path));
     return std::async(std::launch::async, [path = fs::path(path)] () -> std::optional<LoadedTexture<uint8_t>> {
         int width, height, channels;
-        uint8_t* pixels = stbi_load(reinterpret_cast<const char*>(path.c_str()), &width, &height, &channels, STBI_rgb_alpha);
+        uint8_t* pixels = stbi_load(path.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
 
         if (pixels)
         {
             return std::make_optional<LoadedTexture<uint8_t>>(
-                path.stem().string(),
+                path.string(),
                 static_cast<uint32_t>(width),
                 static_cast<uint32_t>(height),
                 pixels);
@@ -352,7 +348,6 @@ glm::mat4 ModelImporter::assimpToGlmMat4(const aiMatrix4x4 &mat)
     };
 }
 
-// todo: figure out correct assimp material enums
 TextureType ModelImporter::getTextureType(aiTextureType type)
 {
     switch (type)
@@ -360,7 +355,7 @@ TextureType ModelImporter::getTextureType(aiTextureType type)
         case aiTextureType_DIFFUSE: return TextureType::Albedo;
         case aiTextureType_SPECULAR: return TextureType::Specular;
         case aiTextureType_EMISSIVE: return TextureType::Emission;
-        case aiTextureType_NORMALS: return TextureType::Normal;
+        case aiTextureType_HEIGHT: return TextureType::Normal;
         case aiTextureType_DISPLACEMENT: return TextureType::Displacement;
         case aiTextureType_METALNESS: return TextureType::Metallic;
         case aiTextureType_DIFFUSE_ROUGHNESS: return TextureType::Roughness;
@@ -376,7 +371,7 @@ aiTextureType ModelImporter::getTextureType(TextureType type)
         case TextureType::Albedo: return aiTextureType_DIFFUSE;
         case TextureType::Specular: return aiTextureType_SPECULAR;
         case TextureType::Emission: return aiTextureType_EMISSIVE;
-        case TextureType::Normal: return aiTextureType_NORMALS;
+        case TextureType::Normal: return aiTextureType_HEIGHT;
         case TextureType::Displacement: return aiTextureType_DISPLACEMENT;
         case TextureType::Metallic: return aiTextureType_METALNESS;
         case TextureType::Roughness: return aiTextureType_DIFFUSE_ROUGHNESS;
