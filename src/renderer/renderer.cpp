@@ -41,7 +41,7 @@ void Renderer::terminate()
 {
     // meshes
     for (auto& meshPtr : mMeshes)
-        meshPtr->destroy(*mRenderDevice);
+        meshPtr->destroy();
 
     // textures
     for (auto& texture : mTextures)
@@ -117,6 +117,16 @@ void Renderer::onSwapchainRecreate()
         vkDestroyFramebuffer(mRenderDevice->device, mSwapchainImageFramebuffers.at(i), nullptr);
     createSwapchainImageFramebuffers();
     updateFinalDescriptors();
+}
+
+void Renderer::addModel(LoadedModel&& loadedModel)
+{
+    Model model {
+        .name = std::move(loadedModel.name),
+        .root = std::move(loadedModel.root)
+    };
+
+
 }
 
 void Renderer::createDescriptorPool()

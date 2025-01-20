@@ -47,7 +47,7 @@ void ModelImporter::create(const VulkanRenderDevice& renderDevice)
 
 void ModelImporter::importModel(const std::string &path)
 {
-    mLoadRequestQueue.push_back(path);
+    mLoadedModelFutures.push_back(loadModel(path));
 }
 
 void ModelImporter::processMainThreadTasks()
@@ -56,6 +56,24 @@ void ModelImporter::processMainThreadTasks()
     for (Task& task : mMainThreadTasks)
         task();
     mMainThreadTasks.clear();
+
+    // get loaded model
+    for (auto itr = mLoadedModelFutures.begin(); itr != mLoadedModelFutures.end();)
+    {
+        if (itr->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+        {
+            mOnModelImportFinished(itr->get());
+
+            itr = mLoadedModelFutures.erase(itr);
+        }
+        else
+            ++itr;
+    }
+}
+
+void ModelImporter::setImportFinishedCallback(std::function<void(LoadedModel&&)> callback)
+{
+    mOnModelImportFinished = callback;
 }
 
 void ModelImporter::enqueue(Task task)
@@ -114,6 +132,92 @@ std::pair<std::string, NamedTexture> ModelImporter::createNamedTexturePair(const
     return std::make_pair(loadedTexture.name, NamedTexture(loadedTexture.name, std::move(texture)));
 }
 
+std::future<LoadedModel> ModelImporter::loadModel(const fs::path& path)
+{
+    return std::async(std::launch::async, [this, path] () -> LoadedModel {
+        std::shared_ptr<aiScene> assimpScene = loadAssimpScene(path);
+        std::string directory = std::format("{}/", path.parent_path().string());
+
+        LoadedModel model {
+            .name = path.stem().string(),
+            .root = createModelGraph(assimpScene->mRootNode)
+        };
+
+        // load mesh data
+        std::vector<std::future<LoadedMesh>> loadedMeshes;
+        for (uint32_t i = 0; i < assimpScene->mNumMeshes; ++i)
+        {
+            const aiMesh& assimpMesh = *assimpScene->mMeshes[i];
+            loadedMeshes.push_back(createLoadedMesh(assimpMesh));
+        }
+
+        // upload mesh data
+        for (auto& loadedMesh : loadedMeshes)
+        {
+            enqueue([this, model = &model, loadedMesh = loadedMesh.get()] () {
+                model->meshes.push_back(this->createMesh(loadedMesh));
+            });
+
+            // todo: check if loaded mesh was moved
+            __debugbreak();
+        }
+
+        // load materials
+        std::unordered_set<std::string> texturePaths;
+        for (uint32_t i = 0; i < assimpScene->mNumMaterials; ++i)
+        {
+            const aiMaterial& material = *assimpScene->mMaterials[i];
+            LoadedModel::Material loadedMaterial = createMaterial(material, directory);
+
+            for (auto& texturePath : loadedMaterial.textures)
+            {
+                if (!texturePath.empty())
+                    texturePaths.insert(texturePath);
+            }
+
+            model.materials.push_back(std::move(loadedMaterial));
+        }
+
+        // load texture data
+        std::vector<std::future<std::optional<LoadedTexture<uint8_t>>>> loadedTextures;
+        for (const auto& texturePath : texturePaths)
+            loadedTextures.push_back(createLoadedTexture(texturePath));
+
+        // upload texture data
+        for (auto& loadedTexture : loadedTextures)
+        {
+            enqueue([this, model = &model, loadedTexture = loadedTexture.get()]() {
+                if (loadedTexture.has_value())
+                {
+                    model->textures.emplace(this->createNamedTexturePair(loadedTexture.value()));
+                }
+            });
+        }
+
+        return model;
+    });
+}
+
+std::shared_ptr<aiScene> ModelImporter::loadAssimpScene(const fs::path &path)
+{
+    Assimp::Importer importer;
+    importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, sRemoveComponents);
+    importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, sRemovePrimitives);
+    importer.SetPropertyBool(AI_CONFIG_PP_PTV_NORMALIZE, true);
+
+    importer.ReadFile(path.string(), sImportFlags);
+
+    std::shared_ptr<aiScene> assimpScene(importer.GetOrphanedScene());
+
+    if (!assimpScene || assimpScene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)
+    {
+        debugLog(std::format("Failed to load model {}.", path.string()));
+        return nullptr;
+    }
+
+    return assimpScene;
+}
+
 ModelNode ModelImporter::createModelGraph(const aiNode* assimpNode)
 {
     ModelNode modelNode(assimpNode->mName.C_Str(), assimpToGlmMat4(assimpNode->mTransformation));
@@ -129,6 +233,7 @@ ModelNode ModelImporter::createModelGraph(const aiNode* assimpNode)
 
 std::future<LoadedMesh> ModelImporter::createLoadedMesh(const aiMesh &mesh)
 {
+    debugLog(std::format("ModelImporter::createLoadedMesh: Loading {}", mesh.mName.C_Str()));
     return std::async(std::launch::async, [&mesh] () -> LoadedMesh {
         return {
             .name = mesh.mName.C_Str(),
@@ -139,9 +244,10 @@ std::future<LoadedMesh> ModelImporter::createLoadedMesh(const aiMesh &mesh)
     });
 }
 
-std::future<std::optional<LoadedTexture<uint8_t>>> ModelImporter::createLoadedTexture(const std::string &path, aiTextureType type)
+std::future<std::optional<LoadedTexture<uint8_t>>> ModelImporter::createLoadedTexture(const std::string &path)
 {
-    return std::async(std::launch::async, [path = std::filesystem::path(path), type] () -> std::optional<LoadedTexture<uint8_t>> {
+    debugLog(std::format("ModelImporter::createLoadedTexture: Loading {}", path));
+    return std::async(std::launch::async, [path = fs::path(path)] () -> std::optional<LoadedTexture<uint8_t>> {
         int width, height, channels;
         uint8_t* pixels = stbi_load(reinterpret_cast<const char*>(path.c_str()), &width, &height, &channels, STBI_rgb_alpha);
 
@@ -149,7 +255,6 @@ std::future<std::optional<LoadedTexture<uint8_t>>> ModelImporter::createLoadedTe
         {
             return std::make_optional<LoadedTexture<uint8_t>>(
                 path.stem().string(),
-                getTextureType(type),
                 static_cast<uint32_t>(width),
                 static_cast<uint32_t>(height),
                 pixels);
@@ -160,7 +265,8 @@ std::future<std::optional<LoadedTexture<uint8_t>>> ModelImporter::createLoadedTe
     });
 }
 
-LoadedModel::Material ModelImporter::createMaterial(const aiMaterial &assimpMaterial)
+// todo: check if the texture paths are correct
+LoadedModel::Material ModelImporter::createMaterial(const aiMaterial &assimpMaterial, const std::string& directory)
 {
     LoadedModel::Material material {.name = assimpMaterial.GetName().C_Str()};
 
@@ -173,14 +279,19 @@ LoadedModel::Material ModelImporter::createMaterial(const aiMaterial &assimpMate
         material.emissionColor = glm::vec3(emissionColor.r, emissionColor.g, emissionColor.b);
 
     for (uint32_t i = TextureType::None + 1; i < TextureType::Count; ++i)
-        material.textures[i] = getTextureName(assimpMaterial, static_cast<TextureType>(i));
+    {
+        std::string textureName = getTextureName(assimpMaterial, static_cast<TextureType>(i));
+
+        if (!textureName.empty())
+            material.textures[i] = directory + textureName;
+    }
 
     return material;
 }
 
 std::vector<InstancedMesh::Vertex> ModelImporter::loadMeshVertices(const aiMesh &mesh)
 {
-    std::vector<::InstancedMesh::Vertex> vertices(mesh.mNumVertices);
+    std::vector<InstancedMesh::Vertex> vertices(mesh.mNumVertices);
 
     for (size_t i = 0; i < vertices.size(); ++i)
     {
@@ -194,22 +305,22 @@ std::vector<InstancedMesh::Vertex> ModelImporter::loadMeshVertices(const aiMesh 
         }
         else
         {
-            static glm::vec3 randomVec = glm::vec3(1.f, 0.f, 0.f);
-            vertices.at(i).tangent = glm::cross(vertices.at(i).normal, randomVec);
+            static glm::vec3 someVec = glm::vec3(1.f, 0.f, 0.f);
+            vertices.at(i).tangent = glm::cross(vertices.at(i).normal, someVec);
 
             if (glm::length(vertices.at(i).tangent) < 0.0001f)
             {
-                randomVec = glm::vec3(0.f, 1.f, 0.f);
-                vertices.at(i).tangent = glm::cross(vertices.at(i).normal, randomVec);
+                someVec = glm::vec3(0.f, 1.f, 0.f);
+                vertices.at(i).tangent = glm::cross(vertices.at(i).normal, someVec);
             }
 
             vertices.at(i).bitangent = glm::cross(vertices.at(i).normal, vertices.at(i).bitangent);
         }
 
         if (mesh.HasTextureCoords(0))
+        {
             vertices.at(i).texCoords = *reinterpret_cast<glm::vec2*>(&mesh.mTextureCoords[0][i]);
-        else
-            vertices.at(i).texCoords = glm::vec3();
+        }
     }
 
     return vertices;

@@ -25,13 +25,3 @@ ModelNode::ModelNode(const std::string &name, const glm::mat4& transformation)
     , transformation(transformation)
 {
 }
-
-Model::Model()
-    : Model("")
-{
-}
-
-Model::Model(const std::string &name)
-    : name(name)
-{
-}

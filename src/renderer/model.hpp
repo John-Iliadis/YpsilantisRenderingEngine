@@ -41,10 +41,6 @@ public:
     ModelNode root;
     std::vector<ModelMesh> meshes;
     std::unordered_map<MappedMaterialName, std::shared_ptr<NamedMaterial>> materialsMapped;
-
-public:
-    Model();
-    Model(const std::string& name);
 };
 
 #endif //VULKANRENDERINGENGINE_MODEL_HPP

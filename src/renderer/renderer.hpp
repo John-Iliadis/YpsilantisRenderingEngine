@@ -13,6 +13,7 @@
 #include "scene_node.hpp"
 #include "model.hpp"
 #include "material.hpp"
+#include "importer/model_importer.hpp"
 
 class Renderer
 {
@@ -29,6 +30,8 @@ public:
     void onSwapchainRecreate();
 
 private:
+    void addModel(LoadedModel&& loadedModel);
+
     void createDescriptorPool();
     void createDepthImages();
     void createViewProjUBOs();

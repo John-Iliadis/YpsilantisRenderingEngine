@@ -11,11 +11,12 @@
 
 void stbi_image_free(void*);
 
+using TexturePath = std::string;
+
 template <typename PixelFormat>
 struct LoadedTexture
 {
     std::string name;
-    TextureType type;
     uint32_t width;
     uint32_t height;
     std::shared_ptr<PixelFormat> pixels;
@@ -25,9 +26,8 @@ struct LoadedTexture
     {
     }
 
-    LoadedTexture(const std::string& name, TextureType type, uint32_t width, uint32_t height, PixelFormat* pixels)
+    LoadedTexture(const std::string& name, uint32_t width, uint32_t height, PixelFormat* pixels)
         : name(name)
-        , type(type)
         , width(width)
         , height(height)
         , pixels(pixels, [] (PixelFormat* pixels) {stbi_image_free(reinterpret_cast<void*>(pixels));})
@@ -54,16 +54,18 @@ struct LoadedModel
     struct Material
     {
         std::string name;
-        std::array<TextureName, TextureType::Count> textures;
+        std::array<TexturePath, TextureType::Count> textures;
         glm::vec3 albedoColor = glm::vec3(1.f);
         glm::vec3 emissionColor = glm::vec3(0.f);
     };
 
     std::string name;
-    ModelNode rootNode;
+    ModelNode root;
     std::vector<LoadedModel::Mesh> meshes;
     std::vector<LoadedModel::Material> materials;
-    std::unordered_map<TextureName, NamedTexture> textures;
+
+    // todo fix: some textures may be misses due to failed load
+    std::unordered_map<TexturePath, NamedTexture> textures;
 };
 
 #endif //VULKANRENDERINGENGINE_LOADED_RESOURCE_HPP

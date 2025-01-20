@@ -11,7 +11,9 @@
 #include "loaded_resource.hpp"
 
 using Task = std::function<void()>;
+namespace fs = std::filesystem;
 
+// todo: error handling
 class ModelImporter
 {
 public:
@@ -21,6 +23,8 @@ public:
     void importModel(const std::string& path);
     void processMainThreadTasks();
 
+    void setImportFinishedCallback(std::function<void(LoadedModel&&)> callback);
+
 private:
     void enqueue(Task task);
 
@@ -29,10 +33,12 @@ private:
     std::pair<std::string, NamedTexture> createNamedTexturePair(const LoadedTexture<uint8_t>& loadedTexture);
 
     // non main thread tasks
+    std::future<LoadedModel> loadModel(const fs::path& path);
+    static std::shared_ptr<aiScene> loadAssimpScene(const fs::path& path);
     static ModelNode createModelGraph(const aiNode* assimpNode);
     static std::future<LoadedMesh> createLoadedMesh(const aiMesh& mesh);
-    static std::future<std::optional<LoadedTexture<uint8_t>>> createLoadedTexture(const std::string& path, aiTextureType type);
-    static LoadedModel::Material createMaterial(const aiMaterial& assimpMaterial);
+    static std::future<std::optional<LoadedTexture<uint8_t>>> createLoadedTexture(const std::string& path);
+    static LoadedModel::Material createMaterial(const aiMaterial& assimpMaterial, const std::string& directory);
 
     static std::vector<InstancedMesh::Vertex> loadMeshVertices(const aiMesh& mesh);
     static std::vector<uint32_t> loadMeshIndices(const aiMesh& mesh);
@@ -47,7 +53,8 @@ private:
     std::vector<Task> mMainThreadTasks;
     std::mutex mMainThreadTasksMutex;
 
-    std::vector<std::string> mLoadRequestQueue;
+    std::vector<std::future<LoadedModel>> mLoadedModelFutures;
+    std::function<void(LoadedModel&&)> mOnModelImportFinished;
 };
 
 #endif //VULKANRENDERINGENGINE_MODEL_IMPORTER_HPP
