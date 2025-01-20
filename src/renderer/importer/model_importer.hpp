@@ -24,7 +24,7 @@ public:
     void importModel(const std::string& path);
     void processMainThreadTasks();
 
-    void setImportFinishedCallback(std::function<void(LoadedModel&&)> callback);
+    void setImportFinishedCallback(std::function<void(const LoadedModel&)> callback);
 
 private:
     void enqueue(Task task);
@@ -34,7 +34,7 @@ private:
     std::pair<std::string, NamedTexture> createNamedTexturePair(const LoadedTexture<uint8_t>& loadedTexture);
 
     // non main thread tasks
-    std::future<LoadedModel> loadModel(const fs::path& path);
+    std::future<std::shared_ptr<LoadedModel>> loadModel(const fs::path& path);
     static std::shared_ptr<aiScene> loadAssimpScene(const fs::path& path);
     static ModelNode createModelGraph(const aiNode* assimpNode);
     static std::future<LoadedMesh> createLoadedMesh(const aiMesh& mesh);
@@ -54,8 +54,8 @@ private:
     std::vector<Task> mMainThreadTasks;
     std::mutex mMainThreadTasksMutex;
 
-    std::vector<std::future<LoadedModel>> mLoadedModelFutures;
-    std::function<void(LoadedModel&&)> mOnModelImportFinished;
+    std::vector<std::future<std::shared_ptr<LoadedModel>>> mLoadedModelFutures;
+    std::function<void(const LoadedModel&)> mOnModelImportFinished;
 };
 
 #endif //VULKANRENDERINGENGINE_MODEL_IMPORTER_HPP

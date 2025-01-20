@@ -62,7 +62,7 @@ void ModelImporter::processMainThreadTasks()
     {
         if (itr->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
         {
-            mOnModelImportFinished(itr->get());
+            mOnModelImportFinished(*itr->get());
             itr = mLoadedModelFutures.erase(itr);
         }
         else
@@ -70,7 +70,7 @@ void ModelImporter::processMainThreadTasks()
     }
 }
 
-void ModelImporter::setImportFinishedCallback(std::function<void(LoadedModel&&)> callback)
+void ModelImporter::setImportFinishedCallback(std::function<void(const LoadedModel&)> callback)
 {
     mOnModelImportFinished = callback;
 }
@@ -131,16 +131,15 @@ std::pair<std::string, NamedTexture> ModelImporter::createNamedTexturePair(const
     return std::make_pair(loadedTexture.name, NamedTexture(loadedTexture.name, std::move(texture)));
 }
 
-std::future<LoadedModel> ModelImporter::loadModel(const fs::path& path)
+std::future<std::shared_ptr<LoadedModel>> ModelImporter::loadModel(const fs::path& path)
 {
-    return std::async(std::launch::async, [this, path] () -> LoadedModel {
+    return std::async(std::launch::async, [this, path] () -> std::shared_ptr<LoadedModel> {
         std::shared_ptr<aiScene> assimpScene = loadAssimpScene(path);
         std::string directory = std::format("{}/", path.parent_path().string());
 
-        LoadedModel model {
-            .name = path.stem().string(),
-            .root = createModelGraph(assimpScene->mRootNode)
-        };
+        std::shared_ptr<LoadedModel> model = std::make_shared<LoadedModel>();
+        model->name = path.stem().string();
+        model->root = createModelGraph(assimpScene->mRootNode);
 
         // load mesh data
         std::vector<std::future<LoadedMesh>> loadedMeshes;
@@ -153,7 +152,7 @@ std::future<LoadedModel> ModelImporter::loadModel(const fs::path& path)
         // upload mesh data
         for (auto& loadedMesh : loadedMeshes)
         {
-            enqueue([this, model = &model, loadedMesh = loadedMesh.get()] () {
+            enqueue([this, model, loadedMesh = loadedMesh.get()] () {
                 model->meshes.push_back(this->createMesh(loadedMesh));
             });
         }
@@ -171,7 +170,7 @@ std::future<LoadedModel> ModelImporter::loadModel(const fs::path& path)
                     texturePaths.insert(texturePath);
             }
 
-            model.materials.push_back(std::move(loadedMaterial));
+            model->materials.push_back(std::move(loadedMaterial));
         }
 
         // load texture data
@@ -182,7 +181,7 @@ std::future<LoadedModel> ModelImporter::loadModel(const fs::path& path)
         // upload texture data
         for (auto& loadedTexture : loadedTextures)
         {
-            enqueue([this, model = &model, loadedTexture = loadedTexture.get()]() {
+            enqueue([this, model, loadedTexture = loadedTexture.get()]() {
                 if (loadedTexture.has_value())
                 {
                     model->textures.emplace(this->createNamedTexturePair(loadedTexture.value()));
@@ -229,7 +228,6 @@ ModelNode ModelImporter::createModelGraph(const aiNode* assimpNode)
 
 std::future<LoadedMesh> ModelImporter::createLoadedMesh(const aiMesh &mesh)
 {
-    debugLog(std::format("ModelImporter::createLoadedMesh: Loading {}", mesh.mName.C_Str()));
     return std::async(std::launch::async, [&mesh] () -> LoadedMesh {
         return {
             .name = mesh.mName.C_Str(),
@@ -240,15 +238,18 @@ std::future<LoadedMesh> ModelImporter::createLoadedMesh(const aiMesh &mesh)
     });
 }
 
+// todo: enable debug comments
 std::future<std::optional<LoadedTexture<uint8_t>>> ModelImporter::createLoadedTexture(const std::string &path)
 {
-    debugLog(std::format("ModelImporter::createLoadedTexture: Loading {}", path));
+    //debugLog(std::format("ModelImporter::createLoadedTexture: Loading {}", path));
     return std::async(std::launch::async, [path = fs::path(path)] () -> std::optional<LoadedTexture<uint8_t>> {
         int width, height, channels;
         uint8_t* pixels = stbi_load(path.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
 
         if (pixels)
         {
+      //      debugLog(std::format("ModelImporter::createLoadedTexture: Finished loading {}", path.string()));
+
             return std::make_optional<LoadedTexture<uint8_t>>(
                 path.string(),
                 static_cast<uint32_t>(width),
@@ -256,7 +257,7 @@ std::future<std::optional<LoadedTexture<uint8_t>>> ModelImporter::createLoadedTe
                 pixels);
         }
 
-        debugLog(std::format("ModelImporter::createLoadedTexture: Failed to load {}", path.string()));
+        //debugLog(std::format("ModelImporter::createLoadedTexture: Failed to load {}", path.string()));
         return {};
     });
 }
