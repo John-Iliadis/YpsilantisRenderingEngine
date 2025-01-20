@@ -241,14 +241,14 @@ std::future<LoadedMesh> ModelImporter::createLoadedMesh(const aiMesh &mesh)
 // todo: enable debug comments
 std::future<std::optional<LoadedTexture<uint8_t>>> ModelImporter::createLoadedTexture(const std::string &path)
 {
-    //debugLog(std::format("ModelImporter::createLoadedTexture: Loading {}", path));
+    debugLog(std::format("ModelImporter::createLoadedTexture: Loading {}", path));
     return std::async(std::launch::async, [path = fs::path(path)] () -> std::optional<LoadedTexture<uint8_t>> {
         int width, height, channels;
         uint8_t* pixels = stbi_load(path.string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
 
         if (pixels)
         {
-      //      debugLog(std::format("ModelImporter::createLoadedTexture: Finished loading {}", path.string()));
+            debugLog(std::format("ModelImporter::createLoadedTexture: Finished loading {}", path.string()));
 
             return std::make_optional<LoadedTexture<uint8_t>>(
                 path.string(),
@@ -257,7 +257,7 @@ std::future<std::optional<LoadedTexture<uint8_t>>> ModelImporter::createLoadedTe
                 pixels);
         }
 
-        //debugLog(std::format("ModelImporter::createLoadedTexture: Failed to load {}", path.string()));
+        debugLog(std::format("ModelImporter::createLoadedTexture: Failed to load {}", path.string()));
         return {};
     });
 }

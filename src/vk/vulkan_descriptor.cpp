@@ -39,17 +39,23 @@ VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count)
     };
 }
 
-DescriptorSetLayoutCreator::DescriptorSetLayoutCreator(VkDevice device)
-    : mDevice(device)
+DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder()
+    : mDevice()
 {
 }
 
-void DescriptorSetLayoutCreator::addLayoutBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages)
+void DescriptorSetLayoutBuilder::init(VkDevice device)
+{
+    mDevice = device;
+}
+
+DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::addLayoutBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages)
 {
     mLayoutBindings.emplace_back(binding, type, 1, stages);
+    return *this;
 }
 
-VkDescriptorSetLayout DescriptorSetLayoutCreator::create() const
+VkDescriptorSetLayout DescriptorSetLayoutBuilder::create()
 {
     VkDescriptorSetLayout descriptorSetLayout;
 
@@ -65,35 +71,63 @@ VkDescriptorSetLayout DescriptorSetLayoutCreator::create() const
                                                   &descriptorSetLayout);
     vulkanCheck(result, "Failed to create descriptor set layout.");
 
+    if (!mDebugName.empty())
+    {
+        setDebugVulkanObjectName(mDevice,
+                                 VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                                 mDebugName,
+                                 descriptorSetLayout);
+    }
+
+    mLayoutBindings.clear();
+
     return descriptorSetLayout;
 }
 
-DescriptorSetCreator::DescriptorSetCreator(VkDevice device,
-                                           VkDescriptorPool descriptorPool,
-                                           VkDescriptorSetLayout layout)
-    : mDevice(device)
-    , mDescriptorPool(descriptorPool)
-    , mDescriptorSetLayout(layout)
+DescriptorSetLayoutBuilder &DescriptorSetLayoutBuilder::setDebugName(const std::string &name)
+{
+    mDebugName = name;
+    return *this;
+}
+
+DescriptorSetBuilder::DescriptorSetBuilder()
+    : mDevice()
+    , mDescriptorPool()
+    , mDescriptorSetLayout()
 {
 }
 
-void DescriptorSetCreator::addBuffer(VkDescriptorType type, uint32_t binding, VkBuffer buffer, uint32_t offset, uint32_t range)
+void DescriptorSetBuilder::init(VkDevice device, VkDescriptorPool descriptorPool)
+{
+    mDevice = device;
+    mDescriptorPool = descriptorPool;
+}
+
+DescriptorSetBuilder& DescriptorSetBuilder::setLayout(VkDescriptorSetLayout layout)
+{
+    mDescriptorSetLayout = layout;
+    return *this;
+}
+
+DescriptorSetBuilder& DescriptorSetBuilder::addBuffer(VkDescriptorType type, uint32_t binding, VkBuffer buffer, uint32_t offset, uint32_t range)
 {
     mBufferInfos.emplace_back(type, binding, buffer, offset, range);
+    return *this;
 }
 
-void DescriptorSetCreator::addTexture(VkDescriptorType type, uint32_t binding, const VulkanTexture &texture)
+DescriptorSetBuilder& DescriptorSetBuilder::addTexture(VkDescriptorType type, uint32_t binding, const VulkanTexture &texture)
 {
     mTextureInfos.emplace_back(type, binding, texture);
+    return *this;
 }
 
-void DescriptorSetCreator::clear()
+DescriptorSetBuilder &DescriptorSetBuilder::setDebugName(const std::string &name)
 {
-    mBufferInfos.clear();
-    mTextureInfos.clear();
+    mDebugName = name;
+    return *this;
 }
 
-VkDescriptorSet DescriptorSetCreator::create() const
+VkDescriptorSet DescriptorSetBuilder::create()
 {
     VkDescriptorSet descriptorSet;
 
@@ -154,5 +188,21 @@ VkDescriptorSet DescriptorSetCreator::create() const
 
     vkUpdateDescriptorSets(mDevice, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 
+    if (!mDebugName.empty())
+    {
+        setDebugVulkanObjectName(mDevice,
+                                 VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                                 mDebugName,
+                                 descriptorSet);
+    }
+
+    clear();
+
     return descriptorSet;
+}
+
+void DescriptorSetBuilder::clear()
+{
+    mBufferInfos.clear();
+    mTextureInfos.clear();
 }

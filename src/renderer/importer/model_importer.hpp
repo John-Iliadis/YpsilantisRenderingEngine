@@ -14,7 +14,7 @@ using Task = std::function<void()>;
 namespace fs = std::filesystem;
 
 // todo: error handling
-// todo: mesh name = model + mesh
+// todo: meshName = modelName + meshName
 class ModelImporter
 {
 public:

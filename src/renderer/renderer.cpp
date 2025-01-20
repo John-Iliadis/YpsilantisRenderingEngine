@@ -14,6 +14,9 @@ void Renderer::init(GLFWwindow* window,
     mMsaaSampleCount = VkSampleCountFlagBits(glm::min(uint32_t(VK_SAMPLE_COUNT_8_BIT), uint32_t(getMaxSampleCount(mRenderDevice->properties))));
 
     createDescriptorPool();
+    dslBuilder.init(mRenderDevice->device);
+    dsBuilder.init(mRenderDevice->device, mDescriptorPool);
+
     createDepthImages();
     createViewProjUBOs();
     createViewProjDescriptors();
@@ -30,9 +33,7 @@ void Renderer::init(GLFWwindow* window,
     createFinalPipeline();
 
     mModelImporter.create(*mRenderDevice);
-    mModelImporter.setImportFinishedCallback([this] (LoadedModel&& loadedModel) {
-        addModel(std::move(loadedModel));
-    });
+    mModelImporter.setImportFinishedCallback([this] (const LoadedModel& loadedModel) {addModel(loadedModel);});
 
     mSceneCamera = {
         glm::vec3(0.f, 0.f, -5.f),
@@ -125,19 +126,18 @@ void Renderer::onSwapchainRecreate()
     updateFinalDescriptors();
 }
 
-void Renderer::addModel(LoadedModel&& loadedModel)
+void Renderer::addModel(const LoadedModel& loadedModel)
 {
     Model model {
-        .name = std::move(loadedModel.name),
-        .root = std::move(loadedModel.root)
+        .name = loadedModel.name,
+        .root = loadedModel.root
     };
 
     // add textures to renderer
-    // todo: check if it's a reference
     std::unordered_map<TexturePath, uint32_t> texturePathToIndex;
     for (auto& [texturePath, namedTexture] : loadedModel.textures)
     {
-        mTextures.push_back(std::move(namedTexture));
+        mTextures.push_back(namedTexture);
         texturePathToIndex[texturePath] = mTextures.size() - 1;
     }
 
@@ -254,35 +254,24 @@ void Renderer::createViewProjUBOs()
 
 void Renderer::createViewProjDescriptors()
 {
-    DescriptorSetLayoutCreator DSLayoutCreator(mRenderDevice->device);
-    DSLayoutCreator.addLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-    mViewProjDSLayout = DSLayoutCreator.create();
-
-    setDebugVulkanObjectName(mRenderDevice->device,
-                             VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
-                             "Renderer::mViewProjDSLayout",
-                             mViewProjDSLayout);
+    mViewProjDSLayout = dslBuilder
+        .addLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT)
+        .setDebugName("mViewProjDSLayout")
+        .create();
 
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        DescriptorSetCreator descriptorSetCreator(mRenderDevice->device, mDescriptorPool, mViewProjDSLayout);
-        descriptorSetCreator.addBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                                       0, mViewProjUBOs.at(i).buffer,
-                                       0, sizeof(glm::mat4));
-        mViewProjDS.at(i) = descriptorSetCreator.create();
-
-        setDebugVulkanObjectName(mRenderDevice->device,
-                                 VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                                 std::format("ViewProjection descriptor set {}", i),
-                                 mViewProjDS.at(i));
+        mViewProjDS.at(i) = dsBuilder
+            .setLayout(mViewProjDSLayout)
+            .addBuffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0,
+                       mViewProjUBOs.at(i).buffer, 0, sizeof(glm::mat4))
+            .setDebugName(std::format("mViewProjDS.at({})", i))
+            .create();
     }
 }
 
 void Renderer::createTexturesDescriptorResources()
 {
-    DescriptorSetLayoutCreator dslCreator(mRenderDevice->device);
-    dslCreator.addLayoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-    mTexturesDSLayout = dslCreator.crate();
 
 }
 
@@ -586,15 +575,18 @@ void Renderer::createSwapchainImageFramebuffers()
 
 void Renderer::createFinalDescriptorResources()
 {
-    DescriptorSetLayoutCreator dslCreator(mRenderDevice->device);
-    dslCreator.addLayoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-    mFinalDSLayout = dslCreator.create();
+    mFinalDSLayout = dslBuilder
+        .addLayoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+        .setDebugName("mFinalDSLayout")
+        .create();
 
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        DescriptorSetCreator dsCreator(mRenderDevice->device, mDescriptorPool, mFinalDSLayout);
-        dsCreator.addTexture(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, mImguiTextures.at(i));
-        mFinalDS.at(i) = dsCreator.create();
+        mFinalDS.at(i) = dsBuilder
+            .setLayout(mFinalDSLayout)
+            .addTexture(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, mImguiTextures.at(i))
+            .setDebugName(std::format("mFinalDS.at({})", i))
+            .create();
     }
 }
 

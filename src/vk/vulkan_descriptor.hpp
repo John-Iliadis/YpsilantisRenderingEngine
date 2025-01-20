@@ -17,30 +17,35 @@ VkDescriptorPool createDescriptorPool(const VulkanRenderDevice& renderDevice,
 
 VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count);
 
-class DescriptorSetLayoutCreator
+class DescriptorSetLayoutBuilder
 {
 public:
-    DescriptorSetLayoutCreator(VkDevice device);
+    DescriptorSetLayoutBuilder();
 
-    void addLayoutBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages);
+    void init(VkDevice device);
 
-    VkDescriptorSetLayout create() const;
+    DescriptorSetLayoutBuilder& addLayoutBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages);
+    DescriptorSetLayoutBuilder& setDebugName(const std::string& name);
+    VkDescriptorSetLayout create();
 
 private:
     VkDevice mDevice;
+    std::string mDebugName;
     std::vector<VkDescriptorSetLayoutBinding> mLayoutBindings;
 };
 
-class DescriptorSetCreator
+class DescriptorSetBuilder
 {
 public:
-    DescriptorSetCreator(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorSetLayout layout);
+    DescriptorSetBuilder();
 
-    void addBuffer(VkDescriptorType type, uint32_t binding, VkBuffer buffer, uint32_t offset, uint32_t range);
-    void addTexture(VkDescriptorType type, uint32_t binding, const VulkanTexture& texture);
+    void init(VkDevice device, VkDescriptorPool descriptorPool);
 
-    void clear();
-    VkDescriptorSet create() const;
+    DescriptorSetBuilder& setLayout(VkDescriptorSetLayout layout);
+    DescriptorSetBuilder& addBuffer(VkDescriptorType type, uint32_t binding, VkBuffer buffer, uint32_t offset, uint32_t range);
+    DescriptorSetBuilder& addTexture(VkDescriptorType type, uint32_t binding, const VulkanTexture& texture);
+    DescriptorSetBuilder& setDebugName(const std::string& name);
+    VkDescriptorSet create();
 
 private:
     struct BufferInfo
@@ -60,9 +65,13 @@ private:
     };
 
 private:
+    void clear();
+
     VkDevice mDevice;
     VkDescriptorPool mDescriptorPool;
     VkDescriptorSetLayout mDescriptorSetLayout;
+
+    std::string mDebugName;
     std::vector<BufferInfo> mBufferInfos;
     std::vector<TextureInfo> mTextureInfos;
 };

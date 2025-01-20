@@ -30,7 +30,7 @@ public:
     void onSwapchainRecreate();
 
 private:
-    void addModel(LoadedModel&& loadedModel);
+    void addModel(const LoadedModel& loadedModel);
 
     void createDescriptorPool();
     void createDepthImages();
@@ -69,6 +69,8 @@ private:
     VkSampleCountFlagBits mMsaaSampleCount;
 
     Camera mSceneCamera;
+    DescriptorSetLayoutBuilder dslBuilder;
+    DescriptorSetBuilder dsBuilder;
     SceneNode mSceneRoot;
     ModelImporter mModelImporter;
 
