@@ -66,6 +66,7 @@ add_executable(${PROJECT_NAME}
         src/renderer/importer/loaded_resource.hpp
         src/renderer/importer/model_importer.cpp
         src/renderer/importer/model_importer.hpp
+        src/renderer/dynamic_buffer.hpp
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)
