@@ -5,9 +5,9 @@
 #ifndef VULKANRENDERINGENGINE_VULKAN_SWAPCHAIN_HPP
 #define VULKANRENDERINGENGINE_VULKAN_SWAPCHAIN_HPP
 
-#include <glfw/glfw3.h>
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
+#include "../window/window.hpp"
 #include "vulkan_render_device.hpp"
 #include "vulkan_image.hpp"
 #include "vulkan_utils.hpp"
@@ -18,30 +18,37 @@ public:
     VkSwapchainKHR swapchain;
     VkSurfaceKHR surface;
 
-    VkFormat format;
-    VkExtent2D extent;
-    uint32_t imageCount;
+    VkCommandBuffer commandBuffer;
+    VkFence inFlightFence;
+    VkSemaphore imageReadySemaphore;
+    VkSemaphore renderCompleteSemaphore;
 
     std::vector<VulkanImage> images;
 
-    std::array<VkCommandBuffer, MAX_FRAMES_IN_FLIGHT> commandBuffers;
-    std::array<VkFence, MAX_FRAMES_IN_FLIGHT> inFlightFences;
-    std::array<VkSemaphore, MAX_FRAMES_IN_FLIGHT> imageReadySemaphores;
-    std::array<VkSemaphore, MAX_FRAMES_IN_FLIGHT> renderCompleteSemaphores;
-
 public:
-    void create(GLFWwindow* window,
-                const VulkanInstance& instance,
-                const VulkanRenderDevice& renderDevice);
-    void destroy(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice);
-    void recreate(const VulkanRenderDevice& renderDevice);
+    VulkanSwapchain(const Window& window, const VulkanInstance& instance, const VulkanRenderDevice& renderDevice);
+    ~VulkanSwapchain();
+
+    void recreate();
+
+    VkFormat getFormat() const;
+    VkExtent2D getExtent() const;
+    uint32_t getImageCount() const;
 
 private:
-    void createSurface(GLFWwindow* window, const VulkanInstance& instance);
-    void createSwapchain(const VulkanRenderDevice& renderDevice);
-    void createSwapchainImages(const VulkanRenderDevice& renderDevice);
-    void createCommandBuffers(const VulkanRenderDevice& renderDevice);
-    void createSyncObjects(const VulkanRenderDevice& renderDevice);
+    void createSurface(const Window& window);
+    void createSwapchain();
+    void createSwapchainImages();
+    void createCommandBuffers();
+    void createSyncObjects();
+
+private:
+    const VulkanInstance& mInstance;
+    const VulkanRenderDevice& mRenderDevice;
+
+    VkFormat mFormat;
+    VkExtent2D mExtent;
+    uint32_t mImageCount;
 };
 
 #endif //VULKANRENDERINGENGINE_VULKAN_SWAPCHAIN_HPP

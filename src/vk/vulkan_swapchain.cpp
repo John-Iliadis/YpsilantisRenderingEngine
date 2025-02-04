@@ -4,77 +4,74 @@
 
 #include "vulkan_swapchain.hpp"
 
-void VulkanSwapchain::create(GLFWwindow* window,
-                             const VulkanInstance& instance,
-                             const VulkanRenderDevice& renderDevice)
+VulkanSwapchain::VulkanSwapchain(const Window &window,
+                                 const VulkanInstance &instance,
+                                 const VulkanRenderDevice &renderDevice)
+    : mInstance(instance)
+    , mRenderDevice(renderDevice)
 {
-    createSurface(window, instance);
-    createSwapchain(renderDevice);
-    createSwapchainImages(renderDevice);
-    createCommandBuffers(renderDevice);
-    createSyncObjects(renderDevice);
+    createSurface(window);
+    createSwapchain();
+    createSwapchainImages();
+    createCommandBuffers();
+    createSyncObjects();
 }
 
-void VulkanSwapchain::destroy(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice)
+VulkanSwapchain::~VulkanSwapchain()
 {
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    vkDestroyFence(mRenderDevice.device, inFlightFence, nullptr);
+    vkDestroySemaphore(mRenderDevice.device, imageReadySemaphore, nullptr);
+    vkDestroySemaphore(mRenderDevice.device, renderCompleteSemaphore, nullptr);
+
+    for (size_t i = 0; i < mImageCount; ++i)
     {
-        vkDestroyFence(renderDevice.device, inFlightFences.at(i), nullptr);
-        vkDestroySemaphore(renderDevice.device, imageReadySemaphores.at(i), nullptr);
-        vkDestroySemaphore(renderDevice.device, renderCompleteSemaphores.at(i), nullptr);
+        vkDestroyImageView(mRenderDevice.device, images.at(i).imageView, nullptr);
     }
 
-    for (size_t i = 0; i < imageCount; ++i)
-    {
-        vkDestroyImageView(renderDevice.device, images.at(i).imageView, nullptr);
-    }
-
-    vkDestroySwapchainKHR(renderDevice.device, swapchain, nullptr);
-    vkDestroySurfaceKHR(instance.instance, surface, nullptr);
+    vkDestroySwapchainKHR(mRenderDevice.device, swapchain, nullptr);
+    vkDestroySurfaceKHR(mInstance.instance, surface, nullptr);
 }
 
-void VulkanSwapchain::recreate(const VulkanRenderDevice& renderDevice)
+void VulkanSwapchain::recreate()
 {
     // swapchain
-    for (size_t i = 0; i < imageCount; ++i)
-        vkDestroyImageView(renderDevice.device, images.at(i).imageView, nullptr);
-    vkDestroySwapchainKHR(renderDevice.device, swapchain, nullptr);
+    for (size_t i = 0; i < mImageCount; ++i)
+        vkDestroyImageView(mRenderDevice.device, images.at(i).imageView, nullptr);
+    vkDestroySwapchainKHR(mRenderDevice.device, swapchain, nullptr);
 
-    createSwapchain(renderDevice);
-    createSwapchainImages(renderDevice);
+    createSwapchain();
+    createSwapchainImages();
 
     // sync objects
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-    {
-        vkDestroyFence(renderDevice.device, inFlightFences.at(i), nullptr);
-        vkDestroySemaphore(renderDevice.device, imageReadySemaphores.at(i), nullptr);
-        vkDestroySemaphore(renderDevice.device, renderCompleteSemaphores.at(i), nullptr);
-    }
-    createSyncObjects(renderDevice);
+    vkDestroyFence(mRenderDevice.device, inFlightFence, nullptr);
+    vkDestroySemaphore(mRenderDevice.device, imageReadySemaphore, nullptr);
+    vkDestroySemaphore(mRenderDevice.device, renderCompleteSemaphore, nullptr);
+
+    createSyncObjects();
 }
 
-void VulkanSwapchain::createSurface(GLFWwindow *window, const VulkanInstance &instance)
+void VulkanSwapchain::createSurface(const Window& window)
 {
-    VkResult result = glfwCreateWindowSurface(instance.instance, window, nullptr, &surface);
+    VkResult result = glfwCreateWindowSurface(mInstance.instance, window, nullptr, &surface);
     vulkanCheck(result, "Failed to create Vulkan surface.");
 }
 
-void VulkanSwapchain::createSwapchain(const VulkanRenderDevice& renderDevice)
+void VulkanSwapchain::createSwapchain()
 {
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(renderDevice.physicalDevice, surface, &surfaceCapabilities);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(mRenderDevice.physicalDevice, surface, &surfaceCapabilities);
 
-    format = VK_FORMAT_R8G8B8A8_UNORM;
-    extent = surfaceCapabilities.currentExtent;
-    imageCount = glm::max(glm::min(3u, surfaceCapabilities.maxImageCount), surfaceCapabilities.minImageCount);
+    mFormat = VK_FORMAT_R8G8B8A8_UNORM;
+    mExtent = surfaceCapabilities.currentExtent;
+    mImageCount = glm::max(glm::min(3u, surfaceCapabilities.maxImageCount), surfaceCapabilities.minImageCount);
 
     VkSwapchainCreateInfoKHR swapchainCreateInfoKhr {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = surface,
-        .minImageCount = imageCount,
-        .imageFormat = format,
+        .minImageCount = mImageCount,
+        .imageFormat = mFormat,
         .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
-        .imageExtent = extent,
+        .imageExtent = mExtent,
         .imageArrayLayers = 1,
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -87,57 +84,66 @@ void VulkanSwapchain::createSwapchain(const VulkanRenderDevice& renderDevice)
         .oldSwapchain = VK_NULL_HANDLE
     };
 
-    VkResult result = vkCreateSwapchainKHR(renderDevice.device, &swapchainCreateInfoKhr, nullptr, &swapchain);
+    VkResult result = vkCreateSwapchainKHR(mRenderDevice.device, &swapchainCreateInfoKhr, nullptr, &swapchain);
     vulkanCheck(result, "Failed to create swapchain.");
 }
 
-void VulkanSwapchain::createSwapchainImages(const VulkanRenderDevice& renderDevice)
+void VulkanSwapchain::createSwapchainImages()
 {
-    images.resize(imageCount);
+    images.resize(mImageCount);
 
-    VkImage swapchainImages[imageCount];
-    vkGetSwapchainImagesKHR(renderDevice.device, swapchain, &imageCount, swapchainImages);
+    std::vector<VkImage> swapchainImages(mImageCount);
+    vkGetSwapchainImagesKHR(mRenderDevice.device, swapchain, &mImageCount, swapchainImages.data());
 
-    for (size_t i = 0; i < imageCount; ++i)
+    for (size_t i = 0; i < mImageCount; ++i)
     {
-        images.at(i).image = swapchainImages[i];
-        images.at(i).imageView = createImageView(renderDevice,
-                                                    images.at(i).image,
-                                                    VK_IMAGE_VIEW_TYPE_2D,
-                                                    format,
-                                                    VK_IMAGE_ASPECT_COLOR_BIT);
+        images.at(i).image = swapchainImages.at(i);
+        images.at(i).imageView = createImageView(mRenderDevice,
+                                                 images.at(i).image,
+                                                 VK_IMAGE_VIEW_TYPE_2D,
+                                                 mFormat,
+                                                 VK_IMAGE_ASPECT_COLOR_BIT);
 
-        setImageDebugName(renderDevice, images.at(i), "Swapchain", i);
+        setImageDebugName(mRenderDevice, images.at(i), "Swapchain", i)
     }
 }
 
-void VulkanSwapchain::createCommandBuffers(const VulkanRenderDevice& renderDevice)
+void VulkanSwapchain::createCommandBuffers()
 {
     VkCommandBufferAllocateInfo commandBufferAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = renderDevice.commandPool,
+        .commandPool = mRenderDevice.commandPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = MAX_FRAMES_IN_FLIGHT
+        .commandBufferCount = 1
     };
 
-    VkResult result = vkAllocateCommandBuffers(renderDevice.device, &commandBufferAllocateInfo, commandBuffers.data());
+    VkResult result = vkAllocateCommandBuffers(mRenderDevice.device, &commandBufferAllocateInfo, &commandBuffer);
     vulkanCheck(result, "Failed to allocate command buffers.");
 
-    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-    {
-        setDebugVulkanObjectName(renderDevice.device,
-                                 VK_OBJECT_TYPE_COMMAND_BUFFER,
-                                 std::format("VulkanSwapchain::commandBuffers[{}]", i),
-                                 commandBuffers.at(i));
-    }
+    setDebugVulkanObjectName(mRenderDevice.device,
+                             VK_OBJECT_TYPE_COMMAND_BUFFER,
+                             std::format("VulkanSwapchain::commandBuffer"),
+                             commandBuffer);
 }
 
-void VulkanSwapchain::createSyncObjects(const VulkanRenderDevice &renderDevice)
+void VulkanSwapchain::createSyncObjects()
 {
-    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-    {
-        inFlightFences.at(i) = createFence(renderDevice.device, true, std::format("Swapchain in flight fence {}", i).c_str());
-        imageReadySemaphores.at(i) = createSemaphore(renderDevice.device, std::format("Swapchain image ready semaphore {}", i).c_str());
-        renderCompleteSemaphores.at(i) = createSemaphore(renderDevice.device, std::format("Swapchain render complete semaphore {}", i).c_str());
-    }
+    inFlightFence = createFence(mRenderDevice.device, true, "VulkanSwapchain::inFlightFence");
+    imageReadySemaphore = createSemaphore(mRenderDevice.device, "VulkanSwapchain::imageReadySemaphore");
+    renderCompleteSemaphore = createSemaphore(mRenderDevice.device, "VulkanSwapchain::renderCompleteSemaphore");
+}
+
+VkFormat VulkanSwapchain::getFormat() const
+{
+    return mFormat;
+}
+
+VkExtent2D VulkanSwapchain::getExtent() const
+{
+    return mExtent;
+}
+
+uint32_t VulkanSwapchain::getImageCount() const
+{
+    return mImageCount;
 }
