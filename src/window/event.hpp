@@ -8,57 +8,50 @@
 class Event
 {
 public:
-    struct SizeEvent
+    struct WindowResize
     {
         int width;
         int height;
     };
 
-    struct KeyEvent
+    struct Key
     {
         int key;
         int action;
     };
 
-    struct MouseButtonEvent
+    struct MouseButton
     {
         int button;
         int action;
     };
 
-    struct MouseWheelEvent
+    struct MouseWheel
     {
         double x;
         double y;
     };
 
-    struct MouseMoveEvent
+    struct MouseMove
     {
         double x;
         double y;
     };
 
-    enum EventType
-    {
-        Resized,
+    std::variant<WindowResize,
         Key,
-        MouseWheelScrolled,
         MouseButton,
-        MouseMoved,
-        WindowMinimized,
-        WindowRestored
-    };
+        MouseWheel,
+        MouseMove> data;
 
-    EventType type;
+    template<typename T>
+    Event(const T& event) : data(event) {}
 
-    union
-    {
-        SizeEvent size;
-        KeyEvent key;
-        MouseButtonEvent mouseButton;
-        MouseWheelEvent mouseWheel;
-        MouseMoveEvent mouseMove;
-    };
+    template<typename T>
+    T* getIf() { return std::get_if<T>(&data); }
+
+    template<typename T>
+    const T* getIf() const { return std::get_if<T>(&data); }
 };
 
 #endif //VULKANRENDERINGENGINE_EVENT_HPP

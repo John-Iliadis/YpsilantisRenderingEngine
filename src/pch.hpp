@@ -16,6 +16,7 @@
 #include <memory>
 #include <cstdint>
 #include <optional>
+#include <variant>
 
 #include <iostream>
 #include <format>
