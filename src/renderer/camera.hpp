@@ -5,14 +5,12 @@
 #ifndef VULKANRENDERINGENGINE_CAMERA_HPP
 #define VULKANRENDERINGENGINE_CAMERA_HPP
 
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-#include "../window/event.hpp"
-#include "../window/input.hpp"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <imgui/imgui.h>
 #include "../utils.hpp"
 
-// todo: clamp speed var
-// todo: modify sensitivity
 // todo: add key shortcuts for changing state
 class Camera
 {
@@ -28,12 +26,9 @@ public:
     Camera() = default;
     Camera(glm::vec3 position, float fovY, float width, float height, float nearZ = 0.1f, float farZ = 100.f);
 
-    void setFov(float fovY);
-    void setNearPlane(float nearZ);
-    void setFarPlane(float farZ);
     void setState(State state);
-
-    void handleEvent(const Event& event);
+    void resize(uint32_t width, uint32_t height);
+    void scroll(float x, float y);
     void update(float dt);
 
     const glm::mat4& viewProjection() const;
@@ -41,14 +36,20 @@ public:
     const glm::mat4& projection() const;
     const glm::vec3& position() const;
     const glm::vec3& front() const;
+    const State state() const;
+
+    float* fov();
+    float* nearPlane();
+    float* farPlane();
+    float* flySpeed();
+    float* panSpeed();
+    float* zScrollOffset();
+    float* rotateSensitivity();
 
 private:
-    void resize(uint32_t width, uint32_t height);
-    void scroll(float x, float y);
     void updateFirstPerson(float dt);
     void updateViewMode(float dt);
     void updateEditorMode(float dt);
-    void updateProjection();
     void calculateBasis();
     void calculateViewProjection();
 
@@ -69,8 +70,12 @@ private:
 
     glm::vec2 mPreviousMousePos;
     State mState;
-    float mSpeed;
-    float mPanSensitivity;
+    float mFlySpeed;
+    float mPanSpeed;
+    float mZScrollOffset;
+    float mRotateSensitivity;
+    bool mLeftButtonDown;
+    bool mRightButtonDown;
 };
 
 #endif //VULKANRENDERINGENGINE_CAMERA_HPP

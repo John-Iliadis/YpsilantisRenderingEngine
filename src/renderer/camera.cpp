@@ -18,35 +18,20 @@ Camera::Camera(glm::vec3 position, float fovY, float width, float height, float 
     , mPosition(position)
     , mTheta()
     , mPhi()
-    , mProjection(sRightHandedBasis * glm::perspective(fovY, width / height, nearZ, farZ))
+    , mProjection(glm::perspective(fovY, width / height, nearZ, farZ))
     , mFovY(fovY)
     , mAspectRatio(width / height)
     , mNearZ(nearZ)
     , mFarZ(farZ)
     , mPreviousMousePos()
     , mState(Camera::State::FIRST_PERSON)
-    , mSpeed(5.f)
-    , mPanSensitivity(0.8f)
+    , mFlySpeed(5.f)
+    , mPanSpeed(0.8f)
+    , mZScrollOffset(1.f)
+    , mRotateSensitivity(1.f)
+    , mLeftButtonDown()
+    , mRightButtonDown()
 {
-    calculateViewProjection();
-}
-
-void Camera::setFov(float fovY)
-{
-    mFovY = fovY;
-    updateProjection();
-}
-
-void Camera::setNearPlane(float nearZ)
-{
-    mNearZ = nearZ;
-    updateProjection();
-}
-
-void Camera::setFarPlane(float farZ)
-{
-    mFarZ = farZ;
-    updateProjection();
 }
 
 void Camera::setState(Camera::State state)
@@ -54,17 +39,20 @@ void Camera::setState(Camera::State state)
     mState = state;
 }
 
-void Camera::handleEvent(const Event &event)
-{
-    if (event.type == Event::Resized)
-        resize(event.size.width, event.size.height);
-
-    if (event.type == Event::MouseWheelScrolled)
-        scroll(event.mouseWheel.x, event.mouseWheel.y);
-}
-
 void Camera::update(float dt)
 {
+    if (ImGui::IsWindowHovered())
+    {
+        mLeftButtonDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        mRightButtonDown = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+    }
+
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        mLeftButtonDown = false;
+
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Right))
+        mRightButtonDown = false;
+
     switch (mState)
     {
         case FIRST_PERSON:
@@ -78,7 +66,10 @@ void Camera::update(float dt)
             break;
     }
 
-    mPreviousMousePos = Input::mousePosition();
+    calculateViewProjection();
+
+    mPreviousMousePos.x = ImGui::GetMousePos().x;
+    mPreviousMousePos.y = ImGui::GetMousePos().y;
 }
 
 const glm::mat4 &Camera::viewProjection() const
@@ -106,13 +97,49 @@ const glm::vec3 &Camera::front() const
     return mBasis[2];
 }
 
+const Camera::State Camera::state() const
+{
+    return mState;
+}
+
+float *Camera::fov()
+{
+    return &mFovY;
+}
+
+float *Camera::nearPlane()
+{
+    return &mNearZ;
+}
+
+float *Camera::farPlane()
+{
+    return &mFarZ;
+}
+
+float *Camera::flySpeed()
+{
+    return &mFlySpeed;
+}
+
+float *Camera::panSpeed()
+{
+    return &mPanSpeed;
+}
+
+float *Camera::zScrollOffset()
+{
+    return &mZScrollOffset;
+}
+
+float *Camera::rotateSensitivity()
+{
+    return &mRotateSensitivity;
+}
+
 void Camera::resize(uint32_t width, uint32_t height)
 {
-    if (width && height)
-    {
-        mAspectRatio = static_cast<float>(width) / static_cast<float>(height);
-        updateProjection();
-    }
+    mAspectRatio = static_cast<float>(glm::max(1u, width)) / static_cast<float>(glm::max(1u,height));
 }
 
 void Camera::scroll(float x, float y)
@@ -121,14 +148,13 @@ void Camera::scroll(float x, float y)
     {
         case FIRST_PERSON:
         {
-            mSpeed += y;
+            mFlySpeed += glm::sign(y);
             break;
         }
         case VIEW_MODE:
         case EDITOR_MODE:
         {
-            mPosition += mBasis[2] * y; // todo: tweak
-            calculateViewProjection();
+            mPosition += mBasis[2] * mZScrollOffset * glm::sign(y);
             break;
         }
     }
@@ -139,50 +165,54 @@ void Camera::updateFirstPerson(float dt)
     int z = 0;
     int x = 0;
 
-    if (Input::keyPressed(GLFW_KEY_W))
-        --z;
-    if (Input::keyPressed(GLFW_KEY_S))
-        ++z;
-    if (Input::keyPressed(GLFW_KEY_A))
-        --x;
-    if (Input::keyPressed(GLFW_KEY_D))
-        ++x;
+    if (ImGui::IsWindowFocused())
+    {
+        if (ImGui::IsKeyDown(ImGuiKey_W))
+            --z;
+        if (ImGui::IsKeyDown(ImGuiKey_S))
+            ++z;
+        if (ImGui::IsKeyDown(ImGuiKey_A))
+            --x;
+        if (ImGui::IsKeyDown(ImGuiKey_D))
+            ++x;
+    }
 
     glm::vec2 mouseDt{};
-    if (Input::mouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT))
-        mouseDt = Input::mousePosition() - mPreviousMousePos;
+    if (mLeftButtonDown)
+    {
+        mouseDt.x = ImGui::GetMousePos().x - mPreviousMousePos.x;
+        mouseDt.y = ImGui::GetMousePos().y - mPreviousMousePos.y;
+    }
 
     if (z || x || mouseDt.x || mouseDt.y)
     {
-        float xOffset = mSpeed * dt * static_cast<float>(x);
-        float zOffset = mSpeed * dt * static_cast<float>(z);
+        float xOffset = mFlySpeed * dt * glm::sign(x);
+        float zOffset = mFlySpeed * dt * glm::sign(z);
         mPosition += mBasis[0] * xOffset + mBasis[2] * zOffset;
 
-        mTheta += mouseDt.x * dt * mPanSensitivity;
-        mPhi += -mouseDt.y * dt * mPanSensitivity;
-
-        calculateViewProjection();
+        mTheta += mouseDt.x * dt * mRotateSensitivity;
+        mPhi += -mouseDt.y * dt * mRotateSensitivity;
     }
 }
 
 void Camera::updateViewMode(float dt)
 {
-    glm::vec2 mouseDt = Input::mousePosition() - mPreviousMousePos;
+    glm::vec2 mouseDt;
+    mouseDt.x = ImGui::GetMousePos().x - mPreviousMousePos.x;
+    mouseDt.y = ImGui::GetMousePos().y - mPreviousMousePos.y;
 
     if (mouseDt.x || mouseDt.y)
     {
-        if (Input::mouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT))
+        if (mRightButtonDown)
         {
-            mTheta += mouseDt.x * dt * mPanSensitivity;
-            mPhi += -mouseDt.y * dt * mPanSensitivity;
-            calculateViewProjection();
+            mTheta += mouseDt.x * dt * mRotateSensitivity;
+            mPhi += -mouseDt.y * dt * mRotateSensitivity;
         }
-        else if (Input::mouseButtonPressed(GLFW_MOUSE_BUTTON_LEFT))
+        else if (mLeftButtonDown)
         {
-            float xOffset = mSpeed * dt * mouseDt.x;
-            float yOffset = mSpeed * dt * mouseDt.y;
-            mPosition += mBasis[0] * xOffset + mBasis[1] * -yOffset;
-            calculateViewProjection();
+            float xOffset = mPanSpeed * dt * mouseDt.x;
+            float yOffset = mPanSpeed * dt * mouseDt.y;
+            mPosition += mBasis[0] * xOffset + mBasis[1] * -yOffset; // todo check
         }
     }
 }
@@ -190,21 +220,17 @@ void Camera::updateViewMode(float dt)
 void Camera::updateEditorMode(float dt)
 {
     glm::vec2 mouseDt{};
-    if (Input::mouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT))
-        mouseDt = Input::mousePosition() - mPreviousMousePos;
+    if (mRightButtonDown)
+    {
+        mouseDt.x = ImGui::GetMousePos().x - mPreviousMousePos.x;
+        mouseDt.y = ImGui::GetMousePos().y - mPreviousMousePos.y;
+    }
 
     if (mouseDt.x || mouseDt.y)
     {
-        mTheta += mouseDt.x * dt * mPanSensitivity;
-        mPhi += -mouseDt.y * dt * mPanSensitivity;
-        calculateViewProjection();
+        mTheta += mouseDt.x * dt * mRotateSensitivity;
+        mPhi += -mouseDt.y * dt * mRotateSensitivity;
     }
-}
-
-void Camera::updateProjection()
-{
-    mProjection = sRightHandedBasis * glm::perspective(mFovY, mAspectRatio, mNearZ, mFarZ);
-    mViewProjection = mProjection * mView;
 }
 
 void Camera::calculateBasis()
@@ -238,5 +264,6 @@ void Camera::calculateViewProjection()
     mView[3].z = -glm::dot(mPosition, mBasis[2]);
     mView[3].w = 1.f;
 
+    mProjection = glm::perspective(mFovY, mAspectRatio, mNearZ, mFarZ);
     mViewProjection = mProjection * mView;
 }
