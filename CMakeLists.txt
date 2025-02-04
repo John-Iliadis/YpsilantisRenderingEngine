@@ -44,8 +44,6 @@ add_executable(${PROJECT_NAME}
         src/editor/camera.hpp
         src/renderer/renderer.cpp
         src/renderer/renderer.hpp
-        src/vk/vulkan_shader.cpp
-        src/vk/vulkan_shader.hpp
         src/vk/vulkan_descriptor.cpp
         src/vk/vulkan_descriptor.hpp
         src/vk/vulkan_pipeline.cpp
@@ -89,14 +87,11 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
         Vulkan::Vulkan
         tiny_gltf
         stb
-        $ENV{VULKAN_SDK}/Lib/shaderc_shared.lib
         ${LIBS}
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
         $<$<CONFIG:Debug>:DEBUG_MODE>
-        $<$<CONFIG:Debug>:SHADER_PATH=\"${CMAKE_SOURCE_DIR}/shaders/\">
-        $<$<CONFIG:Release>:SHADER_PATH=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/\">
         GLFW_EXPOSE_NATIVE_WIN32
         GLFW_INCLUDE_VULKAN
         GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -105,3 +100,36 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 )
 
 target_link_options(${PROJECT_NAME} PRIVATE -static)
+
+# compile shaders
+set(SHADER_DIR ${PROJECT_SOURCE_DIR}/shaders)
+set(COMPILED_SHADER_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders)
+set(GLSLC_EXE ${DEPENDENCIES_DIR}/glslc/glslc.exe)
+set(SHADER_COMPILE_FLAGS "-o")
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(SHADER_COMPILE_FLAGS "${SHADER_COMPILE_FLAGS} -g")
+endif()
+    
+file(GLOB GLSL_FILES
+        ${SHADER_DIR}/*.vert
+        ${SHADER_DIR}/*.frag
+        ${SHADER_DIR}/*.geom
+)
+
+foreach (GLSL_FILE ${GLSL_FILES})
+    get_filename_component(FILENAME ${GLSL_FILE} NAME)
+    set(SPIRV_FILE ${COMPILED_SHADER_DIR}/${FILENAME}.spv)
+
+    add_custom_command(
+            OUTPUT ${SPIRV_FILE}
+            COMMAND ${GLSLC_EXE} ${GLSL_FILE} ${SHADER_COMPILE_FLAGS} ${SPIRV_FILE}
+            DEPENDS ${GLSL_FILE}
+            COMMENT "Compiling ${GLSL_FILE} to SPIR-V..."
+            VERBATIM
+    )
+
+    list(APPEND SPIRV_FILES ${SPIRV_FILE})
+endforeach ()
+
+add_custom_target(Shaders ALL DEPENDS ${SPIRV_FILES})
