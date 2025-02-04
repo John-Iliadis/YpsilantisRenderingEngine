@@ -13,22 +13,18 @@ class VulkanRenderDevice
 {
 public:
     VkPhysicalDevice physicalDevice;
-    VkPhysicalDeviceProperties properties;
-    VkPhysicalDeviceMemoryProperties memoryProperties;
-
     VkDevice device;
     VkQueue graphicsQueue;
     VkCommandPool commandPool;
     VkDescriptorPool descriptorPool;
 
-    uint32_t graphicsQueueFamilyIndex;
-
 public:
-    void create(const VulkanInstance& instance);
-    void destroy();
+    VulkanRenderDevice(const VulkanInstance& instance);
+    ~VulkanRenderDevice();
 
-    static bool checkExtSupport(VkPhysicalDevice physicalDevice, const std::vector<const char*>& extensions);
-    static std::vector<const char*> getRequiredExtensions();
+    const VkPhysicalDeviceProperties& getDeviceProperties() const;
+    const VkPhysicalDeviceMemoryProperties& getMemoryProperties() const;
+    uint32_t getGraphicsQueueFamilyIndex() const;
 
 private:
     void pickPhysicalDevice(const VulkanInstance& instance);
@@ -36,6 +32,11 @@ private:
     void findQueueFamilyIndices();
     void createCommandPool();
     void createDescriptorPool();
+
+private:
+    VkPhysicalDeviceProperties mDeviceProperties;
+    VkPhysicalDeviceMemoryProperties mMemoryProperties;
+    uint32_t mGraphicsQueueFamilyIndex;
 };
 
 #endif //VULKANRENDERINGENGINE_VULKAN_RENDER_DEVICE_HPP
