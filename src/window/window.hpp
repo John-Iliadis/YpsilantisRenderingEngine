@@ -6,7 +6,7 @@
 #define VULKANRENDERINGENGINE_WINDOW_HPP
 
 #include <glfw/glfw3.h>
-#include "../utils.hpp"
+#include "../utils/utils.hpp"
 #include "input.hpp"
 #include "event.hpp"
 

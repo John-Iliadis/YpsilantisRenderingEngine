@@ -5,7 +5,6 @@
 #ifndef VULKANRENDERINGENGINE_VULKAN_SWAPCHAIN_HPP
 #define VULKANRENDERINGENGINE_VULKAN_SWAPCHAIN_HPP
 
-#include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include "../window/window.hpp"
 #include "vulkan_render_device.hpp"

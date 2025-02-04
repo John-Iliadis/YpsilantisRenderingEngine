@@ -17,10 +17,10 @@ add_executable(${PROJECT_NAME}
         ${IMGUI_SRC}
         src/main.cpp
         src/pch.cpp
-        src/application.cpp
-        src/application.hpp
-        src/utils.cpp
-        src/utils.hpp
+        src/app/application.cpp
+        src/app/application.hpp
+        src/utils/utils.cpp
+        src/utils/utils.hpp
         src/window/window.cpp
         src/window/window.hpp
         src/window/Event.hpp
@@ -28,7 +28,6 @@ add_executable(${PROJECT_NAME}
         src/window/input.hpp
         src/vk/vulkan_instance.cpp
         src/vk/vulkan_instance.hpp
-        src/vk/include.hpp
         src/vk/vulkan_render_device.cpp
         src/vk/vulkan_render_device.hpp
         src/vk/vulkan_swapchain.cpp
@@ -41,8 +40,8 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_utils.hpp
         src/vk/vulkan_texture.cpp
         src/vk/vulkan_texture.hpp
-        src/renderer/camera.cpp
-        src/renderer/camera.hpp
+        src/editor/camera.cpp
+        src/editor/camera.hpp
         src/renderer/renderer.cpp
         src/renderer/renderer.hpp
         src/vk/vulkan_shader.cpp
@@ -54,20 +53,29 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_function_pointers.hpp
         src/vk/vulkan_imgui.cpp
         src/vk/vulkan_imgui.hpp
-        src/renderer/scene.hpp
-        src/renderer/scene.cpp
-        src/renderer/instancedMesh.hpp
-        src/renderer/instancedMesh.cpp
-        src/renderer/scene_node.cpp
-        src/renderer/scene_node.hpp
+        src/renderer/instanced_mesh.hpp
+        src/renderer/instanced_mesh.cpp
         src/renderer/model.hpp
         src/renderer/material.hpp
         src/renderer/model.cpp
-        src/renderer/importer/loaded_resource.hpp
-        src/renderer/importer/model_importer.cpp
-        src/renderer/importer/model_importer.hpp
-        src/renderer/dynamic_buffer.hpp
+        src/app/types.hpp
+        src/app/simple_notification_service.hpp
+        src/app/simple_notification_service.cpp
+        src/app/uuid_registry.hpp
+        src/app/uuid_registry.cpp
+        src/editor/editor.cpp
+        src/editor/editor.hpp
+        src/renderer/vertex.hpp
+        src/utils/image_loader.cpp
+        src/utils/image_loader.hpp
+        src/utils/main_thread_task_queue.cpp
+        src/utils/main_thread_task_queue.hpp
+        src/resource/resource_manager.cpp
+        src/resource/resource_importer.cpp
 )
+
+add_subdirectory(${DEPENDENCY_DIR}/tiny_gltf/)
+add_subdirectory(${DEPENDENCY_DIR}/stb/)
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)
 
@@ -75,12 +83,12 @@ set_target_properties(${PROJECT_NAME} PROPERTIES DEBUG_POSTFIX -d)
 
 find_package(Vulkan REQUIRED)
 
-target_include_directories(${PROJECT_NAME} PRIVATE
-        ${INCLUDE_DIRS}
-)
+target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIRS})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
         Vulkan::Vulkan
+        tiny_gltf
+        stb
         $ENV{VULKAN_SDK}/Lib/shaderc_shared.lib
         ${LIBS}
 )
@@ -91,11 +99,9 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
         $<$<CONFIG:Release>:SHADER_PATH=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/\">
         GLFW_EXPOSE_NATIVE_WIN32
         GLFW_INCLUDE_VULKAN
-        STB_IMAGE_IMPLEMENTATION
         GLM_FORCE_DEPTH_ZERO_TO_ONE
         GLM_FORCE_RADIANS
         IMGUI_DEFINE_MATH_OPERATORS
-        MAX_FRAMES_IN_FLIGHT=2
 )
 
 target_link_options(${PROJECT_NAME} PRIVATE -static)

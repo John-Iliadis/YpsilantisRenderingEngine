@@ -86,14 +86,14 @@ void Application::render()
 {
     static uint32_t currentFrame = 0;
 
-    vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(currentFrame), VK_TRUE, UINT64_MAX);
-    vkResetFences(mRenderDevice.device, 1, &mSwapchain.inFlightFences.at(currentFrame));
+    vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFence.at(currentFrame), VK_TRUE, UINT64_MAX);
+    vkResetFences(mRenderDevice.device, 1, &mSwapchain.inFlightFence.at(currentFrame));
 
     uint32_t swapchainImageIndex;
     VkResult result = vkAcquireNextImageKHR(mRenderDevice.device,
                                             mSwapchain.swapchain,
                                            UINT64_MAX,
-                                           mSwapchain.imageReadySemaphores.at(currentFrame),
+                                           mSwapchain.imageReadySemaphore.at(currentFrame),
                                            VK_NULL_HANDLE,
                                            &swapchainImageIndex);
 
@@ -103,29 +103,29 @@ void Application::render()
         return;
     }
 
-    fillCommandBuffer(mSwapchain.commandBuffers.at(currentFrame), currentFrame, swapchainImageIndex);
+    fillCommandBuffer(mSwapchain.commandBuffer.at(currentFrame), currentFrame, swapchainImageIndex);
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submitInfo {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &mSwapchain.imageReadySemaphores.at(currentFrame),
+        .pWaitSemaphores = &mSwapchain.imageReadySemaphore.at(currentFrame),
         .pWaitDstStageMask = &waitStage,
         .commandBufferCount = 1,
-        .pCommandBuffers = &mSwapchain.commandBuffers.at(currentFrame),
+        .pCommandBuffers = &mSwapchain.commandBuffer.at(currentFrame),
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &mSwapchain.renderCompleteSemaphores.at(currentFrame)
+        .pSignalSemaphores = &mSwapchain.renderCompleteSemaphore.at(currentFrame)
     };
 
     result = vkQueueSubmit(mRenderDevice.graphicsQueue,
                            1, &submitInfo,
-                           mSwapchain.inFlightFences.at(currentFrame));
+                           mSwapchain.inFlightFence.at(currentFrame));
     vulkanCheck(result, "Failed queue submit.");
 
     VkPresentInfoKHR presentInfo {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &mSwapchain.renderCompleteSemaphores.at(currentFrame),
+        .pWaitSemaphores = &mSwapchain.renderCompleteSemaphore.at(currentFrame),
         .swapchainCount = 1,
         .pSwapchains = &mSwapchain.swapchain,
         .pImageIndices = &swapchainImageIndex,

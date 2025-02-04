@@ -3,7 +3,7 @@
 //
 
 #include "utils.hpp"
-#include "window/window.hpp"
+#include "../window/window.hpp"
 
 void debugLog(const std::string& logMSG)
 {

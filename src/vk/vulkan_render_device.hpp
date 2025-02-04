@@ -5,9 +5,10 @@
 #ifndef VULKANRENDERINGENGINE_VULKAN_RENDER_DEVICE_HPP
 #define VULKANRENDERINGENGINE_VULKAN_RENDER_DEVICE_HPP
 
-#include <vulkan/vulkan.h>
 #include "vulkan_instance.hpp"
 #include "vulkan_utils.hpp"
+#include "vulkan_descriptor.hpp"
+#include "../utils/utils.hpp"
 
 class VulkanRenderDevice
 {

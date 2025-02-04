@@ -104,7 +104,7 @@ void VulkanSwapchain::createSwapchainImages()
                                                  mFormat,
                                                  VK_IMAGE_ASPECT_COLOR_BIT);
 
-        setImageDebugName(mRenderDevice, images.at(i), "Swapchain", i)
+        setImageDebugName(mRenderDevice, images.at(i), "Swapchain", i);
     }
 }
 
@@ -120,7 +120,7 @@ void VulkanSwapchain::createCommandBuffers()
     VkResult result = vkAllocateCommandBuffers(mRenderDevice.device, &commandBufferAllocateInfo, &commandBuffer);
     vulkanCheck(result, "Failed to allocate command buffers.");
 
-    setDebugVulkanObjectName(mRenderDevice.device,
+    setDebugVulkanObjectName(mRenderDevice,
                              VK_OBJECT_TYPE_COMMAND_BUFFER,
                              std::format("VulkanSwapchain::commandBuffer"),
                              commandBuffer);
@@ -128,9 +128,9 @@ void VulkanSwapchain::createCommandBuffers()
 
 void VulkanSwapchain::createSyncObjects()
 {
-    inFlightFence = createFence(mRenderDevice.device, true, "VulkanSwapchain::inFlightFence");
-    imageReadySemaphore = createSemaphore(mRenderDevice.device, "VulkanSwapchain::imageReadySemaphore");
-    renderCompleteSemaphore = createSemaphore(mRenderDevice.device, "VulkanSwapchain::renderCompleteSemaphore");
+    inFlightFence = createFence(mRenderDevice, true, "VulkanSwapchain::inFlightFence");
+    imageReadySemaphore = createSemaphore(mRenderDevice, "VulkanSwapchain::imageReadySemaphore");
+    renderCompleteSemaphore = createSemaphore(mRenderDevice, "VulkanSwapchain::renderCompleteSemaphore");
 }
 
 VkFormat VulkanSwapchain::getFormat() const

@@ -5,8 +5,6 @@
 #ifndef VULKANRENDERINGENGINE_VULKAN_FUNCTION_POINTERS_HPP
 #define VULKANRENDERINGENGINE_VULKAN_FUNCTION_POINTERS_HPP
 
-#include <vulkan/vulkan.h>
-
 // VK_EXT_debug_utils
 inline PFN_vkCreateDebugUtilsMessengerEXT pfnCreateDebugUtilsMessengerEXT;
 inline PFN_vkDestroyDebugUtilsMessengerEXT pfnDestroyDebugUtilsMessengerEXT;

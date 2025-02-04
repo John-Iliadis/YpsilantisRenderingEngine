@@ -3,13 +3,19 @@
 //
 
 #include "vulkan_utils.hpp"
+#include "vulkan_function_pointers.hpp"
+#include "vulkan_render_device.hpp"
+#include "../utils/utils.hpp"
 
 void vulkanCheck(VkResult result, const char* msg, std::source_location location)
 {
     check(result == VK_SUCCESS, msg, location);
 }
 
-void setDebugVulkanObjectName(VkDevice device, VkObjectType type, const std::string& name, const void* handle)
+void setDebugVulkanObjectName(const VulkanRenderDevice& renderDevice,
+                              VkObjectType type,
+                              const std::string& name,
+                              const void* handle)
 {
 #ifdef DEBUG_MODE
     VkDebugUtilsObjectNameInfoEXT objectNameInfo {
@@ -19,7 +25,7 @@ void setDebugVulkanObjectName(VkDevice device, VkObjectType type, const std::str
         .pObjectName = name.c_str()
     };
 
-    VkResult result = pfnSetDebugUtilsObjectNameEXT(device, &objectNameInfo);
+    VkResult result = pfnSetDebugUtilsObjectNameEXT(renderDevice.device, &objectNameInfo);
     vulkanCheck(result, "Failed to create Vulkan object name.");
 #endif
 }
@@ -57,32 +63,32 @@ void insertDebugLabel(VkCommandBuffer commandBuffer, const char* name)
 #endif
 }
 
-std::optional<uint32_t> findSuitableMemoryType(VkPhysicalDeviceMemoryProperties memoryProperties,
+std::optional<uint32_t> findSuitableMemoryType(const VkPhysicalDeviceMemoryProperties& deviceMemoryProperties,
                                                uint32_t resourceSupportedMemoryTypes,
                                                VkMemoryPropertyFlags desiredMemoryProperties)
 {
-    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i)
+    for (uint32_t i = 0; i < deviceMemoryProperties.memoryTypeCount; ++i)
     {
         if (resourceSupportedMemoryTypes & (1 << i) &&
-            (desiredMemoryProperties & memoryProperties.memoryTypes[i].propertyFlags) == desiredMemoryProperties)
+            (desiredMemoryProperties & deviceMemoryProperties.memoryTypes[i].propertyFlags) == desiredMemoryProperties)
             return i;
     }
 
-    return std::optional<uint32_t>();
+    return std::nullopt;
 }
 
-VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool)
+VkCommandBuffer beginSingleTimeCommands(const VulkanRenderDevice& renderDevice)
 {
     VkCommandBuffer commandBuffer;
 
     VkCommandBufferAllocateInfo commandBufferAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = commandPool,
+        .commandPool = renderDevice.commandPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1
     };
 
-    vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffer);
+    vkAllocateCommandBuffers(renderDevice.device, &commandBufferAllocateInfo, &commandBuffer);
 
     VkCommandBufferBeginInfo commandBufferBeginInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -94,7 +100,7 @@ VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPo
     return commandBuffer;
 }
 
-void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkCommandBuffer commandBuffer, VkQueue queue)
+void endSingleTimeCommands(const VulkanRenderDevice& renderDevice, VkCommandBuffer commandBuffer)
 {
     vkEndCommandBuffer(commandBuffer);
 
@@ -104,49 +110,14 @@ void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkCommand
         .pCommandBuffers = &commandBuffer,
     };
 
-    VkResult result = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    VkResult result = vkQueueSubmit(renderDevice.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
     vulkanCheck(result, "Failed queue submit.");
-    vkQueueWaitIdle(queue);
+    vkQueueWaitIdle(renderDevice.graphicsQueue);
 
-    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+    vkFreeCommandBuffers(renderDevice.device, renderDevice.commandPool, 1, &commandBuffer);
 }
 
-VkDescriptorPool createDescriptorPool(VkDevice device,
-                                      uint32_t imageSamplerCount,
-                                      uint32_t uniformBufferCount,
-                                      uint32_t storageBufferCount,
-                                      uint32_t maxSets)
-{
-    VkDescriptorPool descriptorPool;
-
-    std::array<VkDescriptorPoolSize, 3> descriptorPoolSizes {{
-        descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, imageSamplerCount),
-        descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniformBufferCount),
-        descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, storageBufferCount),
-    }};
-
-    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .maxSets = maxSets,
-            .poolSizeCount = descriptorPoolSizes.size(),
-            .pPoolSizes = descriptorPoolSizes.data()
-    };
-
-    VkResult result = vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, nullptr, &descriptorPool);
-    vulkanCheck(result, "Failed to create descriptor pool.");
-
-    return descriptorPool;
-}
-
-VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count)
-{
-    return {
-            .type = type,
-            .descriptorCount = count
-    };
-}
-
-VkSemaphore createSemaphore(VkDevice device, const char* tag)
+VkSemaphore createSemaphore(const VulkanRenderDevice& renderDevice, const char* tag)
 {
     VkSemaphore semaphore;
 
@@ -156,18 +127,18 @@ VkSemaphore createSemaphore(VkDevice device, const char* tag)
         .flags = 0
     };
 
-    VkResult result = vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &semaphore);
+    VkResult result = vkCreateSemaphore(renderDevice.device, &semaphoreCreateInfo, nullptr, &semaphore);
     vulkanCheck(result, "Failed to create semaphore.");
 
     if (tag)
     {
-        setDebugVulkanObjectName(device, VK_OBJECT_TYPE_SEMAPHORE, tag, semaphore);
+        setDebugVulkanObjectName(renderDevice, VK_OBJECT_TYPE_SEMAPHORE, tag, semaphore);
     }
 
     return semaphore;
 }
 
-VkFence createFence(VkDevice device, bool signaled, const char* tag)
+VkFence createFence(const VulkanRenderDevice& renderDevice, bool signaled, const char* tag)
 {
     VkFence fence;
 
@@ -177,12 +148,12 @@ VkFence createFence(VkDevice device, bool signaled, const char* tag)
         .flags = static_cast<VkFenceCreateFlags>(signaled? VK_FENCE_CREATE_SIGNALED_BIT : 0)
     };
 
-    VkResult result = vkCreateFence(device, &fenceCreateInfo, nullptr, &fence);
+    VkResult result = vkCreateFence(renderDevice.device, &fenceCreateInfo, nullptr, &fence);
     vulkanCheck(result, "Failed to create fence.");
 
     if (tag)
     {
-        setDebugVulkanObjectName(device, VK_OBJECT_TYPE_FENCE, tag, fence);
+        setDebugVulkanObjectName(renderDevice, VK_OBJECT_TYPE_FENCE, tag, fence);
     }
 
     return fence;
@@ -193,7 +164,7 @@ VkSampleCountFlagBits getMaxSampleCount(const VkPhysicalDeviceProperties& physic
     VkSampleCountFlags sampleCounts = physicalDeviceProperties.limits.framebufferColorSampleCounts &
                                       physicalDeviceProperties.limits.framebufferDepthSampleCounts;
 
-    static VkSampleCountFlagBits flags[] {
+    static const VkSampleCountFlagBits flags[] {
         VK_SAMPLE_COUNT_64_BIT,
         VK_SAMPLE_COUNT_32_BIT,
         VK_SAMPLE_COUNT_16_BIT,

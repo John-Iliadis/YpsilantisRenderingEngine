@@ -3,6 +3,7 @@
 //
 
 #include <windows.h>
+#include <vulkan/vulkan.h>
 
 #include <algorithm>
 #include <vector>

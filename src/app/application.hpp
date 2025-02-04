@@ -5,10 +5,9 @@
 #ifndef VULKANRENDERINGENGINE_APPLICATION_HPP
 #define VULKANRENDERINGENGINE_APPLICATION_HPP
 
-#include "window/window.hpp"
-#include "renderer/renderer.hpp"
-#include "vk/include.hpp"
-#include "utils.hpp"
+#include "../window/window.hpp"
+#include "../renderer/renderer.hpp"
+#include "../utils/utils.hpp"
 
 class Application
 {

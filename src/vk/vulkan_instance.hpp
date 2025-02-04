@@ -6,7 +6,6 @@
 #define VULKANRENDERINGENGINE_VULKAN_INSTANCE_HPP
 
 #include <glfw/glfw3.h>
-#include <vulkan/vulkan.h>
 #include "vulkan_function_pointers.hpp"
 #include "vulkan_utils.hpp"
 

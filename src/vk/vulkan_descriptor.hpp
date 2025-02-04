@@ -5,7 +5,6 @@
 #ifndef VULKANRENDERINGENGINE_VULKAN_DESCRIPTOR_HPP
 #define VULKANRENDERINGENGINE_VULKAN_DESCRIPTOR_HPP
 
-#include <vulkan/vulkan.h>
 #include "vulkan_buffer.hpp"
 #include "vulkan_texture.hpp"
 
