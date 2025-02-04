@@ -17,8 +17,8 @@ public:
     VkDebugUtilsMessengerEXT debugMessenger;
 
 public:
-    void create();
-    void destroy();
+    VulkanInstance();
+    ~VulkanInstance();
 
     static VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                                              VkDebugUtilsMessageTypeFlagsEXT type,

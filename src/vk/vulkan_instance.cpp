@@ -4,7 +4,7 @@
 
 #include "vulkan_instance.hpp"
 
-void VulkanInstance::create()
+VulkanInstance::VulkanInstance()
 {
     std::vector<const char*> instanceExtensions {
         "VK_KHR_surface",
@@ -72,7 +72,7 @@ void VulkanInstance::create()
 #endif
 }
 
-void VulkanInstance::destroy()
+VulkanInstance::~VulkanInstance()
 {
 #ifdef DEBUG_MODE
     pfnDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
