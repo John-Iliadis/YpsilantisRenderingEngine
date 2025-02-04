@@ -7,47 +7,35 @@
 
 #include <glm/glm.hpp>
 
-enum class Workflow : uint32_t
+enum class MatTexType
 {
-    Metallic = 1,
-    Specular = 2
-};
-
-enum TextureType
-{
-    None = 0,
-    Albedo,
-    Roughness,
-    Metallic,
+    BaseColor,
+    MetallicRoughness,
     Normal,
-    Displacement,
     Ao,
     Emission,
-    Specular,
-    Count
 };
 
-struct GpuMaterial
+struct Material
 {
-    Workflow workflow;
-    uint32_t albedoMapIndex = 0;
-    uint32_t roughnessMapIndex = 0;
-    uint32_t metallicMapIndex = 0;
-    uint32_t normalMapIndex = 0;
-    uint32_t displacementMapIndex = 0;
-    uint32_t aoMapIndex = 0;
-    uint32_t emissionMapIndex = 0;
-    uint32_t specularMapIndex = 0;
-    glm::vec4 albedoColor = glm::vec4(1.f);
-    glm::vec4 emissionColor = glm::vec4(0.f);
-    glm::vec2 tiling = glm::vec2(1.f);
-    glm::vec2 offset = glm::vec2(0.f);
+    alignas(4) index_t baseColorTexIndex;
+    alignas(4) index_t metallicRoughnessTexIndex;
+    alignas(4) index_t normalTexIndex;
+    alignas(4) index_t aoTexIndex;
+    alignas(4) index_t emissionTexIndex;
+    alignas(16) glm::vec4 baseColorFactor;
+    alignas(16) glm::vec4 emissionFactor;
+    alignas(4) float metallicFactor;
+    alignas(4) float roughnessFactor;
+    alignas(4) float occlusionFactor;
+    alignas(8) glm::vec2 tiling;
+    alignas(8) glm::vec2 offset;
 };
 
-struct NamedMaterial
-{
-    std::string name;
-    GpuMaterial* material;
-};
+inline constexpr index_t DefaultBaseColorTexIndex = 0;
+inline constexpr index_t DefaultMetallicRoughnessTexIndex = 1;
+inline constexpr index_t DefaultNormalTexIndex = 2;
+inline constexpr index_t DefaultAoTexIndex = 3;
+inline constexpr index_t DefaultEmissionTexIndex = 4;
 
 #endif //VULKANRENDERINGENGINE_MATERIAL_HPP
