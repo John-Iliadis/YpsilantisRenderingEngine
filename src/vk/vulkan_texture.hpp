@@ -6,7 +6,6 @@
 #define VULKANRENDERINGENGINE_VULKAN_TEXTURE_HPP
 
 #include <glm/glm.hpp>
-#include <vulkan/vulkan.h>
 #include "vulkan_image.hpp"
 
 enum class TextureWrap
@@ -25,31 +24,38 @@ enum class TextureFilter
     Anisotropic
 };
 
-struct VulkanTexture
+class VulkanTexture
 {
-    VulkanImage image;
+public:
+    VulkanImage vulkanImage;
     VkSampler sampler;
+
+public:
+    VulkanTexture();
+    VulkanTexture(const VulkanRenderDevice& renderDevice,
+                  VkImageViewType viewType,
+                  VkFormat format,
+                  uint32_t width, uint32_t height,
+                  VkImageUsageFlags usage,
+                  VkImageAspectFlags imageAspect,
+                  bool generateMipMaps,
+                  VkSampleCountFlagBits samples,
+                  uint32_t layerCount,
+                  TextureWrap textureWrap,
+                  TextureFilter textureFilter,
+                  VkImageCreateFlags flags = 0);
+    ~VulkanTexture();
+
+    void uploadImageData(const void* data);
+    void generateMipMaps();
+
+private:
+    const VulkanRenderDevice* mRenderDevice;
+
+    TextureWrap mWrapMode;
+    TextureFilter mFilterMode;
 };
 
-VulkanTexture createTexture2D(const VulkanRenderDevice& renderDevice,
-                              uint32_t width, uint32_t height,
-                              VkFormat format,
-                              VkImageUsageFlags usage,
-                              VkImageAspectFlags imageAspect,
-                              TextureWrap wrapMode,
-                              TextureFilter filterMode,
-                              bool enableMipsMaps = false);
-
-void destroyTexture(const VulkanRenderDevice& renderDevice, VulkanTexture& texture);
-
-void uploadTextureData(const VulkanRenderDevice& renderDevice,
-                       VulkanTexture& texture,
-                       const void* data);
-
-void generateMipMaps(const VulkanRenderDevice& renderDevice, const VulkanImage& image);
-
-VkSampler createSampler(const VulkanRenderDevice& renderDevice,
-                        TextureFilter filterMode,
-                        TextureWrap wrapMode);
+VkSampler createSampler(const VulkanRenderDevice& renderDevice, TextureFilter filterMode, TextureWrap wrapMode);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_TEXTURE_HPP

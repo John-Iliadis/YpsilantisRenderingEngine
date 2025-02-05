@@ -17,72 +17,72 @@ static VkDeviceSize formatSize(VkFormat format)
     }
 }
 
-VulkanTexture createTexture2D(const VulkanRenderDevice& renderDevice,
-                              uint32_t width, uint32_t height,
-                              VkFormat format,
-                              VkImageUsageFlags usage,
-                              VkImageAspectFlags imageAspect,
-                              TextureWrap wrapMode,
-                              TextureFilter filterMode,
-                              bool enableMipsMaps)
+VulkanTexture::VulkanTexture()
+    : vulkanImage()
+    , sampler()
+    , mRenderDevice()
 {
-    VulkanTexture texture;
-
-    uint32_t mipLevels = 1;
-    if (enableMipsMaps)
-        mipLevels = static_cast<uint32_t>(glm::floor(glm::log2((float)glm::max(width, height)))) + 1;
-
-    texture.image = createImage2D(renderDevice,
-                                  format,
-                                  width, height,
-                                  usage,
-                                  imageAspect,
-                                  mipLevels);
-    texture.sampler = createSampler(renderDevice, filterMode, wrapMode);
-
-    return texture;
 }
 
-void destroyTexture(const VulkanRenderDevice& renderDevice, VulkanTexture& texture)
+VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice,
+                             VkImageViewType viewType,
+                             VkFormat format,
+                             uint32_t width, uint32_t height,
+                             VkImageUsageFlags usage,
+                             VkImageAspectFlags imageAspect,
+                             bool generateMipMaps,
+                             VkSampleCountFlagBits samples,
+                             uint32_t layerCount,
+                             TextureWrap textureWrap,
+                             TextureFilter textureFilter,
+                             VkImageCreateFlags flags)
+    : vulkanImage(renderDevice,
+                  viewType,
+                  format,
+                  width, height,
+                  usage,
+                  imageAspect,
+                  generateMipMaps? calculateMipLevels(width, height) : 1,
+                  samples,
+                  layerCount,
+                  flags)
+    , sampler(createSampler(renderDevice, textureFilter, textureWrap))
+    , mRenderDevice(&renderDevice)
+    , mFilterMode(textureFilter)
+    , mWrapMode(textureWrap)
 {
-    destroyImage(renderDevice, texture.image);
-    vkDestroySampler(renderDevice.device, texture.sampler, nullptr);
 }
 
-void uploadTextureData(const VulkanRenderDevice& renderDevice,
-                       VulkanTexture& texture,
-                       const void* data)
+VulkanTexture::~VulkanTexture()
 {
-    assert(texture.image.layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    VkDeviceSize size = texture.image.width * texture.image.height * formatSize(texture.image.format);
-
-    VulkanBuffer stagingBuffer = createBuffer(renderDevice,
-                                              size,
-                                              VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    mapBufferMemory(renderDevice, stagingBuffer, 0, size, data);
-
-    copyBufferToImage(renderDevice, stagingBuffer, texture.image);
-
-    destroyBuffer(renderDevice, stagingBuffer);
+    vkDestroySampler(mRenderDevice->device, sampler, nullptr);
 }
 
-void generateMipMaps(const VulkanRenderDevice& renderDevice, const VulkanImage& image)
+void VulkanTexture::uploadImageData(const void *data)
 {
-    assert(image.layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    assert(vulkanImage.layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice.device, renderDevice.commandPool);
+    VkDeviceSize size = vulkanImage.width * vulkanImage.height * formatSize(vulkanImage.format);
 
-    int32_t mipWidth = image.width;
-    int32_t mipHeight = image.height;
+    VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
+
+    vulkanImage.copyBuffer(stagingBuffer);
+}
+
+void VulkanTexture::generateMipMaps()
+{
+    assert(vulkanImage.layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
+
+    int32_t mipWidth = vulkanImage.width;
+    int32_t mipHeight = vulkanImage.height;
 
     VkImageMemoryBarrier imageMemoryBarrier {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .image = image.image,
+        .image = vulkanImage.image,
         .subresourceRange {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .aspectMask = vulkanImage.imageAspect,
             .baseMipLevel = 0,
             .levelCount = 1,
             .baseArrayLayer = 0,
@@ -90,7 +90,7 @@ void generateMipMaps(const VulkanRenderDevice& renderDevice, const VulkanImage& 
         }
     };
 
-    for (uint32_t i = 0; i < image.mipLevels - 1; ++i)
+    for (uint32_t i = 0; i < vulkanImage.mipLevels - 1; ++i)
     {
         // transition mip i + 1 to transfer dst layout
         imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -132,8 +132,8 @@ void generateMipMaps(const VulkanRenderDevice& renderDevice, const VulkanImage& 
         mipHeight /= 2;
 
         vkCmdBlitImage(commandBuffer,
-                       image.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                       vulkanImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       vulkanImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                        1, &blitRegion,
                        VK_FILTER_LINEAR);
 
@@ -150,7 +150,12 @@ void generateMipMaps(const VulkanRenderDevice& renderDevice, const VulkanImage& 
                              1, &imageMemoryBarrier);
     }
 
-    endSingleTimeCommands(renderDevice.device, renderDevice.commandPool, commandBuffer, renderDevice.graphicsQueue);
+    endSingleTimeCommands(*mRenderDevice, commandBuffer);
+}
+
+uint32_t calculateMipLevels(uint32_t width, uint32_t height)
+{
+    return static_cast<uint32_t>(glm::floor(glm::log2((float)glm::max(width, height)))) + 1;
 }
 
 VkSampler createSampler(const VulkanRenderDevice& renderDevice,
@@ -183,7 +188,7 @@ VkSampler createSampler(const VulkanRenderDevice& renderDevice,
             filter = VK_FILTER_LINEAR;
             mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
             anisotropyEnable = VK_TRUE;
-            maxAnisotropy = glm::max(16.f, renderDevice.properties.limits.maxSamplerAnisotropy);
+            maxAnisotropy = glm::max(16.f, renderDevice.getDeviceProperties().limits.maxSamplerAnisotropy);
             break;
     }
 
