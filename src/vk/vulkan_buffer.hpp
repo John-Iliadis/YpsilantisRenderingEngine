@@ -5,44 +5,74 @@
 #ifndef VULKANRENDERINGENGINE_VULKAN_BUFFER_HPP
 #define VULKANRENDERINGENGINE_VULKAN_BUFFER_HPP
 
-#include <vulkan/vulkan.h>
 #include "vulkan_render_device.hpp"
 
-struct VulkanBuffer
+enum BufferType
 {
-    VkBuffer buffer;
-    VkDeviceMemory memory;
-    VkDeviceSize size;
+    Vertex,
+    Index,
+    Uniform,
+    Storage,
+    Staging
 };
 
-struct IndexBuffer
+enum class MemoryType
 {
-    VulkanBuffer buffer;
-    uint32_t count;
+    CPU,
+    GPU
 };
 
-VulkanBuffer createBuffer(const VulkanRenderDevice& renderDevice,
-                          VkDeviceSize size,
-                          VkBufferUsageFlags usage,
-                          VkMemoryPropertyFlags memoryProperties);
+VkBufferUsageFlags toVkFlags(BufferType bufferType);
+VkMemoryPropertyFlags toVkFlags(MemoryType memoryType);
 
-VulkanBuffer createBufferWithStaging(const VulkanRenderDevice& renderDevice,
-                                     VkDeviceSize size,
-                                     VkBufferUsageFlags usage,
-                                     VkMemoryPropertyFlags memoryProperties,
-                                     const void* bufferData);
+class VulkanBuffer
+{
+public:
+    VulkanBuffer();
+    VulkanBuffer(const VulkanRenderDevice& renderDevice,
+                 VkDeviceSize size,
+                 BufferType bufferType,
+                 MemoryType memoryType);
+    VulkanBuffer(const VulkanRenderDevice& renderDevice,
+                 VkDeviceSize size,
+                 BufferType bufferType,
+                 MemoryType memoryType,
+                 const void* bufferData);
+    ~VulkanBuffer();
 
-void destroyBuffer(const VulkanRenderDevice& renderDevice, VulkanBuffer& buffer);
+    VulkanBuffer(const VulkanBuffer&) = delete;
+    VulkanBuffer& operator=(const VulkanBuffer&) = delete;
 
-void mapBufferMemory(const VulkanRenderDevice& renderDevice,
-                     VulkanBuffer& buffer,
-                     VkDeviceSize offset,
-                     VkDeviceSize size,
-                     const void* data);
+    VulkanBuffer(VulkanBuffer&& other) noexcept;
+    VulkanBuffer& operator=(VulkanBuffer&& other) noexcept;
 
-void copyBuffer(const VulkanRenderDevice& renderDevice,
-                VulkanBuffer& srcBuffer,
-                VulkanBuffer& dstBuffer,
-                VkDeviceSize size);
+    void mapBufferMemory(VkDeviceSize offset, VkDeviceSize size, const void* data);
+    void copyBuffer(const VulkanBuffer& other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size);
+    void swap(VulkanBuffer& other) noexcept;
+    void setDebugName(const std::string& debugName);
+
+    VkBuffer getBuffer() const;
+    VkDeviceMemory getMemory() const;
+    VkDeviceSize getSize() const;
+    BufferType getBufferType() const;
+    MemoryType getMemoryType() const;
+
+private:
+    VkBuffer createBuffer(BufferType type);
+    VkDeviceMemory allocateBufferMemory(MemoryType type, VkBuffer buffer);
+    void destroy();
+
+private:
+    const VulkanRenderDevice* mRenderDevice;
+
+    VkBuffer mBuffer;
+    VkDeviceMemory mMemory;
+    VkDeviceSize mSize;
+
+    BufferType mType;
+    MemoryType mMemoryType;
+};
+
+uint32_t getIndexCount(const VulkanBuffer& buffer);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_BUFFER_HPP
