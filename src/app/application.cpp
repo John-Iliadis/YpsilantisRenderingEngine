@@ -9,19 +9,17 @@ static constexpr int sInitialWindowHeight = 1080;
 
 Application::Application()
     : mWindow(sInitialWindowWidth, sInitialWindowHeight)
+    , mInstance()
+    , mRenderDevice(std::make_shared<VulkanRenderDevice>(mInstance))
+    , mSwapchain(mInstance, *mRenderDevice)
+    , mRenderer(std::make_shared<Renderer>())
+    , mResourceManager(std::make_shared<ResourceManager>())
+    , mEditor(mRenderer, mResourceManager)
 {
-    mInstance.create();
-    mRenderDevice.create(mInstance);
-    mSwapchain.create(mWindow, mInstance, mRenderDevice);
-    mRenderer.init(mWindow, mInstance, mRenderDevice, mSwapchain);
 }
 
 Application::~Application()
 {
-    mRenderer.terminate();
-    mSwapchain.destroy(mInstance, mRenderDevice);
-    mRenderDevice.destroy();
-    mInstance.destroy();
 }
 
 void Application::run()
@@ -38,7 +36,7 @@ void Application::run()
         render();
     }
 
-    vkDeviceWaitIdle(mRenderDevice.device);
+    vkDeviceWaitIdle(mRenderDevice->device);
 }
 
 void Application::recreateSwapchain()
@@ -46,10 +44,9 @@ void Application::recreateSwapchain()
     while (mWindow.width() == 0 || mWindow.height() == 0)
         mWindow.waitEvents();
 
-    vkDeviceWaitIdle(mRenderDevice.device);
+    vkDeviceWaitIdle(mRenderDevice->device);
 
-    mSwapchain.recreate(mRenderDevice);
-    mRenderer.onSwapchainRecreate();
+    mSwapchain.recreate();
 }
 
 void Application::handleEvents()
@@ -57,16 +54,19 @@ void Application::handleEvents()
     mWindow.pollEvents();
 
     for (const Event& event : mWindow.events())
-        mRenderer.handleEvent(event);
+    {
+    }
 }
 
 void Application::update(float dt)
 {
+    mResourceManager->processMainThreadTasks();
+    mEditor.update(dt);
+
     countFPS(dt);
-    mRenderer.update(dt);
 }
 
-void Application::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t frameIndex, uint32_t swapchainImageIndex)
+void Application::fillCommandBuffer(VkCommandBuffer commandBuffer)
 {
     VkCommandBufferBeginInfo commandBufferBeginInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -77,23 +77,21 @@ void Application::fillCommandBuffer(VkCommandBuffer commandBuffer, uint32_t fram
     VkResult result = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
     vulkanCheck(result, "Failed to begin command buffer.");
 
-    mRenderer.fillCommandBuffer(commandBuffer, frameIndex, swapchainImageIndex);
+     mEditor.fillCommandBuffer(commandBuffer);
 
     vkEndCommandBuffer(commandBuffer);
 }
 
 void Application::render()
 {
-    static uint32_t currentFrame = 0;
-
-    vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFence.at(currentFrame), VK_TRUE, UINT64_MAX);
-    vkResetFences(mRenderDevice.device, 1, &mSwapchain.inFlightFence.at(currentFrame));
+    vkWaitForFences(mRenderDevice->device, 1, &mSwapchain.inFlightFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(mRenderDevice->device, 1, &mSwapchain.inFlightFence);
 
     uint32_t swapchainImageIndex;
-    VkResult result = vkAcquireNextImageKHR(mRenderDevice.device,
+    VkResult result = vkAcquireNextImageKHR(mRenderDevice->device,
                                             mSwapchain.swapchain,
                                            UINT64_MAX,
-                                           mSwapchain.imageReadySemaphore.at(currentFrame),
+                                           mSwapchain.imageReadySemaphore,
                                            VK_NULL_HANDLE,
                                            &swapchainImageIndex);
 
@@ -103,41 +101,37 @@ void Application::render()
         return;
     }
 
-    fillCommandBuffer(mSwapchain.commandBuffer.at(currentFrame), currentFrame, swapchainImageIndex);
+    fillCommandBuffer(mSwapchain.commandBuffer);
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submitInfo {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &mSwapchain.imageReadySemaphore.at(currentFrame),
+        .pWaitSemaphores = &mSwapchain.imageReadySemaphore,
         .pWaitDstStageMask = &waitStage,
         .commandBufferCount = 1,
-        .pCommandBuffers = &mSwapchain.commandBuffer.at(currentFrame),
+        .pCommandBuffers = &mSwapchain.commandBuffer,
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &mSwapchain.renderCompleteSemaphore.at(currentFrame)
+        .pSignalSemaphores = &mSwapchain.renderCompleteSemaphore
     };
 
-    result = vkQueueSubmit(mRenderDevice.graphicsQueue,
-                           1, &submitInfo,
-                           mSwapchain.inFlightFence.at(currentFrame));
+    result = vkQueueSubmit(mRenderDevice->graphicsQueue, 1, &submitInfo, mSwapchain.inFlightFence);
     vulkanCheck(result, "Failed queue submit.");
 
     VkPresentInfoKHR presentInfo {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &mSwapchain.renderCompleteSemaphore.at(currentFrame),
+        .pWaitSemaphores = &mSwapchain.renderCompleteSemaphore,
         .swapchainCount = 1,
         .pSwapchains = &mSwapchain.swapchain,
         .pImageIndices = &swapchainImageIndex,
         .pResults = nullptr
     };
 
-    result = vkQueuePresentKHR(mRenderDevice.graphicsQueue, &presentInfo);
+    result = vkQueuePresentKHR(mRenderDevice->graphicsQueue, &presentInfo);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         recreateSwapchain();
-
-    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void Application::countFPS(float dt)
