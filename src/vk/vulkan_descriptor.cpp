@@ -4,19 +4,62 @@
 
 #include "vulkan_descriptor.hpp"
 
+VkDescriptorPool createDescriptorPool(VkDevice device,
+                                      uint32_t imageSamplerCount,
+                                      uint32_t uniformBufferCount,
+                                      uint32_t storageBufferCount,
+                                      uint32_t maxSets)
+{
+    VkDescriptorPool descriptorPool;
+
+    std::array<VkDescriptorPoolSize, 3> descriptorPoolSizes {{
+        descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, imageSamplerCount),
+        descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniformBufferCount),
+        descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, storageBufferCount),
+    }};
+
+    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = maxSets,
+        .poolSizeCount = descriptorPoolSizes.size(),
+        .pPoolSizes = descriptorPoolSizes.data()
+    };
+
+    VkResult result = vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, nullptr, &descriptorPool);
+    vulkanCheck(result, "Failed to create descriptor pool.");
+
+    return descriptorPool;
+}
+
+VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count)
+{
+    return {
+        .type = type,
+        .descriptorCount = count
+    };
+}
+
+// -- DescriptorSetLayoutBuilder -- //
+
 DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder()
-    : mDevice()
+    : mRenderDevice()
 {
 }
 
-void DescriptorSetLayoutBuilder::init(VkDevice device)
+DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder(const VulkanRenderDevice &renderDevice)
+    : mRenderDevice(&renderDevice)
 {
-    mDevice = device;
 }
 
 DescriptorSetLayoutBuilder& DescriptorSetLayoutBuilder::addLayoutBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages)
 {
     mLayoutBindings.emplace_back(binding, type, 1, stages);
+    return *this;
+}
+
+DescriptorSetLayoutBuilder &DescriptorSetLayoutBuilder::setDebugName(const std::string &name)
+{
+    mDebugName = name;
     return *this;
 }
 
@@ -30,7 +73,7 @@ VkDescriptorSetLayout DescriptorSetLayoutBuilder::create()
         .pBindings = mLayoutBindings.data()
     };
 
-    VkResult result = vkCreateDescriptorSetLayout(mDevice,
+    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice->device,
                                                   &descriptorSetLayoutCreateInfo,
                                                   nullptr,
                                                   &descriptorSetLayout);
@@ -38,7 +81,7 @@ VkDescriptorSetLayout DescriptorSetLayoutBuilder::create()
 
     if (!mDebugName.empty())
     {
-        setDebugVulkanObjectName(mDevice,
+        setVulkanObjectDebugName(*mRenderDevice,
                                  VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
                                  mDebugName,
                                  descriptorSetLayout);
@@ -49,23 +92,18 @@ VkDescriptorSetLayout DescriptorSetLayoutBuilder::create()
     return descriptorSetLayout;
 }
 
-DescriptorSetLayoutBuilder &DescriptorSetLayoutBuilder::setDebugName(const std::string &name)
-{
-    mDebugName = name;
-    return *this;
-}
+// -- DescriptorSetBuilder -- //
 
 DescriptorSetBuilder::DescriptorSetBuilder()
-    : mDevice()
-    , mDescriptorPool()
+    : mRenderDevice()
     , mDescriptorSetLayout()
 {
 }
 
-void DescriptorSetBuilder::init(VkDevice device, VkDescriptorPool descriptorPool)
+DescriptorSetBuilder::DescriptorSetBuilder(const VulkanRenderDevice &renderDevice)
+    : mRenderDevice(&renderDevice)
+    , mDescriptorSetLayout()
 {
-    mDevice = device;
-    mDescriptorPool = descriptorPool;
 }
 
 DescriptorSetBuilder& DescriptorSetBuilder::setLayout(VkDescriptorSetLayout layout)
@@ -98,15 +136,15 @@ VkDescriptorSet DescriptorSetBuilder::create()
 
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mDescriptorPool,
+        .descriptorPool = mRenderDevice->descriptorPool,
         .descriptorSetCount = 1,
         .pSetLayouts = &mDescriptorSetLayout
     };
 
-    VkResult result = vkAllocateDescriptorSets(mDevice, &descriptorSetAllocateInfo, &descriptorSet);
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice->device, &descriptorSetAllocateInfo, &descriptorSet);
     vulkanCheck(result, "Failed to allocate descriptor set.");
 
-    // writes
+    // descriptor writes
     std::vector<VkWriteDescriptorSet> descriptorWrites;
 
     for (uint32_t i = 0; i < mBufferInfos.size(); ++i)
@@ -134,7 +172,7 @@ VkDescriptorSet DescriptorSetBuilder::create()
     {
         VkDescriptorImageInfo imageInfo {
             .sampler = mTextureInfos.at(i).texture.sampler,
-            .imageView = mTextureInfos.at(i).texture.image.imageView,
+            .imageView = mTextureInfos.at(i).texture.vulkanImage.imageView,
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         };
 
@@ -151,11 +189,11 @@ VkDescriptorSet DescriptorSetBuilder::create()
         descriptorWrites.push_back(writeDescriptorSet);
     }
 
-    vkUpdateDescriptorSets(mDevice, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+    vkUpdateDescriptorSets(mRenderDevice->device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 
     if (!mDebugName.empty())
     {
-        setDebugVulkanObjectName(mDevice,
+        setVulkanObjectDebugName(*mRenderDevice,
                                  VK_OBJECT_TYPE_DESCRIPTOR_SET,
                                  mDebugName,
                                  descriptorSet);
