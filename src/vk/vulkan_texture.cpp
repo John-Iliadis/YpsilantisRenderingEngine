@@ -153,6 +153,12 @@ void VulkanTexture::generateMipMaps()
     endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 
+void VulkanTexture::setDebugName(const std::string &debugName)
+{
+    vulkanImage.setDebugName(debugName);
+    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_SAMPLER, debugName, sampler);
+}
+
 uint32_t calculateMipLevels(uint32_t width, uint32_t height)
 {
     return static_cast<uint32_t>(glm::floor(glm::log2((float)glm::max(width, height)))) + 1;

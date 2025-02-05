@@ -96,6 +96,13 @@ void InstancedMesh::removeInstance(uint32_t instanceID)
     --mInstanceCount;
 }
 
+void InstancedMesh::setDebugName(const std::string &debugName)
+{
+    mVertexBuffer.setDebugName(debugName);
+    mIndexBuffer.setDebugName(debugName);
+    mIndexBuffer.setDebugName(debugName);
+}
+
 void InstancedMesh::render(VkCommandBuffer commandBuffer)
 {
     if (mInstanceCount == 0)

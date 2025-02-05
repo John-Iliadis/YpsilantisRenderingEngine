@@ -17,6 +17,8 @@ HWND getHWND();
 
 std::filesystem::path fileDialog(const std::string& filter);
 
+std::string fileExtension(const std::filesystem::path& path);
+
 struct cStrHash
 {
     size_t operator()(const char* str) const

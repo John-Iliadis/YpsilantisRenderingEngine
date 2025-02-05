@@ -41,3 +41,12 @@ std::filesystem::path fileDialog(const std::string& filter)
         return filename;
     return {};
 }
+
+std::string fileExtension(const std::filesystem::path& path)
+{
+    std::string extension = path.extension().string();
+
+    std::transform(extension.begin(), extension.end(), extension.begin(), tolower);
+
+    return extension;
+}

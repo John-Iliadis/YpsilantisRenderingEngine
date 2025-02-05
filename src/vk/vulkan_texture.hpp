@@ -48,6 +48,7 @@ public:
 
     void uploadImageData(const void* data);
     void generateMipMaps();
+    void setDebugName(const std::string& debugName);
 
 private:
     const VulkanRenderDevice* mRenderDevice;
