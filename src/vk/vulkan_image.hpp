@@ -5,80 +5,58 @@
 #ifndef VULKANRENDERINGENGINE_VULKAN_IMAGE_HPP
 #define VULKANRENDERINGENGINE_VULKAN_IMAGE_HPP
 
-#include <vulkan/vulkan.h>
 #include "vulkan_render_device.hpp"
 #include "vulkan_utils.hpp"
 #include "vulkan_buffer.hpp"
 
-struct VulkanImage
+class VulkanImage
 {
+public:
     VkImage image;
     VkImageView imageView;
     VkDeviceMemory memory;
 
     uint32_t width;
     uint32_t height;
+    uint32_t mipLevels;
+    uint32_t layerCount;
 
     VkFormat format;
     VkImageLayout layout;
-    uint32_t mipLevels;
+    VkImageAspectFlags imageAspect;
+
+public:
+    VulkanImage();
+    VulkanImage(const VulkanRenderDevice& renderDevice,
+                VkImageViewType viewType,
+                VkFormat format,
+                uint32_t width, uint32_t height,
+                VkImageUsageFlags usage,
+                VkImageAspectFlags imageAspect,
+                uint32_t mipLevels = 1,
+                VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT,
+                uint32_t layerCount = 1,
+                VkImageCreateFlags flags = 0);
+    ~VulkanImage();
+
+    VulkanImage(const VulkanImage&) = delete;
+    VulkanImage& operator=(const VulkanImage&) = delete;
+
+    VulkanImage(VulkanImage&& other) noexcept;
+    VulkanImage& operator=(VulkanImage&& other) noexcept;
+
+    void transitionLayout(VkImageLayout newLayout);
+    void copyBuffer(const VulkanBuffer& buffer);
+    void setDebugName(const std::string& debugName);
+    void resolveImage(const VulkanImage& multisampledImage);
+    void swap(VulkanImage& other) noexcept;
+
+private:
+    void createImageView(VkImageViewType viewType, VkImageAspectFlags aspectMask);
+    void destroy();
+
+private:
+    const VulkanRenderDevice* mRenderDevice;
 };
-
-VulkanImage createImage(const VulkanRenderDevice& renderDevice,
-                        VkImageViewType viewType,
-                        VkFormat format,
-                        uint32_t width, uint32_t height,
-                        VkImageUsageFlags usage,
-                        VkImageAspectFlags aspectMask,
-                        uint32_t mipLevels = 1,
-                        VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT,
-                        uint32_t layerCount = 1,
-                        VkImageCreateFlags flags = 0);
-
-VulkanImage createImage2D(const VulkanRenderDevice& renderDevice,
-                          VkFormat format,
-                          uint32_t width, uint32_t height,
-                          VkImageUsageFlags usage,
-                          VkImageAspectFlags aspectMask,
-                          uint32_t mipLevels = 1,
-                          VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
-
-VulkanImage createImageCube(const VulkanRenderDevice& renderDevice,
-                            VkFormat format,
-                            uint32_t width, uint32_t height,
-                            VkImageUsageFlags usage,
-                            VkImageAspectFlags aspectMask,
-                            uint32_t mipLevels = 1,
-                            VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT);
-
-void destroyImage(const VulkanRenderDevice& renderDevice, VulkanImage& image);
-
-VkImageView createImageView(const VulkanRenderDevice& renderDevice,
-                            VkImage image,
-                            VkImageViewType viewType,
-                            VkFormat format,
-                            VkImageAspectFlags aspectFlags,
-                            uint32_t mipLevels = 1,
-                            uint32_t layerCount = 1);
-
-void transitionImageLayout(const VulkanRenderDevice& renderDevice,
-                           VulkanImage& image,
-                           VkImageLayout newLayout,
-                           uint32_t layerCount = 1);
-
-void copyBufferToImage(const VulkanRenderDevice& renderDevice,
-                       const VulkanBuffer& buffer,
-                       const VulkanImage& image);
-
-void resolveImage(const VulkanRenderDevice& renderDevice,
-                  VkImage srcImage,
-                  VkImage dstImage,
-                  VkImageAspectFlags aspectMask,
-                  uint32_t width, uint32_t height);
-
-void setImageDebugName(const VulkanRenderDevice& renderDevice,
-                       const VulkanImage& image,
-                       const char* name,
-                       std::optional<uint32_t> index = {});
 
 #endif //VULKANRENDERINGENGINE_VULKAN_IMAGE_HPP
