@@ -40,23 +40,23 @@ VkBufferUsageFlags toVkFlags(BufferType bufferType)
 {
     switch (bufferType)
     {
-        case Vertex: return
+        case BufferType::Vertex: return
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                 VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        case Index: return
+        case BufferType::Index: return
                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                 VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        case Uniform: return
+        case BufferType::Uniform: return
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                 VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        case Storage: return
+        case BufferType::Storage: return
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                 VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        case Staging: return
+        case BufferType::Staging: return
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                 VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     }
@@ -153,6 +153,12 @@ void VulkanBuffer::mapBufferMemory(VkDeviceSize offset, VkDeviceSize size, const
     ::mapBufferMemory(mRenderDevice, mMemory, offset, size, data);
 }
 
+void VulkanBuffer::update(VkDeviceSize offset, VkDeviceSize size, const void *data)
+{
+    VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
+    copyBuffer(stagingBuffer, offset, 0, size);
+}
+
 void VulkanBuffer::copyBuffer(const VulkanBuffer &other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size)
 {
     ::copyBuffer(mRenderDevice, other.mBuffer, mBuffer, srcOffset, dstOffset, size);
@@ -164,6 +170,8 @@ void VulkanBuffer::swap(VulkanBuffer &other) noexcept
     std::swap(mBuffer, other.mBuffer);
     std::swap(mMemory, other.mMemory);
     std::swap(mSize, other.mSize);
+    std::swap(mType, other.mType);
+    std::swap(mMemoryType, other.mMemoryType);
 }
 
 VkBuffer VulkanBuffer::createBuffer(BufferType type)

@@ -151,7 +151,7 @@ void VulkanRenderDevice::createDescriptorPool()
 {
     descriptorPool = ::createDescriptorPool(device, 1000, 100, 100, 100);
 
-    setDebugVulkanObjectName(*this,
+    setVulkanObjectDebugName(*this,
                              VK_OBJECT_TYPE_DESCRIPTOR_POOL,
                              "VulkanRenderDevice::mDescriptorPool",
                              descriptorPool);

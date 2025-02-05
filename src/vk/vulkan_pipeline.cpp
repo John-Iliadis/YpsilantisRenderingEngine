@@ -27,7 +27,7 @@ VulkanShaderModule::VulkanShaderModule(const VulkanRenderDevice& renderDevice, c
     VkResult result = vkCreateShaderModule(mRenderDevice.device, &shaderModuleCreateInfo, nullptr, &mShaderModule);
     vulkanCheck(result, "Failed to create shader module.");
 
-    setDebugVulkanObjectName(mRenderDevice,
+    setVulkanObjectDebugName(mRenderDevice,
                              VK_OBJECT_TYPE_SHADER_MODULE,
                              path,
                              mShaderModule);

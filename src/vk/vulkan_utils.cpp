@@ -12,7 +12,7 @@ void vulkanCheck(VkResult result, const char* msg, std::source_location location
     check(result == VK_SUCCESS, msg, location);
 }
 
-void setDebugVulkanObjectName(const VulkanRenderDevice& renderDevice,
+void setVulkanObjectDebugName(const VulkanRenderDevice& renderDevice,
                               VkObjectType type,
                               const std::string& name,
                               const void* handle)
@@ -132,7 +132,7 @@ VkSemaphore createSemaphore(const VulkanRenderDevice& renderDevice, const char* 
 
     if (tag)
     {
-        setDebugVulkanObjectName(renderDevice, VK_OBJECT_TYPE_SEMAPHORE, tag, semaphore);
+        setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_SEMAPHORE, tag, semaphore);
     }
 
     return semaphore;
@@ -153,7 +153,7 @@ VkFence createFence(const VulkanRenderDevice& renderDevice, bool signaled, const
 
     if (tag)
     {
-        setDebugVulkanObjectName(renderDevice, VK_OBJECT_TYPE_FENCE, tag, fence);
+        setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_FENCE, tag, fence);
     }
 
     return fence;

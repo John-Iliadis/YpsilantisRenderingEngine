@@ -6,10 +6,10 @@
 #define VULKANRENDERINGENGINE_VULKAN_SWAPCHAIN_HPP
 
 #include <glm/glm.hpp>
-#include "../window/window.hpp"
 #include "vulkan_render_device.hpp"
 #include "vulkan_image.hpp"
 #include "vulkan_utils.hpp"
+#include "../utils/utils.hpp"
 
 class VulkanSwapchain
 {
@@ -22,10 +22,11 @@ public:
     VkSemaphore imageReadySemaphore;
     VkSemaphore renderCompleteSemaphore;
 
-    std::vector<VulkanImage> images;
+    std::vector<VkImage> images;
+    std::vector<VkImageView> imageViews;
 
 public:
-    VulkanSwapchain(const Window& window, const VulkanInstance& instance, const VulkanRenderDevice& renderDevice);
+    VulkanSwapchain(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice);
     ~VulkanSwapchain();
 
     void recreate();
@@ -35,7 +36,7 @@ public:
     uint32_t getImageCount() const;
 
 private:
-    void createSurface(const Window& window);
+    void createSurface();
     void createSwapchain();
     void createSwapchainImages();
     void createCommandBuffers();

@@ -52,11 +52,18 @@ public:
     void swap(VulkanImage& other) noexcept;
 
 private:
-    void createImageView(VkImageViewType viewType, VkImageAspectFlags aspectMask);
     void destroy();
 
 private:
     const VulkanRenderDevice* mRenderDevice;
 };
+
+VkImageView createImageView(const VulkanRenderDevice& renderDevice,
+                            VkImage image,
+                            VkImageViewType imageViewType,
+                            VkFormat format,
+                            VkImageAspectFlags aspectFlags,
+                            uint32_t mipLevels = 1,
+                            uint32_t layerCount = 1);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_IMAGE_HPP

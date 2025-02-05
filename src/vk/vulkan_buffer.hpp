@@ -7,7 +7,7 @@
 
 #include "vulkan_render_device.hpp"
 
-enum BufferType
+enum class BufferType
 {
     Vertex,
     Index,
@@ -47,6 +47,7 @@ public:
     VulkanBuffer& operator=(VulkanBuffer&& other) noexcept;
 
     void mapBufferMemory(VkDeviceSize offset, VkDeviceSize size, const void* data);
+    void update(VkDeviceSize offset, VkDeviceSize size, const void* data);
     void copyBuffer(const VulkanBuffer& other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size);
     void swap(VulkanBuffer& other) noexcept;
     void setDebugName(const std::string& debugName);

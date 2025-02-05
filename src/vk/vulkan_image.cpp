@@ -85,7 +85,7 @@ VulkanImage::VulkanImage(const VulkanRenderDevice &renderDevice,
     vkBindImageMemory(renderDevice.device, image, memory, 0);
 
     // create image view
-    createImageView(viewType, imageAspect);
+    imageView = createImageView(*mRenderDevice, image, viewType, format, imageAspect, mipLevels, layerCount);
 }
 
 VulkanImage::~VulkanImage()
@@ -137,27 +137,6 @@ void VulkanImage::destroy()
 
     format = VK_FORMAT_UNDEFINED;
     layout = VK_IMAGE_LAYOUT_UNDEFINED;
-}
-
-void VulkanImage::createImageView(VkImageViewType viewType, VkImageAspectFlags aspectMask)
-{
-    VkImageViewCreateInfo imageViewCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = image,
-        .viewType = viewType,
-        .format = format,
-        .components = {},
-        .subresourceRange {
-            .aspectMask = aspectMask,
-            .baseMipLevel = 0,
-            .levelCount = mipLevels,
-            .baseArrayLayer = 0,
-            .layerCount = layerCount
-        }
-    };
-
-    VkResult result = vkCreateImageView(mRenderDevice->device, &imageViewCreateInfo, nullptr, &imageView);
-    vulkanCheck(result, "Failed to create image view.");
 }
 
 void VulkanImage::transitionLayout(VkImageLayout newLayout)
@@ -310,4 +289,35 @@ void VulkanImage::resolveImage(const VulkanImage &multisampledImage)
                       1, &resolve);
 
     endSingleTimeCommands(*mRenderDevice, commandBuffer);
+}
+
+VkImageView createImageView(const VulkanRenderDevice& renderDevice,
+                            VkImage image,
+                            VkImageViewType imageViewType,
+                            VkFormat format,
+                            VkImageAspectFlags aspectFlags,
+                            uint32_t mipLevels,
+                            uint32_t layerCount)
+{
+    VkImageView imageView;
+
+    VkImageViewCreateInfo imageViewCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image,
+        .viewType = imageViewType,
+        .format = format,
+        .components = {},
+        .subresourceRange {
+            .aspectMask = aspectFlags,
+            .baseMipLevel = 0,
+            .levelCount = mipLevels,
+            .baseArrayLayer = 0,
+            .layerCount = layerCount
+        }
+    };
+
+    VkResult result = vkCreateImageView(renderDevice.device, &imageViewCreateInfo, nullptr, &imageView);
+    vulkanCheck(result, "Failed to create image view.");
+
+    return imageView;
 }

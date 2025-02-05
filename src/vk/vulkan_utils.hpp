@@ -9,7 +9,7 @@ class VulkanRenderDevice;
 
 void vulkanCheck(VkResult result, const char* msg, std::source_location location = std::source_location::current());
 
-void setDebugVulkanObjectName(const VulkanRenderDevice& renderDevice,
+void setVulkanObjectDebugName(const VulkanRenderDevice& renderDevice,
                               VkObjectType type,
                               const std::string& name,
                               const void* handle);

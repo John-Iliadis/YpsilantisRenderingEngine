@@ -4,13 +4,11 @@
 
 #include "vulkan_swapchain.hpp"
 
-VulkanSwapchain::VulkanSwapchain(const Window &window,
-                                 const VulkanInstance &instance,
-                                 const VulkanRenderDevice &renderDevice)
+VulkanSwapchain::VulkanSwapchain(const VulkanInstance &instance, const VulkanRenderDevice &renderDevice)
     : mInstance(instance)
     , mRenderDevice(renderDevice)
 {
-    createSurface(window);
+    createSurface();
     createSwapchain();
     createSwapchainImages();
     createCommandBuffers();
@@ -25,7 +23,7 @@ VulkanSwapchain::~VulkanSwapchain()
 
     for (size_t i = 0; i < mImageCount; ++i)
     {
-        vkDestroyImageView(mRenderDevice.device, images.at(i).imageView, nullptr);
+        vkDestroyImageView(mRenderDevice.device, imageViews.at(i), nullptr);
     }
 
     vkDestroySwapchainKHR(mRenderDevice.device, swapchain, nullptr);
@@ -36,7 +34,7 @@ void VulkanSwapchain::recreate()
 {
     // swapchain
     for (size_t i = 0; i < mImageCount; ++i)
-        vkDestroyImageView(mRenderDevice.device, images.at(i).imageView, nullptr);
+        vkDestroyImageView(mRenderDevice.device, imageViews.at(i), nullptr);
     vkDestroySwapchainKHR(mRenderDevice.device, swapchain, nullptr);
 
     createSwapchain();
@@ -50,9 +48,15 @@ void VulkanSwapchain::recreate()
     createSyncObjects();
 }
 
-void VulkanSwapchain::createSurface(const Window& window)
+void VulkanSwapchain::createSurface()
 {
-    VkResult result = glfwCreateWindowSurface(mInstance.instance, window, nullptr, &surface);
+    VkWin32SurfaceCreateInfoKHR win32SurfaceCreateInfoKhr {
+        .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+        .hinstance = (HINSTANCE)GetModuleHandle(nullptr),
+        .hwnd = getHWND()
+    };
+
+    VkResult result = vkCreateWin32SurfaceKHR(mInstance.instance, &win32SurfaceCreateInfoKhr, nullptr, &surface);
     vulkanCheck(result, "Failed to create Vulkan surface.");
 }
 
@@ -90,21 +94,25 @@ void VulkanSwapchain::createSwapchain()
 
 void VulkanSwapchain::createSwapchainImages()
 {
-    images.resize(mImageCount);
-
-    std::vector<VkImage> swapchainImages(mImageCount);
-    vkGetSwapchainImagesKHR(mRenderDevice.device, swapchain, &mImageCount, swapchainImages.data());
+    vkGetSwapchainImagesKHR(mRenderDevice.device, swapchain, &mImageCount, images.data());
 
     for (size_t i = 0; i < mImageCount; ++i)
     {
-        images.at(i).image = swapchainImages.at(i);
-        images.at(i).imageView = createImageView(mRenderDevice,
-                                                 images.at(i).image,
-                                                 VK_IMAGE_VIEW_TYPE_2D,
-                                                 mFormat,
-                                                 VK_IMAGE_ASPECT_COLOR_BIT);
+        imageViews.at(i) = createImageView(mRenderDevice,
+                                           images.at(i),
+                                           VK_IMAGE_VIEW_TYPE_2D,
+                                           mFormat,
+                                           VK_IMAGE_ASPECT_COLOR_BIT);
 
-        setImageDebugName(mRenderDevice, images.at(i), "Swapchain", i);
+        setVulkanObjectDebugName(mRenderDevice,
+                                 VK_OBJECT_TYPE_IMAGE,
+                                 std::format("VulkanSwapchain::images.at({})", i),
+                                 images.at(i));
+
+        setVulkanObjectDebugName(mRenderDevice,
+                                 VK_OBJECT_TYPE_IMAGE_VIEW,
+                                 std::format("VulkanSwapchain::imageViews.at({})", i),
+                                 imageViews.at(i));
     }
 }
 
@@ -120,7 +128,7 @@ void VulkanSwapchain::createCommandBuffers()
     VkResult result = vkAllocateCommandBuffers(mRenderDevice.device, &commandBufferAllocateInfo, &commandBuffer);
     vulkanCheck(result, "Failed to allocate command buffers.");
 
-    setDebugVulkanObjectName(mRenderDevice,
+    setVulkanObjectDebugName(mRenderDevice,
                              VK_OBJECT_TYPE_COMMAND_BUFFER,
                              std::format("VulkanSwapchain::commandBuffer"),
                              commandBuffer);

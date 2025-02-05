@@ -12,20 +12,17 @@ void debugLog(const std::string& logMSG);
 
 void check(bool result, const char* msg, std::source_location location = std::source_location::current());
 
-size_t stringLength(const char* str);
+void setHWND(HWND windowHandle);
+HWND getHWND();
 
-bool endsWidth(const std::string& str, const std::string& end);
-
-void removeEndNullChars(std::vector<char>& vec);
-
-std::string fileDialog();
+std::filesystem::path fileDialog(const std::string& filter);
 
 struct cStrHash
 {
     size_t operator()(const char* str) const
     {
         size_t result = 0;
-        size_t len = stringLength(str);
+        size_t len = strlen(str);
 
         for (size_t i = 0; i < len; ++i)
             result = str[i] + (result * 31);
@@ -38,8 +35,8 @@ struct cStrCompare
 {
     bool operator()(const char* str1, const char* str2) const
     {
-        size_t len1 = stringLength(str1);
-        size_t len2 = stringLength(str2);
+        size_t len1 = strlen(str1);
+        size_t len2 = strlen(str2);
 
         if (len1 != len2)
             return false;
