@@ -23,9 +23,14 @@ uuid64_t UUIDRegistry::generateModelID()
     return generateID(ObjectType::Model);
 }
 
-uuid64_t UUIDRegistry::generateTextureID()
+uuid64_t UUIDRegistry::generateTexture2dID()
 {
-    return generateID(ObjectType::Texture);
+    return generateID(ObjectType::Texture2D);
+}
+
+uuid64_t UUIDRegistry::generateTextureCubeID()
+{
+    return generateID(ObjectType::TextureCube)
 }
 
 uuid64_t UUIDRegistry::generateMaterialID()
@@ -51,11 +56,11 @@ uuid64_t UUIDRegistry::getDefMatID()
 
 uuid64_t UUIDRegistry::getDefTexID(MatTexType matTexType)
 {
-    static const uuid64_t baseColor = generateTextureID();
-    static const uuid64_t metallicRoughness = generateTextureID();
-    static const uuid64_t normal = generateTextureID();
-    static const uuid64_t ao = generateTextureID();
-    static const uuid64_t emission = generateTextureID();
+    static const uuid64_t baseColor = generateTexture2dID();
+    static const uuid64_t metallicRoughness = generateTexture2dID();
+    static const uuid64_t normal = generateTexture2dID();
+    static const uuid64_t ao = generateTexture2dID();
+    static const uuid64_t emission = generateTexture2dID();
 
     switch (matTexType)
     {

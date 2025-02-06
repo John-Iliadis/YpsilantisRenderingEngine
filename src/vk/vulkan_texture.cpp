@@ -19,43 +19,37 @@ static VkDeviceSize formatSize(VkFormat format)
 
 VulkanTexture::VulkanTexture()
     : vulkanImage()
-    , sampler()
+    , vulkanSampler()
     , mRenderDevice()
 {
 }
 
-VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice,
-                             VkImageViewType viewType,
-                             VkFormat format,
-                             uint32_t width, uint32_t height,
-                             VkImageUsageFlags usage,
-                             VkImageAspectFlags imageAspect,
-                             bool generateMipMaps,
-                             VkSampleCountFlagBits samples,
-                             uint32_t layerCount,
-                             TextureWrap textureWrap,
-                             TextureFilter textureFilter,
-                             VkImageCreateFlags flags)
+VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const TextureSpecification &specification)
     : vulkanImage(renderDevice,
-                  viewType,
-                  format,
-                  width, height,
-                  usage,
-                  imageAspect,
-                  generateMipMaps? calculateMipLevels(width, height) : 1,
-                  samples,
-                  layerCount,
-                  flags)
-    , sampler(createSampler(renderDevice, textureFilter, textureWrap))
+                  specification.imageViewType,
+                  specification.format,
+                  specification.width, specification.height,
+                  specification.imageUsage,
+                  specification.imageAspect,
+                  specification.generateMipMaps? calculateMipLevels(specification.width, specification.height) : 1,
+                  specification.samples,
+                  specification.layerCount,
+                  specification.createFlags)
+    , vulkanSampler(createSampler(renderDevice, specification.filterMode, specification.wrapMode))
     , mRenderDevice(&renderDevice)
-    , mFilterMode(textureFilter)
-    , mWrapMode(textureWrap)
 {
+}
+
+VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const TextureSpecification &specification, const void *data)
+    : VulkanTexture(renderDevice, specification)
+{
+    vulkanImage.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    uploadImageData(data);
 }
 
 VulkanTexture::~VulkanTexture()
 {
-    vkDestroySampler(mRenderDevice->device, sampler, nullptr);
+    vkDestroySampler(mRenderDevice->device, vulkanSampler.sampler, nullptr);
 }
 
 void VulkanTexture::uploadImageData(const void *data)
@@ -156,7 +150,7 @@ void VulkanTexture::generateMipMaps()
 void VulkanTexture::setDebugName(const std::string &debugName)
 {
     vulkanImage.setDebugName(debugName);
-    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_SAMPLER, debugName, sampler);
+    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_SAMPLER, debugName, vulkanSampler.sampler);
 }
 
 uint32_t calculateMipLevels(uint32_t width, uint32_t height)
@@ -164,11 +158,14 @@ uint32_t calculateMipLevels(uint32_t width, uint32_t height)
     return static_cast<uint32_t>(glm::floor(glm::log2((float)glm::max(width, height)))) + 1;
 }
 
-VkSampler createSampler(const VulkanRenderDevice& renderDevice,
-                        TextureFilter filterMode,
-                        TextureWrap wrapMode)
+VulkanSampler createSampler(const VulkanRenderDevice& renderDevice,
+                            TextureFilter filterMode,
+                            TextureWrap wrapMode)
 {
-    VkSampler sampler;
+    VulkanSampler sampler {
+        .wrapMode = wrapMode,
+        .filterMode = filterMode
+    };
 
     VkBool32 anisotropyEnable = VK_FALSE;
     float maxAnisotropy = 0.f;
@@ -232,7 +229,7 @@ VkSampler createSampler(const VulkanRenderDevice& renderDevice,
         .unnormalizedCoordinates = VK_FALSE
     };
 
-    VkResult result = vkCreateSampler(renderDevice.device, &samplerCreateInfo, nullptr, &sampler);
+    VkResult result = vkCreateSampler(renderDevice.device, &samplerCreateInfo, nullptr, &sampler.sampler);
     vulkanCheck(result, "Failed to create sampler.");
 
     return sampler;

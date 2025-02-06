@@ -24,26 +24,39 @@ enum class TextureFilter
     Anisotropic
 };
 
+struct TextureSpecification
+{
+    VkFormat format;
+    uint32_t width;
+    uint32_t height;
+    uint32_t layerCount;
+    VkImageViewType imageViewType;
+    VkImageUsageFlags imageUsage;
+    VkImageAspectFlags imageAspect;
+    VkSampleCountFlagBits samples;
+    TextureWrap wrapMode;
+    TextureFilter filterMode;
+    bool generateMipMaps;
+    VkImageCreateFlags createFlags;
+};
+
+struct VulkanSampler
+{
+    VkSampler sampler;
+    TextureWrap wrapMode;
+    TextureFilter filterMode;
+};
+
 class VulkanTexture
 {
 public:
     VulkanImage vulkanImage;
-    VkSampler sampler;
+    VulkanSampler vulkanSampler;
 
 public:
     VulkanTexture();
-    VulkanTexture(const VulkanRenderDevice& renderDevice,
-                  VkImageViewType viewType,
-                  VkFormat format,
-                  uint32_t width, uint32_t height,
-                  VkImageUsageFlags usage,
-                  VkImageAspectFlags imageAspect,
-                  bool generateMipMaps,
-                  VkSampleCountFlagBits samples,
-                  uint32_t layerCount,
-                  TextureWrap textureWrap,
-                  TextureFilter textureFilter,
-                  VkImageCreateFlags flags = 0);
+    VulkanTexture(const VulkanRenderDevice& renderDevice, const TextureSpecification& specification);
+    VulkanTexture(const VulkanRenderDevice& renderDevice, const TextureSpecification& specification, const void* data);
     ~VulkanTexture();
 
     void uploadImageData(const void* data);
@@ -52,11 +65,10 @@ public:
 
 private:
     const VulkanRenderDevice* mRenderDevice;
-
-    TextureWrap mWrapMode;
-    TextureFilter mFilterMode;
 };
 
-VkSampler createSampler(const VulkanRenderDevice& renderDevice, TextureFilter filterMode, TextureWrap wrapMode);
+uint32_t calculateMipLevels(uint32_t width, uint32_t height);
+
+VulkanSampler createSampler(const VulkanRenderDevice& renderDevice, TextureFilter filterMode, TextureWrap wrapMode);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_TEXTURE_HPP

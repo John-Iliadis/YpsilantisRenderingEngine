@@ -314,20 +314,24 @@ namespace ResourceImporter
 
     std::pair<std::shared_ptr<VulkanTexture>, std::filesystem::path> makeTexturePathPair(const std::shared_ptr<VulkanRenderDevice> renderDevice, const std::shared_ptr<ImageLoader>& imageData)
     {
-        auto vulkanTexture = std::make_shared<VulkanTexture>(*renderDevice,
-                                                             VK_IMAGE_VIEW_TYPE_2D,
-                                                             imageData->format(),
-                                                             imageData->width(),
-                                                             imageData->height(),
-                                                             VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                                                                 VK_IMAGE_USAGE_SAMPLED_BIT,
-                                                             VK_IMAGE_ASPECT_COLOR_BIT,
-                                                             true,
-                                                             VK_SAMPLE_COUNT_1_BIT,
-                                                             1,
-                                                             TextureWrap::ClampToEdge,
-                                                             TextureFilter::Anisotropic);
+        TextureSpecification textureSpecification {
+            .format = imageData->format(),
+            .width = static_cast<uint32_t>(imageData->width()),
+            .height = static_cast<uint32_t>(imageData->height()),
+            .layerCount = 1,
+            .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+            .imageUsage =
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_SAMPLED_BIT,
+            .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .wrapMode = TextureWrap::ClampToEdge,
+            .filterMode = TextureFilter::Anisotropic,
+            .generateMipMaps = true
+        };
+
+        auto vulkanTexture = std::make_shared<VulkanTexture>(*renderDevice, textureSpecification);
         vulkanTexture->vulkanImage.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
         vulkanTexture->generateMipMaps();
         vulkanTexture->vulkanImage.transitionLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

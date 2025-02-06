@@ -6,38 +6,36 @@
 #define VULKANRENDERINGENGINE_MODEL_HPP
 
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include "scene.hpp"
-#include "material.hpp"
-#include "instancedMesh.hpp"
+#include "../app/simple_notification_service.hpp"
+#include "../app/uuid_registry.hpp"
+#include "bounding_box.hpp"
 
-using MappedMaterialName = std::string;
-using TextureName = std::string;
-
-struct ModelMesh
-{
-    std::shared_ptr<InstancedMesh> mesh;
-    MappedMaterialName mappedMaterialName;
-};
-
-struct ModelNode
-{
-    std::string name;
-    glm::mat4 transformation;
-    std::vector<size_t> meshIndices;
-    std::vector<ModelNode> children;
-
-    ModelNode();
-    ModelNode(const std::string& name, const glm::mat4& transformation);
-};
-
-class Model
+class Model : public SubscriberSNS
 {
 public:
-    std::string name;
-    ModelNode root;
-    std::vector<ModelMesh> meshes;
-    std::unordered_map<MappedMaterialName, std::shared_ptr<NamedMaterial>> materialsMapped;
+    struct Node
+    {
+        std::string name;
+        glm::mat4 transformation;
+        std::optional<uuid64_t> meshID;
+        std::optional<std::string> materialName;
+        std::vector<Node> children;
+    };
+
+public:
+    Node root;
+    BoundingBox bb;
+    std::unordered_map<std::string, uuid64_t> mappedMaterials;
+
+public:
+    Model();
+
+    void notify(const Message &message) override;
+    void remapMaterial(const std::string& materialName, uuid64_t newMatID, uint32_t newMatIndex);
+
+    std::optional<uuid64_t> getMaterialID(const Model::Node& node) const;
 };
+
+std::unordered_set<uuid64_t> getModelMeshIDs(const Model& model);
 
 #endif //VULKANRENDERINGENGINE_MODEL_HPP

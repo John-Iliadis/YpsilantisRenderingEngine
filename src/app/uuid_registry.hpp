@@ -12,7 +12,8 @@ enum class ObjectType
 {
     Model,
     Material,
-    Texture,
+    Texture2D,
+    TextureCube,
     Mesh,
     SceneNode
 };
@@ -21,7 +22,8 @@ class UUIDRegistry
 {
 public:
     static uuid64_t generateModelID();
-    static uuid64_t generateTextureID();
+    static uuid64_t generateTexture2dID();
+    static uuid64_t generateTextureCubeID();
     static uuid64_t generateMaterialID();
     static uuid64_t generateMeshID();
     static uuid64_t generateSceneNodeID();
