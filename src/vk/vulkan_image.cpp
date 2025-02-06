@@ -3,6 +3,8 @@
 //
 
 #include "vulkan_image.hpp"
+#include "vulkan_utils.hpp"
+#include "vulkan_buffer.hpp"
 
 VulkanImage::VulkanImage()
     : mRenderDevice()
@@ -35,7 +37,7 @@ VulkanImage::VulkanImage(const VulkanRenderDevice &renderDevice,
     , memory()
     , width(width)
     , height(height)
-    , mipLevels()
+    , mipLevels(mipLevels)
     , layerCount(layerCount)
     , format(format)
     , layout(VK_IMAGE_LAYOUT_UNDEFINED)
@@ -57,7 +59,7 @@ VulkanImage::VulkanImage(const VulkanRenderDevice &renderDevice,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .initialLayout = image.layout
+        .initialLayout = layout
     };
 
     VkResult result = vkCreateImage(renderDevice.device, &imageCreateInfo, nullptr, &image);
@@ -242,7 +244,7 @@ void VulkanImage::copyBuffer(const VulkanBuffer &buffer)
 
     vkCmdCopyBufferToImage(commandBuffer,
                            buffer.getBuffer(),
-                           image.image,
+                           image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                            1, &copyRegion);
 

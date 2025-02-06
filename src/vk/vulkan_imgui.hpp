@@ -10,17 +10,22 @@
 #include <imgui/imgui_internal.h>
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_vulkan.h>
+#include "../window/window.hpp"
 #include "vulkan_instance.hpp"
 #include "vulkan_render_device.hpp"
 #include "vulkan_swapchain.hpp"
 
-void initImGui(GLFWwindow* window,
-               const VulkanInstance& instance,
-               const VulkanRenderDevice& renderDevice,
-               VkRenderPass renderPass);
-void terminateImGui();
-void beginImGui();
-void endImGui();
-void imGuiFillCommandBuffer(VkCommandBuffer commandBuffer);
+class VulkanImGui
+{
+public:
+    void init(const Window& window,
+              const VulkanInstance& instance,
+              const VulkanRenderDevice& renderDevice,
+              VkRenderPass renderPass);
+    void terminate();
+
+    void update();
+    void render(VkCommandBuffer commandBuffer);
+};
 
 #endif //VULKANRENDERINGENGINE_VULKAN_IMGUI_HPP

@@ -4,10 +4,10 @@
 
 #include "vulkan_imgui.hpp"
 
-void initImGui(GLFWwindow* window,
-               const VulkanInstance& instance,
-               const VulkanRenderDevice& renderDevice,
-               VkRenderPass renderPass)
+void VulkanImGui::init(const Window &window,
+                       const VulkanInstance &instance,
+                       const VulkanRenderDevice &renderDevice,
+                       VkRenderPass renderPass)
 {
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -20,12 +20,12 @@ void initImGui(GLFWwindow* window,
         .Instance = instance.instance,
         .PhysicalDevice = renderDevice.physicalDevice,
         .Device = renderDevice.device,
-        .QueueFamily = renderDevice.mGraphicsQueueFamilyIndex,
+        .QueueFamily = renderDevice.getGraphicsQueueFamilyIndex(),
         .Queue = renderDevice.graphicsQueue,
         .DescriptorPool = renderDevice.descriptorPool,
         .RenderPass = renderPass,
-        .MinImageCount = MAX_FRAMES_IN_FLIGHT,
-        .ImageCount = MAX_FRAMES_IN_FLIGHT,
+        .MinImageCount = 2,
+        .ImageCount = 2,
         .MSAASamples = VK_SAMPLE_COUNT_1_BIT
     };
 
@@ -33,27 +33,23 @@ void initImGui(GLFWwindow* window,
     ImGui_ImplVulkan_Init(&initInfo);
 }
 
-void terminateImGui()
+void VulkanImGui::terminate()
 {
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 }
 
-void beginImGui()
+void VulkanImGui::update()
 {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-    ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+    ImGui::DockSpaceOverViewport();
 }
 
-void endImGui()
+void VulkanImGui::render(VkCommandBuffer commandBuffer)
 {
     ImGui::Render();
-}
-
-void imGuiFillCommandBuffer(VkCommandBuffer commandBuffer)
-{
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 }

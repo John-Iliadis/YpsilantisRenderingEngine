@@ -3,6 +3,8 @@
 //
 
 #include "vulkan_render_device.hpp"
+#include "vulkan_utils.hpp"
+#include "vulkan_descriptor.hpp"
 
 static const std::vector<const char*> extensions {
     "VK_KHR_swapchain",
@@ -79,6 +81,7 @@ void VulkanRenderDevice::createLogicalDevice()
     VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptorIndexingFeatures {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
         .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+        .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
         .descriptorBindingVariableDescriptorCount = VK_TRUE,
         .runtimeDescriptorArray = VK_TRUE
     };

@@ -59,6 +59,7 @@ VkBufferUsageFlags toVkFlags(BufferType bufferType)
         case BufferType::Staging: return
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
                 VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        default: assert(false);
     }
 }
 
@@ -91,9 +92,9 @@ VulkanBuffer::VulkanBuffer(const VulkanRenderDevice &renderDevice,
                            BufferType bufferType,
                            MemoryType memoryType)
     : mRenderDevice(&renderDevice)
+    , mSize(size)
     , mBuffer(createBuffer(bufferType))
     , mMemory(allocateBufferMemory(memoryType, mBuffer))
-    , mSize(size)
     , mType(bufferType)
     , mMemoryType(memoryType)
 {
@@ -105,9 +106,9 @@ VulkanBuffer::VulkanBuffer(const VulkanRenderDevice &renderDevice,
                            MemoryType memoryType,
                            const void *bufferData)
     : mRenderDevice(&renderDevice)
+    , mSize(size)
     , mBuffer(createBuffer(bufferType))
     , mMemory(allocateBufferMemory(memoryType, mBuffer))
-    , mSize(size)
     , mType(bufferType)
     , mMemoryType(memoryType)
 {
@@ -156,7 +157,7 @@ void VulkanBuffer::mapBufferMemory(VkDeviceSize offset, VkDeviceSize size, const
 void VulkanBuffer::update(VkDeviceSize offset, VkDeviceSize size, const void *data)
 {
     VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
-    copyBuffer(stagingBuffer, offset, 0, size);
+    copyBuffer(stagingBuffe
 }
 
 void VulkanBuffer::copyBuffer(const VulkanBuffer &other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size)

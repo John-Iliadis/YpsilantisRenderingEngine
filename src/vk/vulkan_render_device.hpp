@@ -6,9 +6,15 @@
 #define VULKANRENDERINGENGINE_VULKAN_RENDER_DEVICE_HPP
 
 #include "vulkan_instance.hpp"
-#include "vulkan_utils.hpp"
-#include "vulkan_descriptor.hpp"
 #include "../utils/utils.hpp"
+
+VkDescriptorPool createDescriptorPool(VkDevice device,
+                                      uint32_t imageSamplerCount,
+                                      uint32_t uniformBufferCount,
+                                      uint32_t storageBufferCount,
+                                      uint32_t maxSets);
+
+VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count);
 
 class VulkanRenderDevice
 {

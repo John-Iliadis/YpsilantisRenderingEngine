@@ -15,7 +15,7 @@ ImageLoader::ImageLoader()
 {
 }
 
-ImageLoader::ImageLoader(const std::filesystem::path &imagePath, int32_t requiredComponents)
+ImageLoader::ImageLoader(const std::filesystem::path &imagePath)
     : ImageLoader()
 {
     mPath = imagePath;
@@ -23,25 +23,17 @@ ImageLoader::ImageLoader(const std::filesystem::path &imagePath, int32_t require
 
     if (isHDR)
     {
-        mData = stbi_loadf(imagePath.string().c_str(), &mWidth, &mHeight, &mComponents, requiredComponents);
+        mData = stbi_loadf(imagePath.string().c_str(), &mWidth, &mHeight, &mComponents, 4);
     }
     else
     {
-        mData = stbi_load(imagePath.string().c_str(), &mWidth, &mHeight, &mComponents, requiredComponents);
+        mData = stbi_load(imagePath.string().c_str(), &mWidth, &mHeight, &mComponents, 4);
     }
 
     if (!mData)
         return;
 
-    switch (mComponents)
-    {
-        case 1: mFormat = isHDR? VK_FORMAT_R32_SFLOAT : VK_FORMAT_R8_UNORM; break;
-        case 2: mFormat = isHDR? VK_FORMAT_R32G32_SFLOAT : VK_FORMAT_R8G8_UNORM; break;
-        case 3: mFormat = isHDR? VK_FORMAT_R32G32B32_SFLOAT : VK_FORMAT_R8G8B8_UNORM; break;
-        case 4: mFormat = isHDR? VK_FORMAT_R32G32B32A32_SFLOAT : VK_FORMAT_R8G8B8A8_UNORM; break;
-        default: assert(false);
-    }
-
+    mFormat = isHDR? VK_FORMAT_R32G32B32A32_SFLOAT : VK_FORMAT_R8G8B8A8_UNORM;
     mSuccess = true;
 }
 

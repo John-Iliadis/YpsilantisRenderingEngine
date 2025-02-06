@@ -12,6 +12,7 @@
 #include "../vk/vulkan_instance.hpp"
 #include "../vk/vulkan_render_device.hpp"
 #include "../vk/vulkan_swapchain.hpp"
+#include "../vk/vulkan_imgui.hpp"
 #include "../utils/utils.hpp"
 
 class Application
@@ -30,14 +31,23 @@ private:
 
     void countFPS(float dt);
 
+    void createRenderPass();
+    void createSwapchainFramebuffers();
+
 private:
     Window mWindow;
     VulkanInstance mInstance;
     std::shared_ptr<VulkanRenderDevice> mRenderDevice;
     VulkanSwapchain mSwapchain;
+
     std::shared_ptr<Renderer> mRenderer;
     std::shared_ptr<ResourceManager> mResourceManager;
+
     Editor mEditor;
+    VulkanImGui mVulkanImGui;
+
+    VkRenderPass mRenderPass;
+    std::array<VkFramebuffer, 2> mSwapchainFramebuffers;
 };
 
 #endif //VULKANRENDERINGENGINE_APPLICATION_HPP

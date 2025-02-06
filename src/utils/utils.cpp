@@ -34,7 +34,7 @@ std::filesystem::path fileDialog(const std::string& filter)
     ofn.lStructSize = sizeof(OPENFILENAME);
     ofn.hwndOwner = hwnd;
     ofn.nMaxFile = sizeof(filename);
-    ofn.lpstrFilter = filter.c_str();
+    ofn.lpstrFilter = "All Files";
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
 
     if (GetOpenFileName(&ofn) == TRUE)

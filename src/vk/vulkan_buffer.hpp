@@ -66,9 +66,9 @@ private:
 private:
     const VulkanRenderDevice* mRenderDevice;
 
+    VkDeviceSize mSize;
     VkBuffer mBuffer;
     VkDeviceMemory mMemory;
-    VkDeviceSize mSize;
 
     BufferType mType;
     MemoryType mMemoryType;

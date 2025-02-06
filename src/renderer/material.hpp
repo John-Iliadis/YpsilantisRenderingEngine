@@ -6,6 +6,7 @@
 #define VULKANRENDERINGENGINE_MATERIAL_HPP
 
 #include <glm/glm.hpp>
+#include "../app/types.hpp"
 
 enum class MatTexType
 {

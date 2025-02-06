@@ -9,6 +9,7 @@
 #include "../app/uuid_registry.hpp"
 #include "../renderer/material.hpp"
 #include "../utils/main_thread_task_queue.hpp"
+#include "../vk/vulkan_descriptor.hpp"
 #include "resource_importer.hpp"
 
 class Editor;
@@ -33,6 +34,7 @@ public:
     index_t getMatIndex(uuid64_t id);
     index_t getTextureIndex(uuid64_t id);
     uuid64_t getTexIDFromIndex(index_t texIndex);
+    VkDescriptorSet getTextureDescriptorSet(uuid64_t id);
 
     void updateMaterial(index_t materialIndex);
 
@@ -41,6 +43,7 @@ public:
     void deleteMaterial(uuid64_t id);
 
 private:
+    void createDescriptorResources();
     void loadDefaultTextures();
     void loadDefaultMaterial();
     void recreateMaterialTextureDS();
@@ -77,6 +80,7 @@ private:
     VkDescriptorSetLayout mTexture2dDescriptorSetLayout;
 
     std::vector<std::shared_ptr<VulkanTexture>> mMaterialTextureArray;
+    VkDescriptorSetLayout mMaterialTexturesDescriptorSetLayout;
     VkDescriptorSet mMaterialTexturesDescriptorSet; // The order of the descriptors will need to match the texture array
 
     // All materials

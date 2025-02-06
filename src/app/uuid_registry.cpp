@@ -30,7 +30,7 @@ uuid64_t UUIDRegistry::generateTexture2dID()
 
 uuid64_t UUIDRegistry::generateTextureCubeID()
 {
-    return generateID(ObjectType::TextureCube)
+    return generateID(ObjectType::TextureCube);
 }
 
 uuid64_t UUIDRegistry::generateMaterialID()

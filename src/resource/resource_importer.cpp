@@ -331,10 +331,11 @@ namespace ResourceImporter
             .generateMipMaps = true
         };
 
-        auto vulkanTexture = std::make_shared<VulkanTexture>(*renderDevice, textureSpecification);
-        vulkanTexture->vulkanImage.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        auto vulkanTexture = std::make_shared<VulkanTexture>(*renderDevice, textureSpecification, imageData->data());
+        vulkanTexture->vulkanImage.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         vulkanTexture->generateMipMaps();
         vulkanTexture->vulkanImage.transitionLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        vulkanTexture->setDebugName(imageData->path().string());
 
         return {vulkanTexture, imageData->path()};
     }

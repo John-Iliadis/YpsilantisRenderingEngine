@@ -11,7 +11,7 @@ VulkanSwapchain::VulkanSwapchain(const VulkanInstance &instance, const VulkanRen
     createSurface();
     createSwapchain();
     createSwapchainImages();
-    createCommandBuffers();
+    createCommandBuffer();
     createSyncObjects();
 }
 
@@ -21,7 +21,7 @@ VulkanSwapchain::~VulkanSwapchain()
     vkDestroySemaphore(mRenderDevice.device, imageReadySemaphore, nullptr);
     vkDestroySemaphore(mRenderDevice.device, renderCompleteSemaphore, nullptr);
 
-    for (size_t i = 0; i < mImageCount; ++i)
+    for (size_t i = 0; i < 2; ++i)
     {
         vkDestroyImageView(mRenderDevice.device, imageViews.at(i), nullptr);
     }
@@ -33,7 +33,7 @@ VulkanSwapchain::~VulkanSwapchain()
 void VulkanSwapchain::recreate()
 {
     // swapchain
-    for (size_t i = 0; i < mImageCount; ++i)
+    for (size_t i = 0; i < 2; ++i)
         vkDestroyImageView(mRenderDevice.device, imageViews.at(i), nullptr);
     vkDestroySwapchainKHR(mRenderDevice.device, swapchain, nullptr);
 
@@ -67,12 +67,11 @@ void VulkanSwapchain::createSwapchain()
 
     mFormat = VK_FORMAT_R8G8B8A8_UNORM;
     mExtent = surfaceCapabilities.currentExtent;
-    mImageCount = glm::max(glm::min(3u, surfaceCapabilities.maxImageCount), surfaceCapabilities.minImageCount);
 
     VkSwapchainCreateInfoKHR swapchainCreateInfoKhr {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = surface,
-        .minImageCount = mImageCount,
+        .minImageCount = 2,
         .imageFormat = mFormat,
         .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
         .imageExtent = mExtent,
@@ -94,9 +93,10 @@ void VulkanSwapchain::createSwapchain()
 
 void VulkanSwapchain::createSwapchainImages()
 {
-    vkGetSwapchainImagesKHR(mRenderDevice.device, swapchain, &mImageCount, images.data());
+    uint32_t imageCount = 2;
+    vkGetSwapchainImagesKHR(mRenderDevice.device, swapchain, &imageCount, images.data());
 
-    for (size_t i = 0; i < mImageCount; ++i)
+    for (size_t i = 0; i < imageCount; ++i)
     {
         imageViews.at(i) = createImageView(mRenderDevice,
                                            images.at(i),
@@ -116,7 +116,7 @@ void VulkanSwapchain::createSwapchainImages()
     }
 }
 
-void VulkanSwapchain::createCommandBuffers()
+void VulkanSwapchain::createCommandBuffer()
 {
     VkCommandBufferAllocateInfo commandBufferAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -149,9 +149,4 @@ VkFormat VulkanSwapchain::getFormat() const
 VkExtent2D VulkanSwapchain::getExtent() const
 {
     return mExtent;
-}
-
-uint32_t VulkanSwapchain::getImageCount() const
-{
-    return mImageCount;
 }

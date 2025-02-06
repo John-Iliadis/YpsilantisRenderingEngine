@@ -171,7 +171,7 @@ VkDescriptorSet DescriptorSetBuilder::create()
     for (uint32_t i = 0; i < mTextureInfos.size(); ++i)
     {
         VkDescriptorImageInfo imageInfo {
-            .sampler = mTextureInfos.at(i).texture.vulkanSampler,
+            .sampler = mTextureInfos.at(i).texture.vulkanSampler.sampler,
             .imageView = mTextureInfos.at(i).texture.vulkanImage.imageView,
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         };

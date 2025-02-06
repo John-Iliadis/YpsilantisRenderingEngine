@@ -3,17 +3,15 @@
 //
 
 #include "vulkan_texture.hpp"
+#include "vulkan_buffer.hpp"
 
 static VkDeviceSize formatSize(VkFormat format)
 {
     switch (format)
     {
-        case VK_FORMAT_R8G8B8A8_UNORM:
-            return 4;
-        case VK_FORMAT_R16G16B16A16_SFLOAT:
-            return 8;
-        default:
-            assert(false);
+        case VK_FORMAT_R8G8B8A8_UNORM: return 4;
+        case VK_FORMAT_R32G32B32A32_SFLOAT: return 16;
+        default: assert(false);
     }
 }
 

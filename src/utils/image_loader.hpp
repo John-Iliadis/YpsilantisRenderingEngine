@@ -12,7 +12,7 @@ class ImageLoader
 {
 public:
     ImageLoader();
-    ImageLoader(const std::filesystem::path& imagePath, int32_t requiredComponents = 0);
+    ImageLoader(const std::filesystem::path& imagePath);
     ~ImageLoader();
 
     ImageLoader(const ImageLoader&) = delete;

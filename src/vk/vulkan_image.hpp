@@ -6,8 +6,8 @@
 #define VULKANRENDERINGENGINE_VULKAN_IMAGE_HPP
 
 #include "vulkan_render_device.hpp"
-#include "vulkan_utils.hpp"
-#include "vulkan_buffer.hpp"
+
+class VulkanBuffer;
 
 class VulkanImage
 {

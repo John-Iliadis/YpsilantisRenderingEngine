@@ -13,13 +13,21 @@ Application::Application()
     , mRenderDevice(std::make_shared<VulkanRenderDevice>(mInstance))
     , mSwapchain(mInstance, *mRenderDevice)
     , mRenderer(std::make_shared<Renderer>())
-    , mResourceManager(std::make_shared<ResourceManager>())
+    , mResourceManager(std::make_shared<ResourceManager>(mRenderDevice))
     , mEditor(mRenderer, mResourceManager)
 {
+    createRenderPass();
+    createSwapchainFramebuffers();
+
+    mVulkanImGui.init(mWindow, mInstance, *mRenderDevice, mRenderPass);
 }
 
 Application::~Application()
 {
+    vkDestroyRenderPass(mRenderDevice->device, mRenderPass, nullptr);
+    for (uint32_t i = 0; i < mSwapchainFramebuffers.size(); ++i)
+        vkDestroyFramebuffer(mRenderDevice->device, mSwapchainFramebuffers.at(i), nullptr);
+    mVulkanImGui.terminate();
 }
 
 void Application::run()
@@ -47,6 +55,11 @@ void Application::recreateSwapchain()
     vkDeviceWaitIdle(mRenderDevice->device);
 
     mSwapchain.recreate();
+
+    // swapchain framebuffers
+    for (uint32_t i = 0; i < mSwapchainFramebuffers.size(); ++i)
+        vkDestroyFramebuffer(mRenderDevice->device, mSwapchainFramebuffers.at(i), nullptr);
+    createSwapchainFramebuffers();
 }
 
 void Application::handleEvents()
@@ -60,6 +73,8 @@ void Application::handleEvents()
 
 void Application::update(float dt)
 {
+    mVulkanImGui.update();
+
     mResourceManager->processMainThreadTasks();
     mEditor.update(dt);
 
@@ -68,6 +83,8 @@ void Application::update(float dt)
 
 void Application::fillCommandBuffer(VkCommandBuffer commandBuffer)
 {
+    static uint32_t imageIndex = 0;
+
     VkCommandBufferBeginInfo commandBufferBeginInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -75,11 +92,28 @@ void Application::fillCommandBuffer(VkCommandBuffer commandBuffer)
     };
 
     VkResult result = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
-    vulkanCheck(result, "Failed to begin command buffer.");
+    vulkanCheck(result, "Failed to update command buffer.");
 
-     mEditor.fillCommandBuffer(commandBuffer);
+    VkClearValue clearValue {{0.2f, 0.2f, 0.2f, 0.2f}};
 
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mRenderPass,
+        .framebuffer = mSwapchainFramebuffers.at(imageIndex),
+        .renderArea = {
+            .offset = {0, 0},
+            .extent = mSwapchain.getExtent()
+        },
+        .clearValueCount = 1,
+        .pClearValues = &clearValue
+    };
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    mVulkanImGui.render(commandBuffer);
+    vkCmdEndRenderPass(commandBuffer);
     vkEndCommandBuffer(commandBuffer);
+
+    imageIndex = (imageIndex + 1) % 2;
 }
 
 void Application::render()
@@ -148,5 +182,66 @@ void Application::countFPS(float dt)
 
         frameCount = 0;
         accumulatedTime = 0.f;
+    }
+}
+
+void Application::createRenderPass()
+{
+    VkAttachmentDescription attachmentDescription {
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    };
+
+    VkAttachmentReference attachmentReference {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpassDescription {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentReference
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachmentDescription,
+        .subpassCount = 1,
+        .pSubpasses = &subpassDescription
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice->device, &renderPassCreateInfo, nullptr, &mRenderPass);
+    vulkanCheck(result, "Failed to create renderpass");
+}
+
+void Application::createSwapchainFramebuffers()
+{
+    for (uint32_t i = 0; i < mSwapchainFramebuffers.size(); ++i)
+    {
+        VkFramebufferCreateInfo framebufferCreateInfo {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = mRenderPass,
+            .attachmentCount = 1,
+            .pAttachments = &mSwapchain.imageViews.at(i),
+            .width = mSwapchain.getExtent().width,
+            .height = mSwapchain.getExtent().height,
+            .layers = 1
+        };
+
+        VkResult result = vkCreateFramebuffer(mRenderDevice->device,
+                                              &framebufferCreateInfo,
+                                              nullptr,
+                                              &mSwapchainFramebuffers.at(i));
+        vulkanCheck(result, "Failed to create swapchain framebuffer");
+
+        setVulkanObjectDebugName(*mRenderDevice,
+                                 VK_OBJECT_TYPE_FRAMEBUFFER,
+                                 std::format("Application::mSwapchainFramebuffers.at({})", i),
+                                 mSwapchainFramebuffers.at(i));
     }
 }

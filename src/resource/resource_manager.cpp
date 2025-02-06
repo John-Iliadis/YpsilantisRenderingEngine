@@ -4,6 +4,8 @@
 
 #include "resource_manager.hpp"
 
+#define MAX_MATERIALS 128
+
 template <typename T>
 static bool resourceLoaded(const std::unordered_map<T, std::filesystem::path>& resourceMap, const std::filesystem::path& path)
 {
@@ -26,19 +28,16 @@ ResourceManager::ResourceManager(const std::shared_ptr<VulkanRenderDevice> rende
     , mDSLayoutBuilder(*renderDevice)
     , mDSBuilder(*renderDevice)
     , mRenderDevice(renderDevice)
+    , mMaterialsSSBO(*renderDevice, MAX_MATERIALS * sizeof(Material), BufferType::Storage, MemoryType::GPU)
 {
-    mTexture2dDescriptorSetLayout = mDSLayoutBuilder
-        .addLayoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
-        .setDebugName("ResourceManager::mTexture2dDescriptorSetLayout")
-        .create();
-
+    createDescriptorResources();
     loadDefaultTextures();
     loadDefaultMaterial();
 }
 
 ResourceManager::~ResourceManager()
 {
-    vkDestroyDescriptorSetLayout(mRenderDevice->device, mTexture2dDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(mRenderDevice->device, mMaterialTexturesDescriptorSetLayout, nullptr);
 }
 
 bool ResourceManager::importModel(const std::filesystem::path &path)
@@ -439,7 +438,7 @@ void ResourceManager::loadDefaultTextures()
         .height = 1,
         .layerCount = 1,
         .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
-        .imageUsage = VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageUsage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .wrapMode = TextureWrap::Repeat,
@@ -571,4 +570,72 @@ VkDescriptorSet ResourceManager::createTextureDescriptorSet(const std::shared_pt
         .create();
 
     return textureDS;
+}
+
+VkDescriptorSet ResourceManager::getTextureDescriptorSet(uuid64_t id)
+{
+    return mTexture2dDescriptorSets.at(id);
+}
+
+void ResourceManager::createDescriptorResources()
+{
+    mTexture2dDescriptorSetLayout = mDSLayoutBuilder
+        .addLayoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT)
+        .setDebugName("ResourceManager::mTexture2dDescriptorSetLayout")
+        .create();
+
+    uint32_t maxTextureCount = 256;
+    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = maxTextureCount,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    VkDescriptorBindingFlagsEXT descriptorBindingFlags = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT;
+    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT descriptorSetLayoutBindingFlagsCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindingFlags = &descriptorBindingFlags
+    };
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = &descriptorSetLayoutBindingFlagsCreateInfo,
+        .bindingCount = 1,
+        .pBindings = &descriptorSetLayoutBinding
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice->device,
+                                                   &descriptorSetLayoutCreateInfo,
+                                                   nullptr,
+                                                   &mMaterialTexturesDescriptorSetLayout);
+    vulkanCheck(result, "Failed to create mTexture2dDescriptorSetLayout.");
+
+    setVulkanObjectDebugName(*mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                             "ResourceManager::mTexture2dDescriptorSetLayout",
+                             mMaterialTexturesDescriptorSetLayout);
+
+    VkDescriptorSetVariableDescriptorCountAllocateInfoEXT variableDescriptorCountAllocInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
+        .descriptorSetCount = 1,
+        .pDescriptorCounts = &maxTextureCount
+    };
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext = &variableDescriptorCountAllocInfo,
+        .descriptorPool = mRenderDevice->descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &mMaterialTexturesDescriptorSetLayout
+    };
+
+    result = vkAllocateDescriptorSets(mRenderDevice->device, &descriptorSetAllocateInfo, &mMaterialTexturesDescriptorSet);
+    vulkanCheck(result, "Failed to create mMaterialTexturesDescriptorSet.");
+
+    setVulkanObjectDebugName(*mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "ResourceManager::mMaterialTexturesDescriptorSet",
+                             mMaterialTexturesDescriptorSet);
 }

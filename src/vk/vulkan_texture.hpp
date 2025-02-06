@@ -47,6 +47,7 @@ struct VulkanSampler
     TextureFilter filterMode;
 };
 
+// todo: improve
 class VulkanTexture
 {
 public:

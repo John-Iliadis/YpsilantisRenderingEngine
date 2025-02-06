@@ -22,8 +22,8 @@ public:
     VkSemaphore imageReadySemaphore;
     VkSemaphore renderCompleteSemaphore;
 
-    std::vector<VkImage> images;
-    std::vector<VkImageView> imageViews;
+    std::array<VkImage, 2> images;
+    std::array<VkImageView, 2> imageViews;
 
 public:
     VulkanSwapchain(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice);
@@ -33,13 +33,12 @@ public:
 
     VkFormat getFormat() const;
     VkExtent2D getExtent() const;
-    uint32_t getImageCount() const;
 
 private:
     void createSurface();
     void createSwapchain();
     void createSwapchainImages();
-    void createCommandBuffers();
+    void createCommandBuffer();
     void createSyncObjects();
 
 private:
@@ -48,7 +47,6 @@ private:
 
     VkFormat mFormat;
     VkExtent2D mExtent;
-    uint32_t mImageCount;
 };
 
 #endif //VULKANRENDERINGENGINE_VULKAN_SWAPCHAIN_HPP

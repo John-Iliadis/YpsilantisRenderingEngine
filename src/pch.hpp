@@ -31,4 +31,5 @@
 #include <future>
 #include <mutex>
 
+#include <assert.h>
 #include <stdexcept>
