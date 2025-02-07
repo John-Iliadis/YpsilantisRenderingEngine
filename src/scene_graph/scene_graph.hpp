@@ -13,8 +13,13 @@ class SceneGraph : public SubscriberSNS
 public:
     SceneGraph();
 
+    void addNode(SceneNode* node);
+    void deleteNode(uuid64_t nodeID);
     void updateTransforms();
+
     void notify(const Message &message) override;
+
+    SceneNode* searchNode(uuid64_t nodeID);
 
 public:
     SceneNode mRoot;

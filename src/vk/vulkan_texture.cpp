@@ -15,6 +15,42 @@ static VkDeviceSize formatSize(VkFormat format)
     }
 }
 
+const char* toStr(VkFormat format)
+{
+    switch (format)
+    {
+        case VK_FORMAT_R8G8B8A8_UNORM: return "RBGA8";
+        case VK_FORMAT_R32G32B32A32_SFLOAT: return "RGBA32F";
+        default: return "Unknown";
+    }
+}
+
+const char* toStr(TextureWrap wrapMode)
+{
+    switch (wrapMode)
+    {
+        ENUM_CASE(TextureWrap, Repeat)
+        ENUM_CASE(TextureWrap, MirroredRepeat)
+        ENUM_CASE(TextureWrap, ClampToEdge)
+        ENUM_CASE(TextureWrap, ClampToBorder)
+        default: return "Unknown";
+    }
+}
+
+const char* toStr(TextureFilter filterMode)
+{
+    switch (filterMode)
+    {
+        ENUM_CASE(TextureFilter, Nearest)
+        ENUM_CASE(TextureFilter, Bilinear)
+        ENUM_CASE(TextureFilter, Trilinear)
+        ENUM_CASE(TextureFilter, Anisotropic)
+        default: return "Unknown";
+    }
+}
+
+// -- VulkanTexture -- //
+
 VulkanTexture::VulkanTexture()
     : vulkanImage()
     , vulkanSampler()

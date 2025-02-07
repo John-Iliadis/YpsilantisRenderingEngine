@@ -38,6 +38,7 @@ ResourceManager::ResourceManager(const std::shared_ptr<VulkanRenderDevice> rende
 ResourceManager::~ResourceManager()
 {
     vkDestroyDescriptorSetLayout(mRenderDevice->device, mMaterialTexturesDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(mRenderDevice->device, mTexture2dDescriptorSetLayout, nullptr);
 }
 
 bool ResourceManager::importModel(const std::filesystem::path &path)
@@ -638,4 +639,9 @@ void ResourceManager::createDescriptorResources()
                              VK_OBJECT_TYPE_DESCRIPTOR_SET,
                              "ResourceManager::mMaterialTexturesDescriptorSet",
                              mMaterialTexturesDescriptorSet);
+}
+
+uuid64_t ResourceManager::getMatIdFromIndex(index_t matIndex)
+{
+    return getTID(mMaterials, matIndex).value();
 }

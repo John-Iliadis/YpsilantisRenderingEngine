@@ -50,8 +50,11 @@ void SceneNode::removeChild(SceneNode *child)
 
 void SceneNode::orphan()
 {
-    mParent->removeChild(this);
-    mParent = nullptr;
+    if (mParent)
+    {
+        mParent->removeChild(this);
+        mParent = nullptr;
+    }
 }
 
 void SceneNode::markDirty()

@@ -157,7 +157,7 @@ void VulkanBuffer::mapBufferMemory(VkDeviceSize offset, VkDeviceSize size, const
 void VulkanBuffer::update(VkDeviceSize offset, VkDeviceSize size, const void *data)
 {
     VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
-    copyBuffer(stagingBuffe
+    copyBuffer(stagingBuffer, 0, offset, size);
 }
 
 void VulkanBuffer::copyBuffer(const VulkanBuffer &other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size)

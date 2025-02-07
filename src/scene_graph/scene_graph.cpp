@@ -9,6 +9,25 @@ SceneGraph::SceneGraph()
 {
 }
 
+SceneNode *SceneGraph::searchNode(uuid64_t nodeID)
+{
+    std::vector<SceneNode*> stack(1, &mRoot);
+
+    while (!stack.empty())
+    {
+        SceneNode* node = stack.back();
+        stack.pop_back();
+
+        if (node->id() == nodeID)
+            return node;
+
+        for (auto child : node->children())
+            stack.push_back(child);
+    }
+
+    return nullptr;
+}
+
 void SceneGraph::updateTransforms()
 {
     mRoot.updateGlobalTransform();
@@ -40,4 +59,16 @@ void SceneGraph::notify(const Message &message)
                 stack.push_back(child);
         }
     }
+}
+
+void SceneGraph::addNode(SceneNode *node)
+{
+    mRoot.addChild(node);
+}
+
+void SceneGraph::deleteNode(uuid64_t nodeID)
+{
+    SceneNode* node = searchNode(nodeID);
+    node->orphan();
+    delete node;
 }

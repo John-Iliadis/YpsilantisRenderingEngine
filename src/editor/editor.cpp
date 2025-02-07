@@ -189,6 +189,8 @@ void Editor::sceneGraphPanel()
     ImGui::Dummy(ImGui::GetContentRegionAvail());
     sceneNodeDragDropTarget(&mSceneGraph.mRoot);
 
+    sceneGraphPopup();
+
     ImGui::End();
 
     mSceneGraph.updateTransforms();
@@ -211,7 +213,7 @@ void Editor::sceneNodeRecursive(SceneNode *node)
 
     bool nodeOpen = ImGui::TreeNodeEx((void*)(intptr_t)node, treeNodeFlags, node->name().c_str());
 
-    if (ImGui::IsItemClicked())
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
         mSelectedObjectID = node->id();
 
     sceneNodeDragDropSource(node);
@@ -359,16 +361,18 @@ void Editor::inspectorPanel()
     ImGui::Begin("Inspector", &mShowInspectorPanel, ImGuiWindowFlags_NoScrollbar);
 
     if (auto objectType = UUIDRegistry::getObjectType(mSelectedObjectID))
-        if (*objectType == ObjectType::Model)
-            modelInspector(mSelectedObjectID);
-
-    if (auto objectType = UUIDRegistry::getObjectType(mSelectedObjectID))
-        if (*objectType == ObjectType::Material)
-            materialInspector(mSelectedObjectID);
-
-    if (auto objectType = UUIDRegistry::getObjectType(mSelectedObjectID))
-        if (*objectType == ObjectType::Texture2D)
-            textureInspector(mSelectedObjectID);
+    {
+        switch (*objectType)
+        {
+            case ObjectType::Model: modelInspector(mSelectedObjectID); break;
+            case ObjectType::Material: materialInspector(mSelectedObjectID); break;
+            case ObjectType::Texture2D: textureInspector(mSelectedObjectID); break;
+            case ObjectType::TextureCube: assert(false);
+            case ObjectType::Mesh: assert(false);
+            case ObjectType::SceneNode: sceneNodeInspector(mSceneGraph.searchNode(mSelectedObjectID)); break;
+            default: assert(false);
+        }
+    }
 
     ImGui::End();
 }
@@ -615,9 +619,9 @@ void Editor::textureInspector(uuid64_t textureID)
 
     ImGui::SeparatorText("Texture Info");
 
-//    ImGui::Text("Format: %s", toStr(texture->format()));
-//    ImGui::Text("Wrap Mode: %s", toStr(texture->wrapMode()));
-//    ImGui::Text("Filter Mode: %s", toStr(texture->filterMode()));
+    ImGui::Text("Format: %s", toStr(texture->vulkanImage.format));
+    ImGui::Text("Filter Mode: %s", toStr(texture->vulkanSampler.filterMode));
+    ImGui::Text("Wrap Mode: %s", toStr(texture->vulkanSampler.wrapMode));
     ImGui::Text("Size: %dx%d", (int)textureSize.x, (int)textureSize.y);
 
     ImGui::SeparatorText("Preview");
@@ -645,4 +649,290 @@ void Editor::viewPort()
     modelDragDropTarget();
 
     ImGui::End();
+}
+
+void Editor::sceneNodeInspector(SceneNode *node)
+{
+    switch (node->type())
+    {
+        case NodeType::Empty: emptyNodeInspector(node); break;
+        case NodeType::Mesh: meshNodeInspector(node); break;
+        case NodeType::DirectionalLight: dirLightInspector(node); break;
+        case NodeType::PointLight: pointLightInspector(node); break;
+        case NodeType::SpotLight: spotLightInspector(node); break;
+        default: assert(false);
+    }
+}
+
+void Editor::emptyNodeInspector(SceneNode *node)
+{
+    ImGui::Text("Asset Type: Empty Node");
+    ImGui::Text("Name: %s", node->name().c_str());
+
+    nodeTransform(node);
+}
+
+void Editor::meshNodeInspector(SceneNode *node)
+{
+    MeshNode* meshNode = dynamic_cast<MeshNode*>(node);
+
+    ImGui::Text("Asset Type: Mesh Node");
+    ImGui::Text("Name: %s", node->name().c_str());
+
+    nodeTransform(node);
+
+    ImGui::SeparatorText("Info");
+
+    ImGui::Text("Mesh: %s", mResourceManager->mMeshNames.at(meshNode->meshID()).c_str());
+
+    uuid64_t matID = mResourceManager->getMatIdFromIndex(meshNode->materialIndex());
+    ImGui::Text("Material: %s", mResourceManager->mMaterialNames.at(matID).c_str());
+}
+
+void Editor::dirLightInspector(SceneNode *node)
+{
+    DirectionalLight* dirLight = dynamic_cast<DirectionalLight*>(node);
+
+    ImGui::Text("Asset Type: Directional Light");
+    ImGui::Text("Name: %s", node->name().c_str());
+
+    nodeTransform(dirLight);
+
+    lightOptions(dirLight);
+    lightShadowOptions(dirLight);
+}
+
+void Editor::pointLightInspector(SceneNode *node)
+{
+    PointLight* pointLight = dynamic_cast<PointLight*>(node);
+
+    ImGui::Text("Asset Type: Point Light");
+    ImGui::Text("Name: %s", node->name().c_str());
+
+    nodeTransform(pointLight);
+
+    lightOptions(pointLight);
+    ImGui::DragFloat("Range##pointLight", &pointLight->range, 0.1f);
+    lightShadowOptions(pointLight);
+}
+
+void Editor::spotLightInspector(SceneNode *node)
+{
+    SpotLight* spotLight = dynamic_cast<SpotLight*>(node);
+
+    ImGui::Text("Asset Type: Spot Light");
+    ImGui::Text("Name: %s", node->name().c_str());
+
+    nodeTransform(spotLight);
+
+    lightOptions(spotLight);
+    ImGui::DragFloat("Range##spotLight", &spotLight->range, 0.1f);
+    lightShadowOptions(spotLight);
+}
+
+void Editor::nodeTransform(SceneNode *node)
+{
+    ImGui::SeparatorText("Transformation");
+
+    glm::mat4 mat = node->globalTransform();
+
+    float translation[3];
+    float rotation[3];
+    float scale[3];
+
+    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(mat), translation, rotation, scale);
+
+    bool modified = false;
+
+    if (ImGui::DragFloat3("Translation", translation, 0.1f))
+        modified = true;
+
+    if (ImGui::DragFloat3("Rotation", rotation, 0.1f))
+        modified = true;
+
+    if (ImGui::DragFloat3("Scale", scale, 0.1f))
+        modified = true;
+
+    if (modified)
+    {
+        ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, glm::value_ptr(mat));
+        node->setLocalTransform(mat);
+    }
+}
+
+void Editor::lightOptions(LightBase *light)
+{
+    ImGui::SeparatorText("Lighting Options");
+    ImGui::ColorEdit3("Color##light", glm::value_ptr(light->color), ImGuiColorEditFlags_DisplayRGB);
+    ImGui::DragFloat("Intensity##light", &light->intensity, 0.1f, 0.f); // todo: clamp
+}
+
+void Editor::createEmptyNode()
+{
+    mSceneGraph.addNode(new SceneNode(NodeType::Empty, "Empty Node", glm::identity<glm::mat4>(), nullptr));
+}
+
+// todo: implement properly
+void Editor::createDirectionalLight()
+{
+    LightSpecification lightSpecification {
+        .color = glm::vec3(1.f),
+        .intensity = 1.f,
+        .shadowOption = ShadowOptionNoShadows,
+        .shadowSoftness = ShadowSoftnessMedium,
+        .shadowStrength = 1.f,
+        .shadowBias = 0.04f
+    };
+
+    mSceneGraph.addNode(new DirectionalLight(lightSpecification));
+}
+
+void Editor::createSpotLight()
+{
+    LightSpecification lightSpecification {
+        .color = glm::vec3(1.f),
+        .intensity = 1.f,
+        .shadowOption = ShadowOptionNoShadows,
+        .shadowSoftness = ShadowSoftnessMedium,
+        .shadowStrength = 1.f,
+        .shadowBias = 0.04f
+    };
+
+    mSceneGraph.addNode(new SpotLight(lightSpecification));
+}
+
+void Editor::createPointLight()
+{
+    LightSpecification lightSpecification {
+        .color = glm::vec3(1.f),
+        .intensity = 1.f,
+        .shadowOption = ShadowOptionNoShadows,
+        .shadowSoftness = ShadowSoftnessMedium,
+        .shadowStrength = 1.f,
+        .shadowBias = 0.04f
+    };
+
+    mSceneGraph.addNode(new PointLight(lightSpecification));
+}
+
+void Editor::lightShadowOptions(LightBase *light)
+{
+    ImGui::SeparatorText("Shadow Options");
+
+    if (ImGui::BeginCombo("Shadow Option", toStr(light->shadowOption)))
+    {
+        for (uint32_t i = 0; i < ShadowOptionCount; ++i)
+        {
+            bool selected = light->shadowOption == i;
+
+            if (ImGui::Selectable(toStr(static_cast<ShadowOption>(i)), selected))
+                light->shadowOption = static_cast<ShadowOption>(i);
+        }
+
+        ImGui::EndCombo();
+    }
+
+    if (light->shadowOption == ShadowOptionSoftShadows)
+    {
+        if (ImGui::BeginCombo("Shadow Softness", toStr(light->shadowSoftness)))
+        {
+            for (uint32_t i = 0; i < ShadowSoftnessCount; ++i)
+            {
+                bool selected = light->shadowSoftness == i;
+
+                if (ImGui::Selectable(toStr(static_cast<ShadowSoftness>(i)), selected))
+                    light->shadowSoftness = static_cast<ShadowSoftness>(i);
+            }
+
+            ImGui::EndCombo();
+        }
+    }
+
+    if (light->shadowOption != ShadowOptionNoShadows)
+    {
+        ImGui::SliderFloat("Strength", &light->shadowStrength, 0.001f, 1.f);
+        ImGui::SliderFloat("Bias", &light->shadowBias, 0.001f, 1.f);
+    }
+}
+
+void Editor::sceneGraphPopup()
+{
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        ImGui::OpenPopup("sceneGraphPopup");
+
+    if (ImGui::BeginPopup("sceneGraphPopup"))
+    {
+        if (ImGui::MenuItem("Cut##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        if (ImGui::MenuItem("Copy##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        if (ImGui::MenuItem("Paste##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        if (ImGui::MenuItem("Paste as Child##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Rename##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        if (ImGui::MenuItem("Duplicate##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        if (ImGui::MenuItem("Delete##sceneGraph", nullptr, false, nodeSelected()))
+            deleteSelectedNode();
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Create Empty##sceneGraph"))
+            createEmptyNode();
+
+        if (ImGui::BeginMenu("Create Light"))
+        {
+            if (ImGui::MenuItem("Directional Light##sceneGraph"))
+                createDirectionalLight();
+
+            if (ImGui::MenuItem("Point Light##sceneGraph"))
+                createPointLight();
+
+            if (ImGui::MenuItem("Spot Light##sceneGraph"))
+                createSpotLight();
+
+            ImGui::EndMenu();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+bool Editor::nodeSelected()
+{
+    return UUIDRegistry::isSceneNode(mSelectedObjectID);
+}
+
+void Editor::deleteSelectedNode()
+{
+    mSceneGraph.deleteNode(mSelectedObjectID);
+    mSelectedObjectID = 0;
+}
+
+void Editor::deleteSelectedModel()
+{
+    mResourceManager->deleteModel(mSelectedObjectID);
+    mSelectedObjectID = 0;
+}
+
+void Editor::deleteSelectedMaterial()
+{
+    mResourceManager->deleteMaterial(mSelectedObjectID);
+    mSelectedObjectID = 0;
+}
+
+void Editor::deleteSelectedTexture()
+{
+    mResourceManager->deleteTexture(mSelectedObjectID);
+    mSelectedObjectID = 0;
 }

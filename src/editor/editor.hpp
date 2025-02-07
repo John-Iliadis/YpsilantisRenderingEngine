@@ -10,9 +10,12 @@
 #include <imgui/imgui_internal.h>
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_vulkan.h>
+#include <imgui/ImGuizmo.h>
 #include "../utils/utils.hpp"
 #include "../resource/resource_manager.hpp"
 #include "../scene_graph/scene_graph.hpp"
+#include "../scene_graph/light_node.hpp"
+#include "../scene_graph/mesh_node.hpp"
 #include "../renderer/model.hpp"
 #include "camera.hpp"
 
@@ -32,13 +35,27 @@ public:
 
 private:
     void mainMenuBar();
-    void assetPanel();
-    void sceneGraphPanel();
     void cameraPanel();
     void rendererPanel();
     void console();
     void debugPanel();
 
+    void sceneGraphPanel();
+    void sceneGraphPopup();
+    void sceneNodeRecursive(SceneNode* node);
+    void checkPayloadType(const char* type);
+    SceneNode* createModelGraph(std::shared_ptr<Model> model, const Model::Node& modelNode, SceneNode* parent);
+    void createEmptyNode();
+    void createDirectionalLight();
+    void createSpotLight();
+    void createPointLight();
+
+    void deleteSelectedNode();
+    void deleteSelectedModel();
+    void deleteSelectedMaterial();
+    void deleteSelectedTexture();
+
+    void assetPanel();
     void displayModels();
     void displayMaterials();
     void displayTextures();
@@ -48,10 +65,15 @@ private:
     void materialInspector(uuid64_t materialID);
     bool materialTextureInspector(index_t& textureIndex, std::string label);
     void textureInspector(uuid64_t textureID);
-
-    void sceneNodeRecursive(SceneNode* node);
-    void checkPayloadType(const char* type);
-    SceneNode* createModelGraph(std::shared_ptr<Model> model, const Model::Node& modelNode, SceneNode* parent);
+    void sceneNodeInspector(SceneNode* node);
+    void emptyNodeInspector(SceneNode* node);
+    void meshNodeInspector(SceneNode* node);
+    void dirLightInspector(SceneNode* node);
+    void pointLightInspector(SceneNode* node);
+    void spotLightInspector(SceneNode* node);
+    void nodeTransform(SceneNode* node);
+    void lightOptions(LightBase* light);
+    void lightShadowOptions(LightBase* light);
 
     void viewPort();
 
@@ -61,6 +83,8 @@ private:
     void modelDragDropTarget();
     void textureDragDropSource(uuid64_t textureID);
     bool textureDragDropTarget(index_t& textureIndex);
+
+    bool nodeSelected();
 
     std::optional<uuid64_t> textureCombo(uuid64_t selectedTextureID);
 

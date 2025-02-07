@@ -20,6 +20,7 @@ public:
 
     uuid64_t meshID() const;
     uint32_t instanceID() const;
+    index_t materialIndex() const;
 
 private:
     uuid64_t mMeshID;

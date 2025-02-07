@@ -34,6 +34,7 @@ public:
     index_t getMatIndex(uuid64_t id);
     index_t getTextureIndex(uuid64_t id);
     uuid64_t getTexIDFromIndex(index_t texIndex);
+    uuid64_t getMatIdFromIndex(index_t matIndex);
     VkDescriptorSet getTextureDescriptorSet(uuid64_t id);
 
     void updateMaterial(index_t materialIndex);

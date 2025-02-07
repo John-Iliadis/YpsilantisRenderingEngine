@@ -83,3 +83,8 @@ uint32_t MeshNode::instanceID() const
 {
     return mInstanceID;
 }
+
+index_t MeshNode::materialIndex() const
+{
+    return mMatIndex;
+}

@@ -47,6 +47,10 @@ struct VulkanSampler
     TextureFilter filterMode;
 };
 
+const char* toStr(VkFormat format);
+const char* toStr(TextureWrap wrapMode);
+const char* toStr(TextureFilter filterMode);
+
 // todo: improve
 class VulkanTexture
 {

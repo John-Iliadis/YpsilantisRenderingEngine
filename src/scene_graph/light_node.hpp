@@ -7,67 +7,71 @@
 
 #include "scene_node.hpp"
 
-enum class ShadowOption : uint32_t
+enum ShadowOption : uint32_t
 {
-    NoShadows = 0,
-    HardShadows = 1,
-    SoftShadows = 2
+    ShadowOptionNoShadows = 0,
+    ShadowOptionSoftShadows = 1,
+    ShadowOptionHardShadows = 2,
+    ShadowOptionCount
 };
 
-enum class SoftShadow : uint32_t
+enum ShadowSoftness : uint32_t
 {
-    Low = 0,
-    Medium = 1,
-    High = 2
+    ShadowSoftnessLow = 0,
+    ShadowSoftnessMedium = 1,
+    ShadowSoftnessHigh = 2,
+    ShadowSoftnessCount
 };
 
-class LightBase : public SceneNode
+const char* toStr(ShadowOption shadowOption);
+const char* toStr(ShadowSoftness softShadow);
+
+struct LightSpecification
 {
-public:
     glm::vec3 color;
     float intensity;
     ShadowOption shadowOption;
-    SoftShadow softShadow;
+    ShadowSoftness shadowSoftness;
     float shadowStrength;
-    float bias;
-    uint32_t iconTextureIndex;
-
-public:
+    float shadowBias;
 };
 
-class DirectionalLight : public LightBase
+struct LightBase : public SceneNode
 {
-public:
-    glm::vec3 direction;
-    uint32_t shadowAtlasIndex;
-    glm::vec2 shadowAtlasTexCoords;
+    LightBase();
+    LightBase(const LightSpecification& specification, NodeType type, const std::string& name);
 
-public:
+    glm::vec3 color;
+    float intensity;
+    ShadowOption shadowOption;
+    ShadowSoftness shadowSoftness;
+    float shadowStrength;
+    float shadowBias;
 };
 
-class PointLight : public LightBase
+struct DirectionalLight : public LightBase
 {
-public:
-    glm::vec3 position;
-    std::array<glm::mat4, 6> views;
+    DirectionalLight() = default;
+    DirectionalLight(const LightSpecification& specification);
+};
+
+struct PointLight : public LightBase
+{
+    PointLight();
+    PointLight(const LightSpecification& specification, float range = 10.f);
+
+    std::array<glm::mat4, 6> views; // todo: create
     glm::mat4 projection;
     float range;
-    uint32_t cubemapIndex;
-
-public:
 };
 
-class SpotLight : public LightBase
+struct SpotLight : public LightBase
 {
-public:
-    glm::vec3 position;
-    glm::vec3 direction;
+    SpotLight();
+    SpotLight(const LightSpecification& specification, float range = 10.f);
+
     glm::mat4 projection;
     float range;
-    uint32_t shadowAtlasIndex;
-    glm::vec2 shadowAtlasTexCoords;
-
-public:
 };
 
 #endif //OPENGLRENDERINGENGINE_LIGHT_NODE_HPP
