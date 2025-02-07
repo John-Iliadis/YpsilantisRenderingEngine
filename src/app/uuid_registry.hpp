@@ -32,6 +32,14 @@ public:
     static uuid64_t getDefMatID();
     static uuid64_t getDefTexID(MatTexType matTexType);
 
+    static bool is(uuid64_t id, ObjectType objectType);
+    static bool isModel(uuid64_t id);
+    static bool isMaterial(uuid64_t id);
+    static bool isTexture2D(uuid64_t id);
+    static bool isTextureCube(uuid64_t id);
+    static bool isMesh(uuid64_t id);
+    static bool isSceneNode(uuid64_t id);
+
 private:
     static uuid64_t generateID(ObjectType type);
     static inline std::unordered_map<uuid64_t, ObjectType> mIdToType;

@@ -72,3 +72,44 @@ uuid64_t UUIDRegistry::getDefTexID(MatTexType matTexType)
         default: assert(false);
     }
 }
+
+bool UUIDRegistry::is(uuid64_t id, ObjectType objectType)
+{
+    if (mIdToType.contains(id))
+    {
+        if (mIdToType.at(id) == objectType)
+            return true;
+    }
+
+    return false;
+}
+
+bool UUIDRegistry::isModel(uuid64_t id)
+{
+    return is(id, ObjectType::Model);
+}
+
+bool UUIDRegistry::isMaterial(uuid64_t id)
+{
+    return is(id, ObjectType::Material);
+}
+
+bool UUIDRegistry::isTexture2D(uuid64_t id)
+{
+    return is(id, ObjectType::Texture2D);
+}
+
+bool UUIDRegistry::isTextureCube(uuid64_t id)
+{
+    return is(id, ObjectType::TextureCube);
+}
+
+bool UUIDRegistry::isMesh(uuid64_t id)
+{
+    return is(id, ObjectType::Mesh);
+}
+
+bool UUIDRegistry::isSceneNode(uuid64_t id)
+{
+    return is(id, ObjectType::SceneNode);
+}
