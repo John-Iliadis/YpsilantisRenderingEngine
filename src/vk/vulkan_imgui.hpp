@@ -24,7 +24,8 @@ public:
               VkRenderPass renderPass);
     void terminate();
 
-    void update();
+    void begin();
+    void end();
     void render(VkCommandBuffer commandBuffer);
 };
 

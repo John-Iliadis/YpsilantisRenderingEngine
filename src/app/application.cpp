@@ -42,6 +42,7 @@ void Application::run()
         handleEvents();
         update(dt);
         render();
+        countFPS(dt);
     }
 
     vkDeviceWaitIdle(mRenderDevice->device);
@@ -73,12 +74,12 @@ void Application::handleEvents()
 
 void Application::update(float dt)
 {
-    mVulkanImGui.update();
+    mVulkanImGui.begin();
 
     mResourceManager->processMainThreadTasks();
     mEditor.update(dt);
 
-    countFPS(dt);
+    mVulkanImGui.end();
 }
 
 void Application::fillCommandBuffer(VkCommandBuffer commandBuffer)
@@ -92,7 +93,7 @@ void Application::fillCommandBuffer(VkCommandBuffer commandBuffer)
     };
 
     VkResult result = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
-    vulkanCheck(result, "Failed to update command buffer.");
+    vulkanCheck(result, "Failed to begin command buffer.");
 
     VkClearValue clearValue {{0.2f, 0.2f, 0.2f, 0.2f}};
 

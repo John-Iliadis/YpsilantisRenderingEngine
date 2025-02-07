@@ -40,7 +40,7 @@ void VulkanImGui::terminate()
     ImGui::DestroyContext();
 }
 
-void VulkanImGui::update()
+void VulkanImGui::begin()
 {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -48,8 +48,12 @@ void VulkanImGui::update()
     ImGui::DockSpaceOverViewport();
 }
 
-void VulkanImGui::render(VkCommandBuffer commandBuffer)
+void VulkanImGui::end()
 {
     ImGui::Render();
+}
+
+void VulkanImGui::render(VkCommandBuffer commandBuffer)
+{
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 }

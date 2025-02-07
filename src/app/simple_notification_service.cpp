@@ -23,6 +23,8 @@ void Topic::publish(const Message &message)
 SubscriberSNS::SubscriberSNS(std::initializer_list<Topic::Type> topics)
     : mSubscriptionList(topics)
 {
+    for (auto topic : mSubscriptionList)
+        SNS::subscribe(topic, this);
 }
 
 SubscriberSNS::~SubscriberSNS()
