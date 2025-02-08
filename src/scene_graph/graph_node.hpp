@@ -21,7 +21,7 @@ enum class NodeType
     SpotLight
 };
 
-class GraphNode : public SubscriberSNS
+class GraphNode
 {
 public:
     GraphNode();
@@ -34,7 +34,7 @@ public:
     void orphan();
     void markDirty();
 
-    uuid64_t id() const;
+    uuid32_t id() const;
     NodeType type() const;
     const std::string& name() const;
     const std::multiset<GraphNode*>& children() const;
@@ -47,7 +47,7 @@ public:
     bool operator<(const GraphNode* other) const;
 
 protected:
-    uuid64_t mID;
+    uuid32_t mID;
     NodeType mType;
     std::string mName;
     glm::mat4 mLocalTransform;

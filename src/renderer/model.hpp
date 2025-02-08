@@ -39,7 +39,7 @@ struct SceneNode
 
 struct Mesh
 {
-    uuid64_t meshID;
+    uuid32_t meshID;
     std::string name;
     InstancedMesh mesh;
     int32_t materialIndex;

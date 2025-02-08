@@ -29,7 +29,9 @@ private:
     VkDescriptorSetLayout mDisplayTexturesDSLayout;
     VkDescriptorSetLayout mMaterialsDsLayout;
 
-    std::unordered_map<uuid64_t, std::shared_ptr<Model>> mModels;
+    std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
+
+    // async loading
     std::vector<std::future<std::shared_ptr<Model>>> mLoadedModelFutures;
     MainThreadTaskQueue mTaskQueue;
 

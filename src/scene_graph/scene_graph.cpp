@@ -10,7 +10,7 @@ SceneGraph::SceneGraph()
 {
 }
 
-GraphNode *SceneGraph::searchNode(uuid64_t nodeID)
+GraphNode *SceneGraph::searchNode(uuid32_t nodeID)
 {
     std::vector<GraphNode*> stack(1, &mRoot);
 
@@ -68,7 +68,7 @@ void SceneGraph::addNode(GraphNode *node)
     mRoot.addChild(node);
 }
 
-void SceneGraph::deleteNode(uuid64_t nodeID)
+void SceneGraph::deleteNode(uuid32_t nodeID)
 {
     GraphNode* node = searchNode(nodeID);
     node->orphan();

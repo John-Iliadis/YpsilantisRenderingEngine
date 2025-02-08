@@ -7,49 +7,21 @@
 MeshNode::MeshNode()
     : GraphNode()
     , mMeshID()
-    , mMatIndex()
     , mInstanceID()
-    , mModifiedMaterial()
 {
-    subscribe(Topic::Type::Resources);
 }
 
 MeshNode::MeshNode(NodeType type, const std::string& name, const glm::mat4& transformation, GraphNode* parent,
-                   uuid64_t meshID, uint32_t instanceID, index_t materialIndex, const std::string& matName)
+                   uuid32_t meshID, uint32_t instanceID)
     : GraphNode(type, name, transformation, parent)
     , mMeshID(meshID)
     , mInstanceID(instanceID)
-    , mMatIndex(materialIndex)
-    , mMatName(matName)
-    , mModifiedMaterial()
 {
-    subscribe(Topic::Type::Resources);
 }
 
 MeshNode::~MeshNode()
 {
     SNS::publishMessage(Topic::Type::SceneGraph, Message::create<Message::RemoveMeshInstance>(mMeshID, mInstanceID));
-}
-
-void MeshNode::notify(const Message &message)
-{
-    if (const auto m = message.getIf<Message::MaterialDeleted>())
-    {
-        if (m->removeIndex == mMatIndex)
-            mMatIndex = 0;
-
-        if (m->transferIndex.has_value() && m->transferIndex == mMatIndex)
-            mMatIndex = m->removeIndex;
-    }
-
-    if (const auto m = message.getIf<Message::MaterialRemap>())
-    {
-        if (!mModifiedMaterial && mMatName == m->matName)
-        {
-            mMatIndex = m->newMatIndex;
-            SNS::publishMessage(Topic::Type::SceneGraph, Message::create<Message::MeshInstanceUpdate>(mMeshID, mID, mInstanceID, mMatIndex, mGlobalTransform));
-        }
-    }
 }
 
 void MeshNode::updateGlobalTransform()
@@ -67,14 +39,14 @@ void MeshNode::updateGlobalTransform()
 
         mDirty = false;
 
-        SNS::publishMessage(Topic::Type::SceneGraph, Message::create<Message::MeshInstanceUpdate>(mMeshID, mID, mInstanceID, mMatIndex, mGlobalTransform));
+        SNS::publishMessage(Topic::Type::SceneGraph, Message::create<Message::MeshInstanceUpdate>(mMeshID, mID, mInstanceID, mGlobalTransform));
     }
 
     for (auto child : mChildren)
         child->updateGlobalTransform();
 }
 
-uuid64_t MeshNode::meshID() const
+uuid32_t MeshNode::meshID() const
 {
     return mMeshID;
 }
@@ -82,9 +54,4 @@ uuid64_t MeshNode::meshID() const
 uint32_t MeshNode::instanceID() const
 {
     return mInstanceID;
-}
-
-index_t MeshNode::materialIndex() const
-{
-    return mMatIndex;
 }

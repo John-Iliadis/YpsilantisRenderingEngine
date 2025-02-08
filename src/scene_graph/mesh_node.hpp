@@ -12,22 +12,17 @@ class MeshNode : public GraphNode
 public:
     MeshNode();
     MeshNode(NodeType type, const std::string& name, const glm::mat4& transformation, GraphNode* parent,
-             uuid64_t meshID, uint32_t instanceID, index_t materialIndex, const std::string& matName);
+             uuid32_t meshID, uint32_t instanceID);
     ~MeshNode();
 
-    void notify(const Message &message) override;
     void updateGlobalTransform() override;
 
-    uuid64_t meshID() const;
+    uuid32_t meshID() const;
     uint32_t instanceID() const;
-    index_t materialIndex() const;
 
 private:
-    uuid64_t mMeshID;
+    uuid32_t mMeshID;
     uint32_t mInstanceID;
-    index_t mMatIndex;
-    std::string mMatName;
-    bool mModifiedMaterial;
 };
 
 #endif //OPENGLRENDERINGENGINE_MESH_NODE_HPP

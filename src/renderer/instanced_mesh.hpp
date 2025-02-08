@@ -9,6 +9,7 @@
 #include <glm/gtc/matrix_inverse.hpp>
 #include "../vk/vulkan_render_device.hpp"
 #include "../vk/vulkan_buffer.hpp"
+#include "../app/types.hpp"
 #include "vertex.hpp"
 
 class InstancedMesh
@@ -19,7 +20,6 @@ public:
         glm::mat4 modelMatrix;
         glm::mat3 normalMatrix;
         uint32_t id;
-        uint32_t materialIndex;
     };
 
 public:
@@ -28,8 +28,8 @@ public:
                   const std::vector<Vertex>& vertices,
                   const std::vector<uint32_t>& indices);
 
-    uint32_t addInstance(const glm::mat4 &model, uint32_t id, uint32_t materialIndex);
-    void updateInstance(uint32_t instanceID, const glm::mat4& model, uint32_t id, uint32_t materialIndex);
+    uint32_t addInstance(const glm::mat4 &transformation, uuid32_t id);
+    void updateInstance(uint32_t instanceID, const glm::mat4& transformation, uuid32_t id);
     void removeInstance(uint32_t instanceID);
     void setDebugName(const std::string& debugName);
     void render(VkCommandBuffer commandBuffer) const;

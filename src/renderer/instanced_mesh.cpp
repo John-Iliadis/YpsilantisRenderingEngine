@@ -34,7 +34,7 @@ InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice,
 {
 }
 
-uint32_t InstancedMesh::addInstance(const glm::mat4 &model, uint32_t id, uint32_t materialIndex)
+uint32_t InstancedMesh::addInstance(const glm::mat4 &model, uuid32_t id)
 {
     checkResize();
 
@@ -50,7 +50,6 @@ uint32_t InstancedMesh::addInstance(const glm::mat4 &model, uint32_t id, uint32_
         .modelMatrix = model,
         .normalMatrix = glm::inverseTranspose(glm::mat3(model)),
         .id = id,
-        .materialIndex = materialIndex
     };
 
     mInstanceBuffer.update(instanceIndex * sInstanceSize, sInstanceSize, &instanceData);
@@ -58,7 +57,7 @@ uint32_t InstancedMesh::addInstance(const glm::mat4 &model, uint32_t id, uint32_
     return instanceID;
 }
 
-void InstancedMesh::updateInstance(uint32_t instanceID, const glm::mat4& model, uint32_t id, uint32_t materialIndex)
+void InstancedMesh::updateInstance(uint32_t instanceID, const glm::mat4& model, uuid32_t id)
 {
     uint32_t instanceIndex = mInstanceIdToIndexMap.at(instanceID);
 
@@ -66,7 +65,6 @@ void InstancedMesh::updateInstance(uint32_t instanceID, const glm::mat4& model, 
         .modelMatrix = model,
         .normalMatrix = glm::inverseTranspose(glm::mat3(model)),
         .id = id,
-        .materialIndex = materialIndex
     };
 
     mInstanceBuffer.update(instanceIndex * sInstanceSize, sInstanceSize, &instanceData);
@@ -196,12 +194,6 @@ std::array<VkVertexInputAttributeDescription, 14> constexpr InstancedMesh::attri
     attributeDescriptions.at(12).binding = 1;
     attributeDescriptions.at(12).format = VK_FORMAT_R32_UINT;
     attributeDescriptions.at(12).offset = offsetof(InstanceData, id);
-
-    // PerInstanceData::materialIndex
-    attributeDescriptions.at(13).location = 14;
-    attributeDescriptions.at(13).binding = 1;
-    attributeDescriptions.at(13).format = VK_FORMAT_R32_UINT;
-    attributeDescriptions.at(13).offset = offsetof(InstanceData, materialIndex);
 
     return attributeDescriptions;
 }

@@ -64,7 +64,7 @@ void GraphNode::markDirty()
         child->markDirty();
 }
 
-uuid64_t GraphNode::id() const
+uuid32_t GraphNode::id() const
 {
     return mID;
 }
