@@ -10,23 +10,22 @@ static constexpr int sInitialWindowHeight = 1080;
 Application::Application()
     : mWindow(sInitialWindowWidth, sInitialWindowHeight)
     , mInstance()
-    , mRenderDevice(std::make_shared<VulkanRenderDevice>(mInstance))
-    , mSwapchain(mInstance, *mRenderDevice)
-    , mRenderer(std::make_shared<Renderer>())
-    , mResourceManager(std::make_shared<ResourceManager>(mRenderDevice))
-    , mEditor(mRenderer, mResourceManager)
+    , mRenderDevice(mInstance)
+    , mSwapchain(mInstance, mRenderDevice)
+    , mRenderer(mRenderDevice)
+    , mEditor(mRenderer)
 {
     createRenderPass();
     createSwapchainFramebuffers();
 
-    mVulkanImGui.init(mWindow, mInstance, *mRenderDevice, mRenderPass);
+    mVulkanImGui.init(mWindow, mInstance, mRenderDevice, mRenderPass);
 }
 
 Application::~Application()
 {
-    vkDestroyRenderPass(mRenderDevice->device, mRenderPass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mRenderPass, nullptr);
     for (uint32_t i = 0; i < mSwapchainFramebuffers.size(); ++i)
-        vkDestroyFramebuffer(mRenderDevice->device, mSwapchainFramebuffers.at(i), nullptr);
+        vkDestroyFramebuffer(mRenderDevice.device, mSwapchainFramebuffers.at(i), nullptr);
     mVulkanImGui.terminate();
 }
 
@@ -45,7 +44,7 @@ void Application::run()
         countFPS(dt);
     }
 
-    vkDeviceWaitIdle(mRenderDevice->device);
+    vkDeviceWaitIdle(mRenderDevice.device);
 }
 
 void Application::recreateSwapchain()
@@ -53,13 +52,13 @@ void Application::recreateSwapchain()
     while (mWindow.width() == 0 || mWindow.height() == 0)
         mWindow.waitEvents();
 
-    vkDeviceWaitIdle(mRenderDevice->device);
+    vkDeviceWaitIdle(mRenderDevice.device);
 
     mSwapchain.recreate();
 
     // swapchain framebuffers
     for (uint32_t i = 0; i < mSwapchainFramebuffers.size(); ++i)
-        vkDestroyFramebuffer(mRenderDevice->device, mSwapchainFramebuffers.at(i), nullptr);
+        vkDestroyFramebuffer(mRenderDevice.device, mSwapchainFramebuffers.at(i), nullptr);
     createSwapchainFramebuffers();
 }
 
@@ -76,23 +75,21 @@ void Application::update(float dt)
 {
     mVulkanImGui.begin();
 
-    mResourceManager->processMainThreadTasks();
+    mRenderer.processMainThreadTasks();
     mEditor.update(dt);
 
     mVulkanImGui.end();
 }
 
-void Application::fillCommandBuffer(VkCommandBuffer commandBuffer)
+void Application::fillCommandBuffer(uint32_t imageIndex)
 {
-    static uint32_t imageIndex = 0;
-
     VkCommandBufferBeginInfo commandBufferBeginInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         .pInheritanceInfo = nullptr
     };
 
-    VkResult result = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+    VkResult result = vkBeginCommandBuffer(mSwapchain.commandBuffer, &commandBufferBeginInfo);
     vulkanCheck(result, "Failed to begin command buffer.");
 
     VkClearValue clearValue {{0.2f, 0.2f, 0.2f, 0.2f}};
@@ -109,21 +106,19 @@ void Application::fillCommandBuffer(VkCommandBuffer commandBuffer)
         .pClearValues = &clearValue
     };
 
-    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    mVulkanImGui.render(commandBuffer);
-    vkCmdEndRenderPass(commandBuffer);
-    vkEndCommandBuffer(commandBuffer);
-
-    imageIndex = (imageIndex + 1) % 2;
+    vkCmdBeginRenderPass(mSwapchain.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    mVulkanImGui.render(mSwapchain.commandBuffer);
+    vkCmdEndRenderPass(mSwapchain.commandBuffer);
+    vkEndCommandBuffer(mSwapchain.commandBuffer);
 }
 
 void Application::render()
 {
-    vkWaitForFences(mRenderDevice->device, 1, &mSwapchain.inFlightFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(mRenderDevice->device, 1, &mSwapchain.inFlightFence);
+    vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(mRenderDevice.device, 1, &mSwapchain.inFlightFence);
 
     uint32_t swapchainImageIndex;
-    VkResult result = vkAcquireNextImageKHR(mRenderDevice->device,
+    VkResult result = vkAcquireNextImageKHR(mRenderDevice.device,
                                             mSwapchain.swapchain,
                                            UINT64_MAX,
                                            mSwapchain.imageReadySemaphore,
@@ -136,7 +131,7 @@ void Application::render()
         return;
     }
 
-    fillCommandBuffer(mSwapchain.commandBuffer);
+    fillCommandBuffer(swapchainImageIndex);
 
     VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submitInfo {
@@ -150,7 +145,7 @@ void Application::render()
         .pSignalSemaphores = &mSwapchain.renderCompleteSemaphore
     };
 
-    result = vkQueueSubmit(mRenderDevice->graphicsQueue, 1, &submitInfo, mSwapchain.inFlightFence);
+    result = vkQueueSubmit(mRenderDevice.graphicsQueue, 1, &submitInfo, mSwapchain.inFlightFence);
     vulkanCheck(result, "Failed queue submit.");
 
     VkPresentInfoKHR presentInfo {
@@ -163,7 +158,7 @@ void Application::render()
         .pResults = nullptr
     };
 
-    result = vkQueuePresentKHR(mRenderDevice->graphicsQueue, &presentInfo);
+    result = vkQueuePresentKHR(mRenderDevice.graphicsQueue, &presentInfo);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         recreateSwapchain();
@@ -216,7 +211,7 @@ void Application::createRenderPass()
         .pSubpasses = &subpassDescription
     };
 
-    VkResult result = vkCreateRenderPass(mRenderDevice->device, &renderPassCreateInfo, nullptr, &mRenderPass);
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mRenderPass);
     vulkanCheck(result, "Failed to create renderpass");
 }
 
@@ -234,13 +229,13 @@ void Application::createSwapchainFramebuffers()
             .layers = 1
         };
 
-        VkResult result = vkCreateFramebuffer(mRenderDevice->device,
+        VkResult result = vkCreateFramebuffer(mRenderDevice.device,
                                               &framebufferCreateInfo,
                                               nullptr,
                                               &mSwapchainFramebuffers.at(i));
         vulkanCheck(result, "Failed to create swapchain framebuffer");
 
-        setVulkanObjectDebugName(*mRenderDevice,
+        setVulkanObjectDebugName(mRenderDevice,
                                  VK_OBJECT_TYPE_FRAMEBUFFER,
                                  std::format("Application::mSwapchainFramebuffers.at({})", i),
                                  mSwapchainFramebuffers.at(i));

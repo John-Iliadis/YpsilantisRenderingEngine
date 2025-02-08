@@ -7,7 +7,6 @@
 
 #include "../window/window.hpp"
 #include "../renderer/renderer.hpp"
-#include "../resource/resource_manager.hpp"
 #include "../editor/editor.hpp"
 #include "../vk/vulkan_instance.hpp"
 #include "../vk/vulkan_render_device.hpp"
@@ -26,7 +25,7 @@ private:
     void recreateSwapchain();
     void handleEvents();
     void update(float dt);
-    void fillCommandBuffer(VkCommandBuffer commandBuffer);
+    void fillCommandBuffer(uint32_t imageIndex);
     void render();
 
     void countFPS(float dt);
@@ -37,12 +36,10 @@ private:
 private:
     Window mWindow;
     VulkanInstance mInstance;
-    std::shared_ptr<VulkanRenderDevice> mRenderDevice;
+    VulkanRenderDevice mRenderDevice;
     VulkanSwapchain mSwapchain;
 
-    std::shared_ptr<Renderer> mRenderer;
-    std::shared_ptr<ResourceManager> mResourceManager;
-
+    Renderer mRenderer;
     Editor mEditor;
     VulkanImGui mVulkanImGui;
 
