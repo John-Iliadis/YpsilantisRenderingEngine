@@ -2,9 +2,9 @@
 // Created by Gianni on 26/01/2025.
 //
 
-#include "scene_node.hpp"
+#include "graph_node.hpp"
 
-SceneNode::SceneNode()
+GraphNode::GraphNode()
     : mID(UUIDRegistry::generateSceneNodeID())
     , mType(NodeType::Empty)
     , mName("")
@@ -15,7 +15,7 @@ SceneNode::SceneNode()
 {
 }
 
-SceneNode::SceneNode(NodeType type, const std::string &name, const glm::mat4& transformation, SceneNode *parent)
+GraphNode::GraphNode(NodeType type, const std::string &name, const glm::mat4& transformation, GraphNode *parent)
     : mID(UUIDRegistry::generateSceneNodeID())
     , mType(type)
     , mName(name)
@@ -26,29 +26,29 @@ SceneNode::SceneNode(NodeType type, const std::string &name, const glm::mat4& tr
 {
 }
 
-SceneNode::~SceneNode()
+GraphNode::~GraphNode()
 {
-    for (SceneNode* node : mChildren)
+    for (GraphNode* node : mChildren)
         delete node;
 }
 
-void SceneNode::setParent(SceneNode *parent)
+void GraphNode::setParent(GraphNode *parent)
 {
     mParent = parent;
 }
 
-void SceneNode::addChild(SceneNode* child)
+void GraphNode::addChild(GraphNode* child)
 {
     child->mParent = this;
     mChildren.insert(child);
 }
 
-void SceneNode::removeChild(SceneNode *child)
+void GraphNode::removeChild(GraphNode *child)
 {
     mChildren.erase(child);
 }
 
-void SceneNode::orphan()
+void GraphNode::orphan()
 {
     if (mParent)
     {
@@ -57,55 +57,55 @@ void SceneNode::orphan()
     }
 }
 
-void SceneNode::markDirty()
+void GraphNode::markDirty()
 {
     mDirty = true;
     for (auto child : mChildren)
         child->markDirty();
 }
 
-uuid64_t SceneNode::id() const
+uuid64_t GraphNode::id() const
 {
     return mID;
 }
 
-NodeType SceneNode::type() const
+NodeType GraphNode::type() const
 {
     return mType;
 }
 
-const std::string &SceneNode::name() const
+const std::string &GraphNode::name() const
 {
     return mName;
 }
 
-const std::multiset<SceneNode*>& SceneNode::children() const
+const std::multiset<GraphNode*>& GraphNode::children() const
 {
     return mChildren;
 }
 
-const glm::mat4 &SceneNode::localTransform() const
+const glm::mat4 &GraphNode::localTransform() const
 {
     return mLocalTransform;
 }
 
-const glm::mat4 &SceneNode::globalTransform()
+const glm::mat4 &GraphNode::globalTransform()
 {
     return mGlobalTransform;
 }
 
-void SceneNode::setLocalTransform(const glm::mat4 &transform)
+void GraphNode::setLocalTransform(const glm::mat4 &transform)
 {
     mLocalTransform = transform;
     markDirty();
 }
 
-bool SceneNode::operator<(const SceneNode* other) const
+bool GraphNode::operator<(const GraphNode* other) const
 {
     return std::less<std::string>()(mName, other->mName);
 }
 
-void SceneNode::updateGlobalTransform()
+void GraphNode::updateGlobalTransform()
 {
     if (mDirty)
     {

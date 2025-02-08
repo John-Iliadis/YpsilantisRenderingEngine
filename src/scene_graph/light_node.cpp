@@ -37,7 +37,7 @@ LightBase::LightBase()
 }
 
 LightBase::LightBase(const LightSpecification &specification, NodeType type, const std::string& name)
-    : SceneNode(type, name, glm::identity<glm::mat4>(), nullptr)
+    : GraphNode(type, name, glm::identity<glm::mat4>(), nullptr)
     , color(specification.color)
     , intensity(specification.intensity)
     , shadowOption(specification.shadowOption)

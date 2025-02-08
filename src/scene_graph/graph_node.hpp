@@ -2,8 +2,8 @@
 // Created by Gianni on 26/01/2025.
 //
 
-#ifndef OPENGLRENDERINGENGINE_SCENE_NODE_HPP
-#define OPENGLRENDERINGENGINE_SCENE_NODE_HPP
+#ifndef VULKANRENDERINGENGINE_SCENE_NODE_HPP
+#define VULKANRENDERINGENGINE_SCENE_NODE_HPP
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -21,30 +21,30 @@ enum class NodeType
     SpotLight
 };
 
-class SceneNode : public SubscriberSNS
+class GraphNode : public SubscriberSNS
 {
 public:
-    SceneNode();
-    SceneNode(NodeType type, const std::string& name, const glm::mat4& transformation, SceneNode* parent);
-    virtual ~SceneNode();
+    GraphNode();
+    GraphNode(NodeType type, const std::string& name, const glm::mat4& transformation, GraphNode* parent);
+    virtual ~GraphNode();
 
-    void setParent(SceneNode* parent);
-    void addChild(SceneNode* child);
-    void removeChild(SceneNode* child);
+    void setParent(GraphNode* parent);
+    void addChild(GraphNode* child);
+    void removeChild(GraphNode* child);
     void orphan();
     void markDirty();
 
     uuid64_t id() const;
     NodeType type() const;
     const std::string& name() const;
-    const std::multiset<SceneNode*>& children() const;
+    const std::multiset<GraphNode*>& children() const;
 
     const glm::mat4& localTransform() const;
     const glm::mat4& globalTransform();
     void setLocalTransform(const glm::mat4& transform);
     virtual void updateGlobalTransform();
 
-    bool operator<(const SceneNode* other) const;
+    bool operator<(const GraphNode* other) const;
 
 protected:
     uuid64_t mID;
@@ -54,8 +54,8 @@ protected:
     glm::mat4 mGlobalTransform;
     bool mDirty;
 
-    SceneNode* mParent;
-    std::multiset<SceneNode*> mChildren;
+    GraphNode* mParent;
+    std::multiset<GraphNode*> mChildren;
 };
 
-#endif //OPENGLRENDERINGENGINE_SCENE_NODE_HPP
+#endif //VULKANRENDERINGENGINE_SCENE_NODE_HPP

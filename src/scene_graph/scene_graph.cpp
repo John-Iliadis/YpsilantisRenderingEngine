@@ -10,13 +10,13 @@ SceneGraph::SceneGraph()
 {
 }
 
-SceneNode *SceneGraph::searchNode(uuid64_t nodeID)
+GraphNode *SceneGraph::searchNode(uuid64_t nodeID)
 {
-    std::vector<SceneNode*> stack(1, &mRoot);
+    std::vector<GraphNode*> stack(1, &mRoot);
 
     while (!stack.empty())
     {
-        SceneNode* node = stack.back();
+        GraphNode* node = stack.back();
         stack.pop_back();
 
         if (node->id() == nodeID)
@@ -38,11 +38,11 @@ void SceneGraph::notify(const Message &message)
 {
     if (const auto& m = message.getIf<Message::ModelDeleted>())
     {
-        std::vector<SceneNode*> stack(1, &mRoot);
+        std::vector<GraphNode*> stack(1, &mRoot);
 
         while (!stack.empty())
         {
-            SceneNode* node = stack.back();
+            GraphNode* node = stack.back();
             stack.pop_back();
 
             if (node->type() == NodeType::Mesh)
@@ -63,14 +63,14 @@ void SceneGraph::notify(const Message &message)
     }
 }
 
-void SceneGraph::addNode(SceneNode *node)
+void SceneGraph::addNode(GraphNode *node)
 {
     mRoot.addChild(node);
 }
 
 void SceneGraph::deleteNode(uuid64_t nodeID)
 {
-    SceneNode* node = searchNode(nodeID);
+    GraphNode* node = searchNode(nodeID);
     node->orphan();
     delete node;
 }

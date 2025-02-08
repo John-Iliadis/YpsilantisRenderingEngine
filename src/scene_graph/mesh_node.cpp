@@ -5,7 +5,7 @@
 #include "mesh_node.hpp"
 
 MeshNode::MeshNode()
-    : SceneNode()
+    : GraphNode()
     , mMeshID()
     , mMatIndex()
     , mInstanceID()
@@ -14,9 +14,9 @@ MeshNode::MeshNode()
     subscribe(Topic::Type::Resources);
 }
 
-MeshNode::MeshNode(NodeType type, const std::string& name, const glm::mat4& transformation, SceneNode* parent,
+MeshNode::MeshNode(NodeType type, const std::string& name, const glm::mat4& transformation, GraphNode* parent,
                    uuid64_t meshID, uint32_t instanceID, index_t materialIndex, const std::string& matName)
-    : SceneNode(type, name, transformation, parent)
+    : GraphNode(type, name, transformation, parent)
     , mMeshID(meshID)
     , mInstanceID(instanceID)
     , mMatIndex(materialIndex)

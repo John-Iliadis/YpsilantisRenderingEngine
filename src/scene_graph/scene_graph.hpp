@@ -13,16 +13,16 @@ class SceneGraph : public SubscriberSNS
 public:
     SceneGraph();
 
-    void addNode(SceneNode* node);
+    void addNode(GraphNode* node);
     void deleteNode(uuid64_t nodeID);
     void updateTransforms();
 
     void notify(const Message &message) override;
 
-    SceneNode* searchNode(uuid64_t nodeID);
+    GraphNode* searchNode(uuid64_t nodeID);
 
 public:
-    SceneNode mRoot;
+    GraphNode mRoot;
 };
 
 #endif //OPENGLRENDERINGENGINE_SCENE_GRAPH_HPP

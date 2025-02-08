@@ -5,13 +5,13 @@
 #ifndef OPENGLRENDERINGENGINE_MESH_NODE_HPP
 #define OPENGLRENDERINGENGINE_MESH_NODE_HPP
 
-#include "scene_node.hpp"
+#include "graph_node.hpp"
 
-class MeshNode : public SceneNode
+class MeshNode : public GraphNode
 {
 public:
     MeshNode();
-    MeshNode(NodeType type, const std::string& name, const glm::mat4& transformation, SceneNode* parent,
+    MeshNode(NodeType type, const std::string& name, const glm::mat4& transformation, GraphNode* parent,
              uuid64_t meshID, uint32_t instanceID, index_t materialIndex, const std::string& matName);
     ~MeshNode();
 

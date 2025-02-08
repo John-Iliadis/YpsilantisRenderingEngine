@@ -5,7 +5,7 @@
 #ifndef OPENGLRENDERINGENGINE_LIGHT_NODE_HPP
 #define OPENGLRENDERINGENGINE_LIGHT_NODE_HPP
 
-#include "scene_node.hpp"
+#include "graph_node.hpp"
 
 enum ShadowOption : uint32_t
 {
@@ -36,7 +36,7 @@ struct LightSpecification
     float shadowBias;
 };
 
-struct LightBase : public SceneNode
+struct LightBase : public GraphNode
 {
     LightBase();
     LightBase(const LightSpecification& specification, NodeType type, const std::string& name);
