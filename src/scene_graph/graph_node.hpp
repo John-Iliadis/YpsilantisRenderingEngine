@@ -25,7 +25,11 @@ class GraphNode
 {
 public:
     GraphNode();
-    GraphNode(NodeType type, const std::string& name, const glm::mat4& transformation, GraphNode* parent);
+    GraphNode(NodeType type,
+              const std::string& name,
+              const glm::mat4& transformation,
+              GraphNode* parent,
+              std::optional<uuid32_t> modelID = {});
     virtual ~GraphNode();
 
     void setParent(GraphNode* parent);
@@ -37,6 +41,7 @@ public:
     uuid32_t id() const;
     NodeType type() const;
     const std::string& name() const;
+    std::optional<uuid32_t> modelID() const;
     const std::multiset<GraphNode*>& children() const;
 
     const glm::mat4& localTransform() const;
@@ -50,6 +55,7 @@ protected:
     uuid32_t mID;
     NodeType mType;
     std::string mName;
+    std::optional<uuid32_t> mModelID;
     glm::mat4 mLocalTransform;
     glm::mat4 mGlobalTransform;
     bool mDirty;

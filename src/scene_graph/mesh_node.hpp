@@ -12,7 +12,7 @@ class MeshNode : public GraphNode
 public:
     MeshNode();
     MeshNode(NodeType type, const std::string& name, const glm::mat4& transformation, GraphNode* parent,
-             uuid32_t meshID, uint32_t instanceID);
+             uuid32_t modelID, uuid32_t meshID, uint32_t instanceID);
     ~MeshNode();
 
     void updateGlobalTransform() override;

@@ -15,10 +15,15 @@ GraphNode::GraphNode()
 {
 }
 
-GraphNode::GraphNode(NodeType type, const std::string &name, const glm::mat4& transformation, GraphNode *parent)
+GraphNode::GraphNode(NodeType type,
+                     const std::string& name,
+                     const glm::mat4& transformation,
+                     GraphNode* parent,
+                     std::optional<uuid32_t> modelID)
     : mID(UUIDRegistry::generateSceneNodeID())
     , mType(type)
     , mName(name)
+    , mModelID(modelID)
     , mLocalTransform(transformation)
     , mGlobalTransform(transformation)
     , mDirty(true)
@@ -77,6 +82,11 @@ NodeType GraphNode::type() const
 const std::string &GraphNode::name() const
 {
     return mName;
+}
+
+std::optional<uuid32_t> GraphNode::modelID() const
+{
+    return mModelID;
 }
 
 const std::multiset<GraphNode*>& GraphNode::children() const

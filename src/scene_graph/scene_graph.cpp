@@ -5,7 +5,7 @@
 #include "scene_graph.hpp"
 
 SceneGraph::SceneGraph()
-    : SubscriberSNS({Topic::Type::Resources})
+    : SubscriberSNS({Topic::Type::Renderer})
     , mRoot(NodeType::Empty, "RootNode", glm::identity<glm::mat4>(), nullptr)
 {
 }
@@ -45,16 +45,11 @@ void SceneGraph::notify(const Message &message)
             GraphNode* node = stack.back();
             stack.pop_back();
 
-            if (node->type() == NodeType::Mesh)
+            if (node->modelID().has_value() && node->modelID() == m->modelID)
             {
-                MeshNode* meshNode = dynamic_cast<MeshNode*>(node);
-
-                if (m->meshIDs.contains(meshNode->meshID()))
-                {
-                    meshNode->orphan();
-                    delete meshNode;
-                    continue;
-                }
+                node->orphan();
+                delete node;
+                continue;
             }
 
             for (auto child : node->children())
