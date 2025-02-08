@@ -16,12 +16,20 @@ enum class TextureWrap
     ClampToBorder
 };
 
-enum class TextureFilter
+enum class TextureMagFilter
 {
     Nearest,
-    Bilinear,
-    Trilinear,
-    Anisotropic
+    Linear
+};
+
+enum class TextureMinFilter
+{
+    Nearest,
+    Linear,
+    NearestMipmapNearest,
+    LinearMipmapNearest,
+    NearestMipmapLinear,
+    LinearMipmapLinear
 };
 
 struct TextureSpecification
@@ -34,8 +42,11 @@ struct TextureSpecification
     VkImageUsageFlags imageUsage;
     VkImageAspectFlags imageAspect;
     VkSampleCountFlagBits samples;
-    TextureWrap wrapMode;
-    TextureFilter filterMode;
+    TextureMagFilter magFilter;
+    TextureMinFilter minFilter;
+    TextureWrap wrapS;
+    TextureWrap wrapT;
+    TextureWrap wrapR;
     bool generateMipMaps;
     VkImageCreateFlags createFlags;
 };
@@ -43,13 +54,15 @@ struct TextureSpecification
 struct VulkanSampler
 {
     VkSampler sampler;
-    TextureWrap wrapMode;
-    TextureFilter filterMode;
+    TextureMagFilter magFilter;
+    TextureMinFilter minFilter;
+    TextureWrap wrapS;
+    TextureWrap wrapT;
+    TextureWrap wrapR;
 };
 
 const char* toStr(VkFormat format);
 const char* toStr(TextureWrap wrapMode);
-const char* toStr(TextureFilter filterMode);
 
 // todo: improve
 class VulkanTexture
@@ -64,6 +77,9 @@ public:
     VulkanTexture(const VulkanRenderDevice& renderDevice, const TextureSpecification& specification, const void* data);
     ~VulkanTexture();
 
+    VulkanTexture(VulkanTexture&&) noexcept = default;
+    VulkanTexture& operator=(VulkanTexture&&) noexcept = default;
+
     void uploadImageData(const void* data);
     void generateMipMaps();
     void setDebugName(const std::string& debugName);
@@ -74,6 +90,11 @@ private:
 
 uint32_t calculateMipLevels(uint32_t width, uint32_t height);
 
-VulkanSampler createSampler(const VulkanRenderDevice& renderDevice, TextureFilter filterMode, TextureWrap wrapMode);
+VulkanSampler createSampler(const VulkanRenderDevice& renderDevice,
+                            TextureMagFilter magFilter,
+                            TextureMinFilter minFilter,
+                            TextureWrap wrapS,
+                            TextureWrap wrapT,
+                            TextureWrap wrapR);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_TEXTURE_HPP

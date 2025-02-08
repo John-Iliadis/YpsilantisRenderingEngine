@@ -37,18 +37,6 @@ const char* toStr(TextureWrap wrapMode)
     }
 }
 
-const char* toStr(TextureFilter filterMode)
-{
-    switch (filterMode)
-    {
-        ENUM_CASE(TextureFilter, Nearest)
-        ENUM_CASE(TextureFilter, Bilinear)
-        ENUM_CASE(TextureFilter, Trilinear)
-        ENUM_CASE(TextureFilter, Anisotropic)
-        default: return "Unknown";
-    }
-}
-
 // -- VulkanTexture -- //
 
 VulkanTexture::VulkanTexture()
@@ -69,7 +57,12 @@ VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const Textu
                   specification.samples,
                   specification.layerCount,
                   specification.createFlags)
-    , vulkanSampler(createSampler(renderDevice, specification.filterMode, specification.wrapMode))
+    , vulkanSampler(createSampler(renderDevice,
+                                  specification.magFilter,
+                                  specification.minFilter,
+                                  specification.wrapS,
+                                  specification.wrapT,
+                                  specification.wrapR))
     , mRenderDevice(&renderDevice)
 {
 }
@@ -193,66 +186,123 @@ uint32_t calculateMipLevels(uint32_t width, uint32_t height)
 }
 
 VulkanSampler createSampler(const VulkanRenderDevice& renderDevice,
-                            TextureFilter filterMode,
-                            TextureWrap wrapMode)
+                            TextureMagFilter magFilter,
+                            TextureMinFilter minFilter,
+                            TextureWrap wrapS,
+                            TextureWrap wrapT,
+                            TextureWrap wrapR)
 {
     VulkanSampler sampler {
-        .wrapMode = wrapMode,
-        .filterMode = filterMode
+        .magFilter = magFilter,
+        .minFilter = minFilter,
+        .wrapS = wrapS,
+        .wrapT = wrapT,
+        .wrapR = wrapR
     };
 
     VkBool32 anisotropyEnable = VK_FALSE;
     float maxAnisotropy = 0.f;
-    VkFilter filter;
+    VkFilter vkMagFilter;
+    VkFilter vkMinFilter;
     VkSamplerMipmapMode mipmapMode;
-    VkSamplerAddressMode addressMode;
+    VkSamplerAddressMode addressModeS;
+    VkSamplerAddressMode addressModeT;
+    VkSamplerAddressMode addressModeR;
 
-    switch (filterMode)
+    switch (magFilter)
     {
-        case TextureFilter::Nearest:
-            filter = VK_FILTER_NEAREST;
-            mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        case TextureMagFilter::Nearest:
+            vkMagFilter = VK_FILTER_NEAREST;
             break;
-        case TextureFilter::Bilinear:
-            filter = VK_FILTER_LINEAR;
-            mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-            break;
-        case TextureFilter::Trilinear:
-            filter = VK_FILTER_LINEAR;
-            mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-            break;
-        case TextureFilter::Anisotropic:
-            filter = VK_FILTER_LINEAR;
-            mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-            anisotropyEnable = VK_TRUE;
-            maxAnisotropy = glm::max(16.f, renderDevice.getDeviceProperties().limits.maxSamplerAnisotropy);
+        case TextureMagFilter::Linear:
+            vkMagFilter = VK_FILTER_LINEAR;
             break;
     }
 
-    switch (wrapMode)
+    switch (minFilter)
+    {
+        case TextureMinFilter::Nearest:
+            vkMinFilter = VK_FILTER_NEAREST;
+            mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+            break;
+        case TextureMinFilter::Linear:
+            vkMinFilter = VK_FILTER_LINEAR;
+            mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+            break;
+        case TextureMinFilter::NearestMipmapNearest:
+            vkMinFilter = VK_FILTER_NEAREST;
+            mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+            break;
+        case TextureMinFilter::LinearMipmapNearest:
+            vkMinFilter = VK_FILTER_LINEAR;
+            mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+            break;
+        case TextureMinFilter::NearestMipmapLinear:
+            vkMinFilter = VK_FILTER_NEAREST;
+            mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+            break;
+        case TextureMinFilter::LinearMipmapLinear:
+            vkMinFilter = VK_FILTER_LINEAR;
+            mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+            break;
+    }
+
+    switch (wrapS)
+    {
+        case TextureWrap::Repeat: addressModeS = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
+        case TextureWrap::MirroredRepeat: addressModeS = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
+        case TextureWrap::ClampToEdge: addressModeS = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
+        case TextureWrap::ClampToBorder: addressModeS = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER; break;
+    }
+
+    switch (wrapT)
     {
         case TextureWrap::Repeat:
-            addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+            addressModeT = VK_SAMPLER_ADDRESS_MODE_REPEAT;
             break;
         case TextureWrap::MirroredRepeat:
-            addressMode = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+            addressModeT = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
             break;
         case TextureWrap::ClampToEdge:
-            addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            addressModeT = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
             break;
         case TextureWrap::ClampToBorder:
-            addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            addressModeT = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
             break;
+    }
+
+    switch (wrapR)
+    {
+        case TextureWrap::Repeat:
+            addressModeR = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+            break;
+        case TextureWrap::MirroredRepeat:
+            addressModeR = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+            break;
+        case TextureWrap::ClampToEdge:
+            addressModeR = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            break;
+        case TextureWrap::ClampToBorder:
+            addressModeR = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+            break;
+    }
+
+    if (minFilter == TextureMinFilter::Linear ||
+        minFilter == TextureMinFilter::LinearMipmapLinear ||
+        minFilter == TextureMinFilter::NearestMipmapLinear)
+    {
+        anisotropyEnable = VK_TRUE;
+        maxAnisotropy = glm::min(renderDevice.getDeviceProperties().limits.maxSamplerAnisotropy, 16.f);
     }
 
     VkSamplerCreateInfo samplerCreateInfo {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .magFilter = filter,
-        .minFilter = filter,
+        .magFilter = vkMagFilter,
+        .minFilter = vkMinFilter,
         .mipmapMode = mipmapMode,
-        .addressModeU = addressMode,
-        .addressModeV = addressMode,
-        .addressModeW = addressMode,
+        .addressModeU = addressModeS,
+        .addressModeV = addressModeT,
+        .addressModeW = addressModeR,
         .mipLodBias = 0.f,
         .anisotropyEnable = anisotropyEnable,
         .maxAnisotropy = maxAnisotropy,

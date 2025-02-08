@@ -54,7 +54,6 @@ add_executable(${PROJECT_NAME}
         src/renderer/instanced_mesh.hpp
         src/renderer/instanced_mesh.cpp
         src/renderer/model.hpp
-        src/renderer/material.hpp
         src/renderer/model.cpp
         src/app/types.hpp
         src/app/simple_notification_service.hpp
@@ -64,12 +63,12 @@ add_executable(${PROJECT_NAME}
         src/editor/editor.cpp
         src/editor/editor.hpp
         src/renderer/vertex.hpp
-        src/utils/image_loader.cpp
-        src/utils/image_loader.hpp
+        src/utils/loaded_image.cpp
+        src/utils/loaded_image.hpp
         src/utils/main_thread_task_queue.cpp
         src/utils/main_thread_task_queue.hpp
-        src/resource/resource_manager.cpp
-        src/resource/resource_importer.cpp
+        src/renderer/model_importer.cpp
+        src/renderer/model_importer.hpp
         src/scene_graph/light_node.cpp
         src/scene_graph/light_node.hpp
         src/scene_graph/mesh_node.cpp

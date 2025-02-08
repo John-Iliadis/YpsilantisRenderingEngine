@@ -80,6 +80,7 @@ void VulkanRenderDevice::createLogicalDevice()
 {
     VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptorIndexingFeatures {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+        .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
         .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
         .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
         .descriptorBindingVariableDescriptorCount = VK_TRUE,
@@ -152,7 +153,7 @@ void VulkanRenderDevice::createCommandPool()
 
 void VulkanRenderDevice::createDescriptorPool()
 {
-    descriptorPool = ::createDescriptorPool(device, 1000, 100, 100, 100);
+    descriptorPool = ::createDescriptorPool(device, 1000, 100, 100, 500);
 
     setVulkanObjectDebugName(*this,
                              VK_OBJECT_TYPE_DESCRIPTOR_POOL,

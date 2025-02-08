@@ -9,62 +9,27 @@
 #include "vulkan_buffer.hpp"
 #include "vulkan_texture.hpp"
 
+VkDescriptorPool createDescriptorPool(VkDevice device,
+                                      uint32_t imageSamplerCount,
+                                      uint32_t uniformBufferCount,
+                                      uint32_t storageBufferCount,
+                                      uint32_t maxSets);
 
+VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count);
 
-class DescriptorSetLayoutBuilder
-{
-public:
-    DescriptorSetLayoutBuilder();
-    DescriptorSetLayoutBuilder(const VulkanRenderDevice& renderDevice);
+VkDescriptorSetLayoutBinding dsLayoutBinding(uint32_t binding,
+                                             VkDescriptorType type,
+                                             uint32_t descriptorCount,
+                                             VkShaderStageFlags shaderStages);
 
-    DescriptorSetLayoutBuilder& addLayoutBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages);
-    DescriptorSetLayoutBuilder& setDebugName(const std::string& name);
-    VkDescriptorSetLayout create();
+void setDSLayoutDebugName(const VulkanRenderDevice& renderDevice,
+                          VkDescriptorSetLayout dsLayout,
+                          const std::string& debugName);
 
-private:
-    const VulkanRenderDevice* mRenderDevice;
-    std::string mDebugName;
-    std::vector<VkDescriptorSetLayoutBinding> mLayoutBindings;
-};
+void setDSDebugName(const VulkanRenderDevice& renderDevice, VkDescriptorSet ds, const std::string& debugName);
 
-class DescriptorSetBuilder
-{
-public:
-    DescriptorSetBuilder();
-    DescriptorSetBuilder(const VulkanRenderDevice& renderDevice);
+VkDescriptorBufferInfo descriptorBufferInfo(VkBuffer buffer, uint32_t offset, uint32_t range);
 
-    DescriptorSetBuilder& setLayout(VkDescriptorSetLayout layout);
-    DescriptorSetBuilder& addBuffer(VkDescriptorType type, uint32_t binding, VkBuffer buffer, uint32_t offset, uint32_t range);
-    DescriptorSetBuilder& addTexture(VkDescriptorType type, uint32_t binding, const VulkanTexture& texture);
-    DescriptorSetBuilder& setDebugName(const std::string& name);
-    VkDescriptorSet create();
-
-private:
-    struct BufferInfo
-    {
-        VkDescriptorType type;
-        uint32_t binding;
-        VkBuffer buffer;
-        uint32_t offset;
-        uint32_t range;
-    };
-
-    struct TextureInfo
-    {
-        VkDescriptorType type;
-        uint32_t binding;
-        const VulkanTexture& texture;
-    };
-
-private:
-    void clear();
-
-    const VulkanRenderDevice* mRenderDevice;
-    VkDescriptorSetLayout mDescriptorSetLayout;
-
-    std::string mDebugName;
-    std::vector<BufferInfo> mBufferInfos;
-    std::vector<TextureInfo> mTextureInfos;
-};
+VkDescriptorImageInfo descriptorImageInfo(VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_DESCRIPTOR_HPP

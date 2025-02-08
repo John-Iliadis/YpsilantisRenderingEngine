@@ -2,9 +2,9 @@
 // Created by Gianni on 4/02/2025.
 //
 
-#include "image_loader.hpp"
+#include "loaded_image.hpp"
 
-ImageLoader::ImageLoader()
+LoadedImage::LoadedImage()
     : mPath()
     , mSuccess()
     , mWidth()
@@ -15,8 +15,8 @@ ImageLoader::ImageLoader()
 {
 }
 
-ImageLoader::ImageLoader(const std::filesystem::path &imagePath)
-    : ImageLoader()
+LoadedImage::LoadedImage(const std::filesystem::path &imagePath)
+    : LoadedImage()
 {
     mPath = imagePath;
     bool isHDR = stbi_is_hdr(imagePath.string().c_str());
@@ -37,15 +37,15 @@ ImageLoader::ImageLoader(const std::filesystem::path &imagePath)
     mSuccess = true;
 }
 
-ImageLoader::~ImageLoader() { stbi_image_free(mData); }
+LoadedImage::~LoadedImage() { stbi_image_free(mData); }
 
-ImageLoader::ImageLoader(ImageLoader &&other) noexcept
-    : ImageLoader()
+LoadedImage::LoadedImage(LoadedImage &&other) noexcept
+    : LoadedImage()
 {
     swap(other);
 }
 
-ImageLoader &ImageLoader::operator=(ImageLoader &&other) noexcept
+LoadedImage &LoadedImage::operator=(LoadedImage &&other) noexcept
 {
     if (this != &other)
     {
@@ -63,7 +63,7 @@ ImageLoader &ImageLoader::operator=(ImageLoader &&other) noexcept
     return *this;
 }
 
-void ImageLoader::swap(ImageLoader &other)
+void LoadedImage::swap(LoadedImage &other)
 {
     std::swap(mPath, other.mPath);
     std::swap(mSuccess, other.mSuccess);
@@ -74,37 +74,37 @@ void ImageLoader::swap(ImageLoader &other)
     std::swap(mData, other.mData);
 }
 
-const std::filesystem::path &ImageLoader::path() const
+const std::filesystem::path &LoadedImage::path() const
 {
     return mPath;
 }
 
-bool ImageLoader::success() const
+bool LoadedImage::success() const
 {
     return mSuccess;
 }
 
-int32_t ImageLoader::width() const
+int32_t LoadedImage::width() const
 {
     return mWidth;
 }
 
-int32_t ImageLoader::height() const
+int32_t LoadedImage::height() const
 {
     return mHeight;
 }
 
-int32_t ImageLoader::components() const
+int32_t LoadedImage::components() const
 {
     return mComponents;
 }
 
-VkFormat ImageLoader::format() const
+VkFormat LoadedImage::format() const
 {
     return mFormat;
 }
 
-void *ImageLoader::data() const
+void *LoadedImage::data() const
 {
     return mData;
 }
