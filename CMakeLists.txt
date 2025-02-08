@@ -76,8 +76,8 @@ add_executable(${PROJECT_NAME}
         src/scene_graph/mesh_node.hpp
         src/scene_graph/scene_graph.cpp
         src/scene_graph/scene_graph.hpp
-        src/scene_graph/scene_node.cpp
-        src/scene_graph/scene_node.hpp
+        src/scene_graph/graph_node.cpp
+        src/scene_graph/graph_node.hpp
 )
 
 add_subdirectory(${DEPENDENCY_DIR}/tiny_gltf/)

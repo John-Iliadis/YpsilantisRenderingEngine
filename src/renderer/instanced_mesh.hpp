@@ -32,7 +32,7 @@ public:
     void updateInstance(uint32_t instanceID, const glm::mat4& model, uint32_t id, uint32_t materialIndex);
     void removeInstance(uint32_t instanceID);
     void setDebugName(const std::string& debugName);
-    void render(VkCommandBuffer commandBuffer);
+    void render(VkCommandBuffer commandBuffer) const;
 
     static constexpr std::array<VkVertexInputBindingDescription, 2> bindingDescriptions();
     static constexpr std::array<VkVertexInputAttributeDescription, 14> attributeDescriptions();

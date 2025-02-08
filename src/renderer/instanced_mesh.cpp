@@ -103,7 +103,7 @@ void InstancedMesh::setDebugName(const std::string &debugName)
     mIndexBuffer.setDebugName(debugName);
 }
 
-void InstancedMesh::render(VkCommandBuffer commandBuffer)
+void InstancedMesh::render(VkCommandBuffer commandBuffer) const
 {
     if (mInstanceCount == 0)
         return;

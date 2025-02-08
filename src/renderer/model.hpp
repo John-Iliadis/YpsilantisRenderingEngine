@@ -8,34 +8,70 @@
 #include <glm/glm.hpp>
 #include "../app/simple_notification_service.hpp"
 #include "../app/uuid_registry.hpp"
+#include "../vk/vulkan_texture.hpp"
+#include "../vk/vulkan_descriptor.hpp"
+#include "instanced_mesh.hpp"
 #include "bounding_box.hpp"
+
+struct Material
+{
+    alignas(4) int32_t baseColorTexIndex;
+    alignas(4) int32_t metallicRoughnessTexIndex;
+    alignas(4) int32_t normalTexIndex;
+    alignas(4) int32_t aoTexIndex;
+    alignas(4) int32_t emissionTexIndex;
+    alignas(4) float metallicFactor;
+    alignas(4) float roughnessFactor;
+    alignas(4) float occlusionFactor;
+    alignas(16) glm::vec4 baseColorFactor;
+    alignas(16) glm::vec4 emissionFactor;
+};
+
+struct SceneNode
+{
+    std::string name;
+    glm::mat4 transformation;
+    int32_t meshIndex;
+    std::vector<SceneNode> children;
+};
+
+struct Mesh
+{
+    uuid64_t meshID;
+    InstancedMesh mesh;
+    int32_t materialIndex;
+};
+
+struct Texture
+{
+    std::string name;
+    VulkanTexture vulkanTexture;
+    VkDescriptorSet descriptorSet; // todo: free these
+};
 
 class Model : public SubscriberSNS
 {
 public:
-    struct Node
-    {
-        std::string name;
-        glm::mat4 transformation;
-        std::optional<uuid64_t> meshID;
-        std::optional<std::string> materialName;
-        std::vector<Node> children;
-    };
-
-public:
-    Node root;
-    BoundingBox bb;
-    std::unordered_map<std::string, uuid64_t> mappedMaterials;
+    std::string name;
+    std::vector<SceneNode> scenes;
+    std::vector<Texture> textures;
+    std::vector<Material> materials;
+    std::vector<Mesh> meshes;
 
 public:
     Model();
+    ~Model() = default;
 
-    void notify(const Message &message) override;
-    void remapMaterial(const std::string& materialName, uuid64_t newMatID, uint32_t newMatIndex);
+    void createMaterialsUBO(const VulkanRenderDevice& renderDevice);
+    void createTextureDescriptorSets(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout);
+    void createMaterialsDescriptorSet(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout);
 
-    std::optional<uuid64_t> getMaterialID(const Model::Node& node) const;
+    void render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout);
+
+private:
+    VkDescriptorSet mMaterialsDS;
+    VulkanBuffer mMaterialsUBO;
 };
 
-std::unordered_set<uuid64_t> getModelMeshIDs(const Model& model);
 
 #endif //VULKANRENDERINGENGINE_MODEL_HPP
