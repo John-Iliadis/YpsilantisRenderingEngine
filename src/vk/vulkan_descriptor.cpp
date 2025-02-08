@@ -53,7 +53,7 @@ VkDescriptorSetLayoutBinding dsLayoutBinding(uint32_t binding,
     };
 }
 
-void setDSLayoutDebugName(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout, const std::string& debugName)
+void setDsLayoutDebugName(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout, const std::string& debugName)
 {
     setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, debugName, dsLayout);
 }

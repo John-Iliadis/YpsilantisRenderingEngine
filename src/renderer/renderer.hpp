@@ -5,11 +5,33 @@
 #ifndef VULKANRENDERINGENGINE_RENDERER_HPP
 #define VULKANRENDERINGENGINE_RENDERER_HPP
 
+#include "../utils/utils.hpp"
+#include "../utils/main_thread_task_queue.hpp"
+#include "model_importer.hpp"
+#include "model.hpp"
+
 class Renderer
 {
 public:
-    Renderer();
+    Renderer(const VulkanRenderDevice& renderDevice);
     ~Renderer();
+
+    void importModel(const std::filesystem::path& path);
+    void processMainThreadTasks();
+
+private:
+    void createDisplayTexturesDsLayout();
+    void createMaterialDsLayout();
+
+private:
+    const VulkanRenderDevice& mRenderDevice;
+
+    VkDescriptorSetLayout mDisplayTexturesDSLayout;
+    VkDescriptorSetLayout mMaterialsDsLayout;
+
+    std::unordered_map<uuid64_t, std::shared_ptr<Model>> mModels;
+    std::vector<std::future<std::shared_ptr<Model>>> mLoadedModelFutures;
+    MainThreadTaskQueue mTaskQueue;
 
 private:
     friend class Editor;

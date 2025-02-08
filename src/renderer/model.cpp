@@ -4,9 +4,6 @@
 
 #include "model.hpp"
 
-static constexpr uint32_t MaxMaterialCount = 32;
-static constexpr uint32_t MaxTextureCount = 128;
-
 Model::Model()
     : mMaterialsDS()
 {
@@ -60,8 +57,8 @@ void Model::createTextureDescriptorSets(const VulkanRenderDevice &renderDevice, 
 void Model::createMaterialsDescriptorSet(const VulkanRenderDevice &renderDevice, VkDescriptorSetLayout dsLayout)
 {
     std::array<uint32_t, 2> descriptorCounts {
-        MaxMaterialCount,
-        MaxTextureCount
+        PerModelMaxMaterialCount,
+        PerModelMaxTextureCount
     };
 
     VkDescriptorSetVariableDescriptorCountAllocateInfoEXT variableDescriptorCountAllocInfo {

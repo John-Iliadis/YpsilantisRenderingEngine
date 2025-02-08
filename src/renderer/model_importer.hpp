@@ -64,8 +64,6 @@ namespace ModelImporter
     TextureMinFilter getMipFilter(int filterMode);
 
     Texture createTexture(const VulkanRenderDevice* renderDevice, const std::shared_ptr<ImageData> imageData);
-
-    std::pair<std::shared_ptr<VulkanTexture>, std::filesystem::path> makeTexturePathPair(const std::shared_ptr<VulkanRenderDevice> renderDevice, const std::shared_ptr<LoadedImage>& imageData);
 }
 
 #endif //VULKANRENDERINGENGINE_MODEL_IMPORTER_HPP

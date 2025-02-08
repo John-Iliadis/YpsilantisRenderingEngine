@@ -4,8 +4,6 @@
 
 #include "model_importer.hpp"
 
-// todo: handle texture sampler and wrap
-
 // todo: load all mesh primitives
 // todo: handle multiple primitive types
 // todo: handle embedded image data
@@ -20,6 +18,9 @@ namespace ModelImporter
         return std::async(std::launch::async, [path, renderDevice, callback] () {
             std::shared_ptr<tinygltf::Model> gltfModel = loadGltfScene(path);
             std::shared_ptr<Model> model = std::make_shared<Model>();
+
+            model->name = path.filename().string();
+            model->path = path;
 
             // load scene root nodes
             for (const tinygltf::Scene& scene : gltfModel->scenes)

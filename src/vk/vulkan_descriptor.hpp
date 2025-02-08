@@ -22,7 +22,7 @@ VkDescriptorSetLayoutBinding dsLayoutBinding(uint32_t binding,
                                              uint32_t descriptorCount,
                                              VkShaderStageFlags shaderStages);
 
-void setDSLayoutDebugName(const VulkanRenderDevice& renderDevice,
+void setDsLayoutDebugName(const VulkanRenderDevice& renderDevice,
                           VkDescriptorSetLayout dsLayout,
                           const std::string& debugName);
 

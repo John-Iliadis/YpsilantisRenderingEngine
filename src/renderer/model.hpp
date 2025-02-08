@@ -11,7 +11,9 @@
 #include "../vk/vulkan_texture.hpp"
 #include "../vk/vulkan_descriptor.hpp"
 #include "instanced_mesh.hpp"
-#include "bounding_box.hpp"
+
+constexpr uint32_t PerModelMaxMaterialCount = 32;
+constexpr uint32_t PerModelMaxTextureCount = 128;
 
 struct Material
 {
@@ -38,6 +40,7 @@ struct SceneNode
 struct Mesh
 {
     uuid64_t meshID;
+    std::string name;
     InstancedMesh mesh;
     int32_t materialIndex;
 };
@@ -53,6 +56,8 @@ class Model : public SubscriberSNS
 {
 public:
     std::string name;
+    std::filesystem::path path;
+
     std::vector<SceneNode> scenes;
     std::vector<Texture> textures;
     std::vector<Material> materials;
