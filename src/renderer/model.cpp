@@ -56,15 +56,12 @@ void Model::createTextureDescriptorSets(const VulkanRenderDevice &renderDevice, 
 
 void Model::createMaterialsDescriptorSet(const VulkanRenderDevice &renderDevice, VkDescriptorSetLayout dsLayout)
 {
-    std::array<uint32_t, 2> descriptorCounts {
-        PerModelMaxMaterialCount,
-        PerModelMaxTextureCount
-    };
+    uint32_t descriptorCounts = PerModelMaxTextureCount;
 
     VkDescriptorSetVariableDescriptorCountAllocateInfoEXT variableDescriptorCountAllocInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
-        .descriptorSetCount = static_cast<uint32_t>(descriptorCounts.size()),
-        .pDescriptorCounts = descriptorCounts.data()
+        .descriptorSetCount = 1,
+        .pDescriptorCounts = &descriptorCounts
     };
 
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
@@ -98,4 +95,12 @@ void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayou
                            &mesh.materialIndex);
         mesh.mesh.render(commandBuffer);
     }
+}
+
+const Mesh &Model::getMesh(uuid32_t meshID) const
+{
+    for (const auto& mesh : meshes)
+        if (mesh.meshID == meshID)
+            return mesh;
+    return meshes.front();
 }

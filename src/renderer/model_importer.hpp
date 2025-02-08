@@ -32,6 +32,12 @@ struct ImageData
     TextureWrap wrapModeT;
 };
 
+struct MaterialData
+{
+    std::vector<Material> materials;
+    std::vector<std::string> materialNames;
+};
+
 namespace ModelImporter
 {
     std::future<std::shared_ptr<Model>> loadModel(const std::filesystem::path& path, const VulkanRenderDevice* renderDevice, EnqueueCallback callback);
@@ -55,7 +61,7 @@ namespace ModelImporter
 
     std::vector<uint32_t> loadMeshIndices(const tinygltf::Model& model, const tinygltf::Mesh& mesh);
 
-    std::vector<Material> loadMaterials(const tinygltf::Model& gltfModel);
+    MaterialData loadMaterials(const tinygltf::Model& gltfModel);
 
     std::future<std::shared_ptr<ImageData>> loadImageData(const tinygltf::Model& gltfModel, const tinygltf::Texture& texture, const std::filesystem::path& directory);
 

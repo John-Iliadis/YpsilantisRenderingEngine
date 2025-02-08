@@ -55,17 +55,21 @@ struct Texture
 class Model : public SubscriberSNS
 {
 public:
+    uuid32_t id;
     std::string name;
     std::filesystem::path path;
 
     std::vector<SceneNode> scenes;
     std::vector<Texture> textures;
     std::vector<Material> materials;
+    std::vector<std::string> materialNames;
     std::vector<Mesh> meshes;
 
 public:
     Model();
     ~Model() = default;
+
+    const Mesh& getMesh(uuid32_t meshID) const;
 
     void createMaterialsUBO(const VulkanRenderDevice& renderDevice);
     void createTextureDescriptorSets(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout);

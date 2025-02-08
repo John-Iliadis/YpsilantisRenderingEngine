@@ -11,6 +11,9 @@
 // todo: handle texture loading fails
 // todo: handle "Load error: No LoadImageData callback specified"
 
+// todo: fix double root node bug
+// todo: fix texture debug name bug
+
 namespace ModelImporter
 {
     std::future<std::shared_ptr<Model>> loadModel(const std::filesystem::path& path, const VulkanRenderDevice* renderDevice, EnqueueCallback callback)
@@ -43,7 +46,10 @@ namespace ModelImporter
             }
 
             // load materials
-            model->materials = loadMaterials(*gltfModel);
+            MaterialData materialData = loadMaterials(*gltfModel);
+
+            model->materials = std::move(materialData.materials);
+            model->materialNames = std::move(materialData.materialNames);
 
             // load texture data
             std::filesystem::path directory = path.parent_path();
@@ -263,9 +269,9 @@ namespace ModelImporter
         return indices;
     }
 
-    std::vector<Material> loadMaterials(const tinygltf::Model& gltfModel)
+    MaterialData loadMaterials(const tinygltf::Model& gltfModel)
     {
-        std::vector<Material> materials;
+        MaterialData materialData;
 
         for (const tinygltf::Material& gltfMaterial : gltfModel.materials)
         {
@@ -282,10 +288,11 @@ namespace ModelImporter
                 .emissionFactor = glm::vec4(glm::make_vec3(gltfMaterial.emissiveFactor.data()), 0.f)
             };
 
-            materials.push_back(material);
+            materialData.materials.push_back(material);
+            materialData.materialNames.push_back(gltfMaterial.name);
         }
 
-        return materials;
+        return materialData;
     }
 
     // todo: handle load fail
