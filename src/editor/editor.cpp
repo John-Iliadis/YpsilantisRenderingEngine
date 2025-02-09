@@ -4,9 +4,8 @@
 
 #include "editor.hpp"
 
-Editor::Editor(std::shared_ptr<Renderer> renderer, std::shared_ptr<ResourceManager> resourceManager)
-    : mRenderer(std::move(renderer))
-    , mResourceManager(std::move(resourceManager))
+Editor::Editor(Renderer& renderer)
+    : mRenderer(renderer)
     , mCamera({}, 30.f, 1920.f, 1080.f)
     , mSelectedObjectID()
     , mShowViewport(true)
@@ -28,6 +27,7 @@ void Editor::update(float dt)
 
     ImGui::ShowDemoWindow();
 
+    imguiEvents();
     mainMenuBar();
 
     if (mShowAssetPanel)
@@ -55,6 +55,12 @@ void Editor::update(float dt)
         viewPort();
 }
 
+void Editor::imguiEvents()
+{
+    if (ImGui::IsKeyPressed(ImGuiKey_Delete))
+        deleteSelectedObject();
+}
+
 void Editor::mainMenuBar()
 {
     if (ImGui::BeginMainMenuBar())
@@ -62,12 +68,7 @@ void Editor::mainMenuBar()
         if (ImGui::BeginMenu("File"))
         {
             if (ImGui::MenuItem("Import Model"))
-            {
-                std::filesystem::path path = fileDialog("All Files");
-
-                if (!path.empty())
-                    mResourceManager->importModel(path);
-            }
+                importModel();
 
             ImGui::EndMenu();
         }
@@ -92,169 +93,6 @@ void Editor::mainMenuBar()
         }
 
         ImGui::EndMainMenuBar();
-    }
-}
-
-void Editor::assetPanel()
-{
-    ImGui::Begin("Assets", &mShowAssetPanel);
-
-    static int selectedIndex = 0;
-    static const std::array<const char*, 3> items {{
-                                                       "Models",
-                                                       "Materials",
-                                                       "Textures"
-                                                   }};
-
-    {
-        ImGui::BeginGroup();
-
-        for (int i = 0; i < items.size(); ++i)
-        {
-            const ImGuiStyle& style = ImGui::GetStyle();
-            ImVec2 selectableSize = ImGui::CalcTextSize(items.at(i)) + style.FramePadding * 2.f;
-
-            ImGui::PushStyleColor(ImGuiCol_Button, style.Colors[selectedIndex == i? ImGuiCol_ButtonHovered : ImGuiCol_Button]);
-
-            if (ImGui::Button(items.at(i), selectableSize))
-                selectedIndex = i;
-
-            ImGui::PopStyleColor();
-
-            if (i < items.size() - 1)
-                ImGui::SameLine();
-        }
-
-        ImGui::EndGroup();
-        ImGui::Separator();
-    }
-
-    if (selectedIndex == 0)
-        displayModels();
-
-    if (selectedIndex == 1)
-        displayMaterials();
-
-    if (selectedIndex == 2)
-        displayTextures();
-
-    ImGui::End();
-}
-
-void Editor::displayModels()
-{
-    for (const auto& [modelID, modelName] : mResourceManager->mModelNames)
-    {
-        if (ImGui::Selectable(modelName.c_str(), mSelectedObjectID == modelID))
-        {
-            mSelectedObjectID = modelID;
-        }
-
-        modelDragDropSource(modelID);
-    }
-}
-
-void Editor::displayMaterials()
-{
-    for (const auto& [materialID, materialName] : mResourceManager->mMaterialNames)
-    {
-        if (ImGui::Selectable(materialName.c_str(), mSelectedObjectID == materialID))
-        {
-            mSelectedObjectID = materialID;
-        }
-    }
-}
-
-void Editor::displayTextures()
-{
-    for (const auto& [textureID, textureName] : mResourceManager->mTextureNames)
-    {
-        if (ImGui::Selectable(textureName.c_str(), mSelectedObjectID == textureID))
-        {
-            mSelectedObjectID = textureID;
-        }
-
-        textureDragDropSource(textureID);
-    }
-}
-
-void Editor::sceneGraphPanel()
-{
-    ImGui::Begin("Scene Graph", &mShowSceneGraph);
-
-    for (auto child : mSceneGraph.mRoot.children())
-        sceneNodeRecursive(child);
-
-    // todo: improve drag drop area
-    ImGui::Dummy(ImGui::GetContentRegionAvail());
-    sceneNodeDragDropTarget(&mSceneGraph.mRoot);
-
-    sceneGraphPopup();
-
-    ImGui::End();
-
-    mSceneGraph.updateTransforms();
-}
-
-void Editor::sceneNodeRecursive(SceneNode *node)
-{
-    ImGuiTreeNodeFlags treeNodeFlags {
-        ImGuiTreeNodeFlags_OpenOnArrow |
-        ImGuiTreeNodeFlags_OpenOnDoubleClick |
-        ImGuiTreeNodeFlags_SpanFullWidth |
-        ImGuiTreeNodeFlags_FramePadding
-    };
-
-    if (mSelectedObjectID == node->id())
-        treeNodeFlags |= ImGuiTreeNodeFlags_Selected;
-
-    if (node->children().empty())
-        treeNodeFlags |= ImGuiTreeNodeFlags_Leaf;
-
-    bool nodeOpen = ImGui::TreeNodeEx((void*)(intptr_t)node, treeNodeFlags, node->name().c_str());
-
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
-        mSelectedObjectID = node->id();
-
-    sceneNodeDragDropSource(node);
-    sceneNodeDragDropTarget(node);
-
-    if (nodeOpen)
-    {
-        for (auto child : node->children())
-            sceneNodeRecursive(child);
-
-        ImGui::TreePop();
-    }
-}
-
-void Editor::sceneNodeDragDropSource(SceneNode *node)
-{
-    if (ImGui::BeginDragDropSource())
-    {
-        ImGui::SetDragDropPayload("SceneNode", &node, sizeof(SceneNode*));
-        ImGui::Text(std::format("{} (Scene Node)", node->name()).c_str());
-        ImGui::EndDragDropSource();
-    }
-}
-
-void Editor::sceneNodeDragDropTarget(SceneNode *node)
-{
-    if (ImGui::BeginDragDropTarget())
-    {
-        checkPayloadType("SceneNode");
-
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SceneNode"))
-        {
-            SceneNode* transferNode = *(SceneNode**)payload->Data;
-
-            transferNode->orphan();
-            transferNode->markDirty();
-
-            node->addChild(transferNode);
-        }
-
-        ImGui::EndDragDropTarget();
     }
 }
 
@@ -310,52 +148,6 @@ void Editor::cameraPanel()
     ImGui::End();
 }
 
-// todo: fix mesh instance::addInstance
-// todo: what if node doesn't have a material
-SceneNode *Editor::createModelGraph(std::shared_ptr<Model> model, const Model::Node &modelNode, SceneNode* parent)
-{
-    SceneNode* sceneNode;
-
-    if (auto meshID = modelNode.meshID)
-    {
-        uint32_t instanceID = mResourceManager->mMeshes.at(*meshID)->addInstance({}, {}, {});
-        index_t materialIndex = 0;
-        std::string matName = "";
-
-        if (auto materialID = model->getMaterialID(modelNode))
-            materialIndex = mResourceManager->getMatIndex(*materialID);
-
-        if (auto& matNameOpt = modelNode.materialName)
-            matName = *matNameOpt;
-
-        sceneNode = new MeshNode(NodeType::Mesh,
-                                 modelNode.name,
-                                 modelNode.transformation,
-                                 parent,
-                                 *meshID,
-                                 instanceID,
-                                 materialIndex,
-                                 matName);
-    }
-    else
-    {
-        sceneNode = new SceneNode(NodeType::Empty, modelNode.name, modelNode.transformation, parent);
-    }
-
-    for (const auto& child : modelNode.children)
-        sceneNode->addChild(createModelGraph(model, child, sceneNode));
-
-    return sceneNode;
-}
-
-void Editor::checkPayloadType(const char *type)
-{
-    const ImGuiPayload* payload = ImGui::GetDragDropPayload();
-
-    if (payload && strcmp(payload->DataType, type) != 0)
-        ImGui::SetMouseCursor(ImGuiMouseCursor_NotAllowed);
-}
-
 void Editor::inspectorPanel()
 {
     ImGui::Begin("Inspector", &mShowInspectorPanel, ImGuiWindowFlags_NoScrollbar);
@@ -365,9 +157,6 @@ void Editor::inspectorPanel()
         switch (*objectType)
         {
             case ObjectType::Model: modelInspector(mSelectedObjectID); break;
-            case ObjectType::Material: materialInspector(mSelectedObjectID); break;
-            case ObjectType::Texture2D: textureInspector(mSelectedObjectID); break;
-            case ObjectType::TextureCube: assert(false);
             case ObjectType::Mesh: assert(false);
             case ObjectType::SceneNode: sceneNodeInspector(mSceneGraph.searchNode(mSelectedObjectID)); break;
             default: assert(false);
@@ -377,260 +166,180 @@ void Editor::inspectorPanel()
     ImGui::End();
 }
 
-void Editor::rendererPanel()
+void Editor::modelInspector(uuid32_t modelID)
 {
-    ImGui::Begin("Renderer", &mShowRendererPanel);
-    ImGui::End();
-}
-
-void Editor::console()
-{
-    ImGui::Begin("Console", &mShowConsole);
-    ImGui::End();
-}
-
-void Editor::debugPanel()
-{
-    ImGui::Begin("Debug", &mShowDebugPanel);
-    ImGui::End();
-}
-
-void Editor::modelInspector(uuid64_t modelID)
-{
-    auto model = mResourceManager->getModel(modelID);
+    auto model = mRenderer.mModels.at(modelID);
 
     ImGui::Text("Asset Type: Model");
-    ImGui::Text("Name: %s", mResourceManager->mModelNames.at(modelID).c_str());
-    ImGui::Separator();
+    ImGui::Text("Name: %s", model->name.c_str());
+}
 
-    // todo: put this into a function
-    if (ImGui::CollapsingHeader("Mapped Materials", ImGuiTreeNodeFlags_DefaultOpen))
+void Editor::sceneNodeInspector(GraphNode *node)
+{
+    switch (node->type())
     {
-        for (const auto& [mappedMaterialName, mappedMaterialID] : model->mappedMaterials)
-        {
-            const char* selectedMat = mResourceManager->mMaterialNames.at(mappedMaterialID).c_str();
+        case NodeType::Empty: emptyNodeInspector(node); break;
+        case NodeType::Mesh: meshNodeInspector(node); break;
+        case NodeType::DirectionalLight: dirLightInspector(node); break;
+        case NodeType::PointLight: pointLightInspector(node); break;
+        case NodeType::SpotLight: spotLightInspector(node); break;
+        default: assert(false);
+    }
+}
 
-            if (ImGui::BeginCombo(mappedMaterialName.c_str(), selectedMat))
+void Editor::emptyNodeInspector(GraphNode *node)
+{
+    ImGui::Text("Asset Type: Empty Node");
+    ImGui::Text("Name: %s", node->name().c_str());
+
+    nodeTransform(node);
+
+    if (node->modelID().has_value())
+    {
+        ImGui::SeparatorText("Info");
+
+        const auto& model = *mRenderer.mModels.at(*node->modelID());
+        ImGui::Text("Associated Model: %s", model.name.c_str());
+    }
+}
+
+void Editor::meshNodeInspector(GraphNode *node)
+{
+    MeshNode* meshNode = dynamic_cast<MeshNode*>(node);
+
+    ImGui::Text("Asset Type: Mesh Node");
+    ImGui::Text("Name: %s", node->name().c_str());
+
+    nodeTransform(node);
+
+    ImGui::SeparatorText("Info");
+
+    const auto& model = *mRenderer.mModels.at(meshNode->modelID().value());
+    const auto& mesh = model.getMesh(meshNode->meshID());
+
+    ImGui::Text("Associated Model: %s", model.name.c_str());
+    ImGui::Text("Mesh: %s", mesh.name.c_str());
+    ImGui::Text("Material: %s", mesh.materialIndex == -1? "None" :
+                            model.materialNames.at(mesh.materialIndex).c_str());
+}
+
+void Editor::dirLightInspector(GraphNode *node)
+{
+    DirectionalLight* dirLight = dynamic_cast<DirectionalLight*>(node);
+
+    ImGui::Text("Asset Type: Directional Light");
+    ImGui::Text("Name: %s", node->name().c_str());
+
+    nodeTransform(dirLight);
+
+    lightOptions(dirLight);
+    lightShadowOptions(dirLight);
+}
+
+void Editor::pointLightInspector(GraphNode *node)
+{
+    PointLight* pointLight = dynamic_cast<PointLight*>(node);
+
+    ImGui::Text("Asset Type: Point Light");
+    ImGui::Text("Name: %s", node->name().c_str());
+
+    nodeTransform(pointLight);
+
+    lightOptions(pointLight);
+    ImGui::DragFloat("Range##pointLight", &pointLight->range, 0.1f);
+    lightShadowOptions(pointLight);
+}
+
+void Editor::spotLightInspector(GraphNode *node)
+{
+    SpotLight* spotLight = dynamic_cast<SpotLight*>(node);
+
+    ImGui::Text("Asset Type: Spot Light");
+    ImGui::Text("Name: %s", node->name().c_str());
+
+    nodeTransform(spotLight);
+
+    lightOptions(spotLight);
+    ImGui::DragFloat("Range##spotLight", &spotLight->range, 0.1f);
+    lightShadowOptions(spotLight);
+}
+
+void Editor::nodeTransform(GraphNode *node)
+{
+    ImGui::SeparatorText("Transformation");
+
+    glm::mat4 mat = node->globalTransform();
+
+    float translation[3];
+    float rotation[3];
+    float scale[3];
+
+    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(mat), translation, rotation, scale);
+
+    bool modified = false;
+
+    if (ImGui::DragFloat3("Translation", translation, 0.001f))
+        modified = true;
+
+    if (ImGui::DragFloat3("Rotation", rotation, 0.001f))
+        modified = true;
+
+    if (ImGui::DragFloat3("Scale", scale, 0.001f))
+        modified = true;
+
+    if (modified)
+    {
+        ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, glm::value_ptr(mat));
+        node->setLocalTransform(mat);
+    }
+}
+
+void Editor::lightOptions(LightBase *light)
+{
+    ImGui::SeparatorText("Lighting Options");
+    ImGui::ColorEdit3("Color##light", glm::value_ptr(light->color), ImGuiColorEditFlags_DisplayRGB);
+    ImGui::DragFloat("Intensity##light", &light->intensity, 0.1f, 0.f);
+    glm::clamp(light->intensity, 0.f, light->intensity);
+}
+
+void Editor::lightShadowOptions(LightBase *light)
+{
+    ImGui::SeparatorText("Shadow Options");
+
+    if (ImGui::BeginCombo("Shadow Option", toStr(light->shadowOption)))
+    {
+        for (uint32_t i = 0; i < ShadowOptionCount; ++i)
+        {
+            bool selected = light->shadowOption == i;
+
+            if (ImGui::Selectable(toStr(static_cast<ShadowOption>(i)), selected))
+                light->shadowOption = static_cast<ShadowOption>(i);
+        }
+
+        ImGui::EndCombo();
+    }
+
+    if (light->shadowOption == ShadowOptionSoftShadows)
+    {
+        if (ImGui::BeginCombo("Shadow Softness", toStr(light->shadowSoftness)))
+        {
+            for (uint32_t i = 0; i < ShadowSoftnessCount; ++i)
             {
-                for (const auto& [materialID, materialName] : mResourceManager->mMaterialNames)
-                {
-                    bool selected = mappedMaterialID == materialID;
-                    if (ImGui::Selectable(materialName.c_str(), selected))
-                    {
-                        index_t materialIndex = mResourceManager->getMatIndex(materialID);
-                        model->remapMaterial(mappedMaterialName, materialID, materialIndex);
-                    }
-                }
+                bool selected = light->shadowSoftness == i;
 
-                ImGui::EndCombo();
+                if (ImGui::Selectable(toStr(static_cast<ShadowSoftness>(i)), selected))
+                    light->shadowSoftness = static_cast<ShadowSoftness>(i);
             }
+
+            ImGui::EndCombo();
         }
     }
 
-    ImGui::Text("Todo: Add reset button");
-}
-
-void Editor::materialInspector(uuid64_t materialID)
-{
-    static constexpr ImGuiColorEditFlags sColorEditFlags {
-        ImGuiColorEditFlags_DisplayRGB |
-        ImGuiColorEditFlags_AlphaBar
-    };
-
-    index_t matIndex = mResourceManager->getMatIndex(materialID);
-    Material& material = mResourceManager->mMaterialArray.at(matIndex);
-
-    ImGui::Text("Asset Type: Material");
-    ImGui::Text("Name: %s", mResourceManager->mMaterialNames.at(materialID).c_str());
-    ImGui::Separator();
-
-    bool matNeedsUpdate = false;
-
-    if (ImGui::CollapsingHeader("Material Textures", ImGuiTreeNodeFlags_DefaultOpen))
+    if (light->shadowOption != ShadowOptionNoShadows)
     {
-        if (materialTextureInspector(material.baseColorTexIndex, "Base Color"))
-            matNeedsUpdate = true;
-        if (materialTextureInspector(material.metallicRoughnessTexIndex, "Metallic Roughness"))
-            matNeedsUpdate = true;
-        if (materialTextureInspector(material.normalTexIndex, "Normal"))
-            matNeedsUpdate = true;
-        if (materialTextureInspector(material.aoTexIndex, "Ambient Occlusion"))
-            matNeedsUpdate = true;
-        if (materialTextureInspector(material.emissionTexIndex, "Emission"))
-            matNeedsUpdate = true;
+        ImGui::SliderFloat("Strength", &light->shadowStrength, 0.001f, 1.f);
+        ImGui::SliderFloat("Bias", &light->shadowBias, 0.001f, 1.f);
     }
-
-    if (ImGui::CollapsingHeader("Factors", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        if (ImGui::ColorEdit4("Base Color Factor", &material.baseColorFactor[0], sColorEditFlags))
-            matNeedsUpdate = true;
-
-        if (ImGui::ColorEdit3("Emission Factor", &material.emissionFactor[0], sColorEditFlags))
-            matNeedsUpdate = true;
-
-        if (ImGui::SliderFloat("Metallic Factor", &material.metallicFactor, 0.f, 1.f))
-            matNeedsUpdate = true;
-
-        if (ImGui::SliderFloat("Roughness Factor", &material.roughnessFactor, 0.f, 1.f))
-            matNeedsUpdate = true;
-
-        if (ImGui::SliderFloat("Occlusion Factor", &material.occlusionFactor, 0.f, 1.f))
-            matNeedsUpdate = true;
-    }
-
-    if (ImGui::CollapsingHeader("Texture Coordinates", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        if (ImGui::DragFloat2("Tiling", &material.tiling[0], 0.01f))
-            matNeedsUpdate = true;
-
-        if (ImGui::DragFloat2("Offset", &material.offset[0], 0.01f))
-            matNeedsUpdate = true;
-    }
-
-    if (matNeedsUpdate)
-        mResourceManager->updateMaterial(matIndex);
-}
-
-bool Editor::materialTextureInspector(index_t &textureIndex, std::string label)
-{
-    static constexpr ImVec2 sImageSize = ImVec2(20.f, 20.f);
-    static constexpr ImVec2 sTooltipImageSize = ImVec2(250.f, 250.f);
-    static constexpr ImVec2 sImageButtonFramePadding = ImVec2(2.f, 2.f);
-    static const ImVec2 sTextSize = ImGui::CalcTextSize("H");
-
-    uuid64_t textureID = mResourceManager->getTexIDFromIndex(textureIndex);
-    std::shared_ptr<VulkanTexture> texture = mResourceManager->getTexture(textureID);
-    VkDescriptorSet textureDescriptorSet = mResourceManager->getTextureDescriptorSet(textureID);
-
-    bool matNeedsUpdate = false;
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, sImageButtonFramePadding);
-    if (ImGui::ImageButton((ImTextureID)textureDescriptorSet, sImageSize))
-        ImGui::OpenPopup(label.c_str());
-    ImGui::PopStyleVar();
-
-    if (ImGui::BeginPopup(label.c_str()))
-    {
-        ImGui::SeparatorText("Select Texture:");
-
-        if (auto selectedTexID = textureCombo(textureID))
-        {
-            textureIndex = mResourceManager->getTextureIndex(*selectedTexID);
-            matNeedsUpdate = true;
-        }
-
-        ImGui::EndPopup();
-    }
-
-    if (textureDragDropTarget(textureIndex))
-        matNeedsUpdate = true;
-
-    if (ImGui::BeginItemTooltip())
-    {
-        ImGui::Image((ImTextureID)textureDescriptorSet, sTooltipImageSize);
-        ImGui::EndTooltip();
-    }
-
-    ImGui::SameLine();
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + sImageSize.y / 2.f - sTextSize.y / 2.f + 1.f);
-    ImGui::Text("%s | (%s)", label.c_str(), mResourceManager->mTextureNames.at(textureID).c_str());
-
-    return matNeedsUpdate;
-}
-
-void Editor::modelDragDropSource(uuid64_t modelID)
-{
-    if (ImGui::BeginDragDropSource())
-    {
-        ImGui::SetDragDropPayload("Model", &modelID, sizeof(uuid64_t));
-        ImGui::Text("%s (Model)", mResourceManager->mModelNames.at(modelID).c_str());
-        ImGui::EndDragDropSource();
-    }
-}
-
-void Editor::modelDragDropTarget()
-{
-    if (ImGui::BeginDragDropTarget())
-    {
-        checkPayloadType("Model");
-
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Model"))
-        {
-            uuid64_t modelID = *(uuid64_t*)payload->Data;
-            std::shared_ptr<Model> model = mResourceManager->getModel(modelID);
-            mSceneGraph.mRoot.addChild(createModelGraph(model, model->root, &mSceneGraph.mRoot));
-        }
-
-        ImGui::EndDragDropTarget();
-    }
-}
-
-void Editor::textureDragDropSource(uuid64_t textureID)
-{
-    if (ImGui::BeginDragDropSource())
-    {
-        ImGui::SetDragDropPayload("Texture", &textureID, sizeof(uuid64_t));
-        ImGui::Text("%s (Texture)", mResourceManager->mTextureNames.at(textureID).c_str());
-        ImGui::EndDragDropSource();
-    }
-}
-
-bool Editor::textureDragDropTarget(index_t& textureIndex)
-{
-    if (ImGui::BeginDragDropTarget())
-    {
-        checkPayloadType("Texture");
-
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Texture"))
-        {
-            uuid64_t textureID = *(uuid64_t*)payload->Data;
-            textureIndex = mResourceManager->getTextureIndex(textureID);
-            return true;
-        }
-
-        ImGui::EndDragDropTarget();
-    }
-
-    return false;
-}
-
-std::optional<uuid64_t> Editor::textureCombo(uuid64_t selectedTextureID)
-{
-    for (const auto& [textureID, textureName] : mResourceManager->mTextureNames)
-    {
-        bool selected = selectedTextureID == textureID;
-
-        if (ImGui::Selectable(textureName.c_str(), selected))
-            return textureID;
-    }
-
-    return std::nullopt;
-}
-
-void Editor::textureInspector(uuid64_t textureID)
-{
-    auto texture = mResourceManager->getTexture(textureID);
-    VkDescriptorSet textureDescriptorSet = mResourceManager->getTextureDescriptorSet(textureID);
-
-    const ImVec2 textureSize(texture->vulkanImage.width, texture->vulkanImage.height);
-
-    ImGui::Text("Asset Type: Texture");
-    ImGui::Text("Name: %s", mResourceManager->mTextureNames.at(textureID).c_str());
-
-    ImGui::SeparatorText("Texture Info");
-
-    ImGui::Text("Format: %s", toStr(texture->vulkanImage.format));
-    ImGui::Text("Filter Mode: %s", toStr(texture->vulkanSampler.filterMode));
-    ImGui::Text("Wrap Mode: %s", toStr(texture->vulkanSampler.wrapMode));
-    ImGui::Text("Size: %dx%d", (int)textureSize.x, (int)textureSize.y);
-
-    ImGui::SeparatorText("Preview");
-
-    float windowWidth = ImGui::GetContentRegionAvail().x;
-    float newHeight = (windowWidth / textureSize.x) * textureSize.y;
-    float xPadding = (ImGui::GetContentRegionAvail().x - windowWidth) * 0.5f;
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xPadding);
-    ImGui::Image((ImTextureID)textureDescriptorSet, ImVec2(windowWidth, newHeight));
 }
 
 void Editor::viewPort()
@@ -651,125 +360,207 @@ void Editor::viewPort()
     ImGui::End();
 }
 
-void Editor::sceneNodeInspector(SceneNode *node)
+void Editor::deleteSelectedObject()
 {
-    switch (node->type())
+    if (mSelectedObjectID)
     {
-        case NodeType::Empty: emptyNodeInspector(node); break;
-        case NodeType::Mesh: meshNodeInspector(node); break;
-        case NodeType::DirectionalLight: dirLightInspector(node); break;
-        case NodeType::PointLight: pointLightInspector(node); break;
-        case NodeType::SpotLight: spotLightInspector(node); break;
-        default: assert(false);
+        if (isModelSelected())
+            deleteSelectedModel();
+
+        if (isNodeSelected())
+            deleteSelectedNode();
     }
 }
 
-void Editor::emptyNodeInspector(SceneNode *node)
+void Editor::deleteSelectedNode()
 {
-    ImGui::Text("Asset Type: Empty Node");
-    ImGui::Text("Name: %s", node->name().c_str());
-
-    nodeTransform(node);
+    mSceneGraph.deleteNode(mSelectedObjectID);
+    mSelectedObjectID = 0;
 }
 
-void Editor::meshNodeInspector(SceneNode *node)
+void Editor::deleteSelectedModel()
 {
-    MeshNode* meshNode = dynamic_cast<MeshNode*>(node);
-
-    ImGui::Text("Asset Type: Mesh Node");
-    ImGui::Text("Name: %s", node->name().c_str());
-
-    nodeTransform(node);
-
-    ImGui::SeparatorText("Info");
-
-    ImGui::Text("Mesh: %s", mResourceManager->mMeshNames.at(meshNode->meshID()).c_str());
-
-    uuid64_t matID = mResourceManager->getMatIdFromIndex(meshNode->materialIndex());
-    ImGui::Text("Material: %s", mResourceManager->mMaterialNames.at(matID).c_str());
+    mRenderer.deleteModel(mSelectedObjectID);
+    mSelectedObjectID = 0;
 }
 
-void Editor::dirLightInspector(SceneNode *node)
+void Editor::rendererPanel()
 {
-    DirectionalLight* dirLight = dynamic_cast<DirectionalLight*>(node);
-
-    ImGui::Text("Asset Type: Directional Light");
-    ImGui::Text("Name: %s", node->name().c_str());
-
-    nodeTransform(dirLight);
-
-    lightOptions(dirLight);
-    lightShadowOptions(dirLight);
+    ImGui::Begin("Renderer", &mShowRendererPanel);
+    ImGui::End();
 }
 
-void Editor::pointLightInspector(SceneNode *node)
+void Editor::console()
 {
-    PointLight* pointLight = dynamic_cast<PointLight*>(node);
-
-    ImGui::Text("Asset Type: Point Light");
-    ImGui::Text("Name: %s", node->name().c_str());
-
-    nodeTransform(pointLight);
-
-    lightOptions(pointLight);
-    ImGui::DragFloat("Range##pointLight", &pointLight->range, 0.1f);
-    lightShadowOptions(pointLight);
+    ImGui::Begin("Console", &mShowConsole);
+    ImGui::End();
 }
 
-void Editor::spotLightInspector(SceneNode *node)
+void Editor::debugPanel()
 {
-    SpotLight* spotLight = dynamic_cast<SpotLight*>(node);
-
-    ImGui::Text("Asset Type: Spot Light");
-    ImGui::Text("Name: %s", node->name().c_str());
-
-    nodeTransform(spotLight);
-
-    lightOptions(spotLight);
-    ImGui::DragFloat("Range##spotLight", &spotLight->range, 0.1f);
-    lightShadowOptions(spotLight);
+    ImGui::Begin("Debug", &mShowDebugPanel);
+    ImGui::End();
 }
 
-void Editor::nodeTransform(SceneNode *node)
+// todo: improve drag drop area
+void Editor::sceneGraphPanel()
 {
-    ImGui::SeparatorText("Transformation");
+    ImGui::Begin("Scene Graph", &mShowSceneGraph);
 
-    glm::mat4 mat = node->globalTransform();
+    sceneGraphPopup();
 
-    float translation[3];
-    float rotation[3];
-    float scale[3];
-
-    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(mat), translation, rotation, scale);
-
-    bool modified = false;
-
-    if (ImGui::DragFloat3("Translation", translation, 0.1f))
-        modified = true;
-
-    if (ImGui::DragFloat3("Rotation", rotation, 0.1f))
-        modified = true;
-
-    if (ImGui::DragFloat3("Scale", scale, 0.1f))
-        modified = true;
-
-    if (modified)
+    for (auto child : mSceneGraph.mRoot.children())
     {
-        ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, glm::value_ptr(mat));
-        node->setLocalTransform(mat);
+        sceneNodeRecursive(child);
+    }
+
+    ImGui::Dummy(ImGui::GetContentRegionAvail());
+    sceneNodeDragDropTarget(&mSceneGraph.mRoot);
+
+    ImGui::End();
+
+    mSceneGraph.updateTransforms();
+}
+
+void Editor::sceneGraphPopup()
+{
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        ImGui::OpenPopup("sceneGraphPopup");
+
+    if (ImGui::BeginPopup("sceneGraphPopup"))
+    {
+        if (ImGui::MenuItem("Cut##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        if (ImGui::MenuItem("Copy##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        if (ImGui::MenuItem("Paste##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        if (ImGui::MenuItem("Paste as Child##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Rename##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        if (ImGui::MenuItem("Duplicate##sceneGraph", nullptr, false, false))
+            nullptr;
+
+        if (ImGui::MenuItem("Delete##sceneGraph", nullptr, false, isNodeSelected()))
+            deleteSelectedNode();
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Create Empty##sceneGraph"))
+            createEmptyNode();
+
+        ImGui::MenuItem("Create from Model##sceneGraph", nullptr, false, !mRenderer.mModels.empty());
+        if (ImGui::IsItemClicked())
+            ImGui::OpenPopup("SelectModel##sceneGraph");
+
+        if (ImGui::BeginPopup("SelectModel##sceneGraph"))
+        {
+            std::optional<uuid32_t> modelID = selectModel();
+
+            ImGui::EndPopup();
+
+            if (modelID.has_value())
+            {
+                auto& model = *mRenderer.mModels.at(*modelID);
+                createModelGraph(model);
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (ImGui::BeginMenu("Create Light"))
+        {
+            if (ImGui::MenuItem("Directional Light##sceneGraph"))
+                createDirectionalLight();
+
+            if (ImGui::MenuItem("Point Light##sceneGraph"))
+                createPointLight();
+
+            if (ImGui::MenuItem("Spot Light##sceneGraph"))
+                createSpotLight();
+
+            ImGui::EndMenu();
+        }
+
+        ImGui::EndPopup();
     }
 }
 
-void Editor::lightOptions(LightBase *light)
+void Editor::sceneNodeRecursive(GraphNode *node)
 {
-    ImGui::SeparatorText("Lighting Options");
-    ImGui::ColorEdit3("Color##light", glm::value_ptr(light->color), ImGuiColorEditFlags_DisplayRGB);
-    ImGui::DragFloat("Intensity##light", &light->intensity, 0.1f, 0.f); // todo: clamp
+    ImGuiTreeNodeFlags treeNodeFlags {
+        ImGuiTreeNodeFlags_OpenOnArrow |
+        ImGuiTreeNodeFlags_OpenOnDoubleClick |
+        ImGuiTreeNodeFlags_SpanFullWidth |
+        ImGuiTreeNodeFlags_FramePadding
+    };
+
+    if (mSelectedObjectID == node->id())
+        treeNodeFlags |= ImGuiTreeNodeFlags_Selected;
+
+    if (node->children().empty())
+        treeNodeFlags |= ImGuiTreeNodeFlags_Leaf;
+
+    bool nodeOpen = ImGui::TreeNodeEx((void*)(intptr_t)node, treeNodeFlags, node->name().c_str());
+
+    lastItemClicked(node->id());
+
+    sceneNodeDragDropSource(node);
+    sceneNodeDragDropTarget(node);
+
+    if (nodeOpen)
+    {
+        for (auto child : node->children())
+            sceneNodeRecursive(child);
+
+        ImGui::TreePop();
+    }
+}
+
+static GraphNode* createModelGraphImpl(Model& model, const SceneNode& sceneNode, GraphNode* parent)
+{
+    GraphNode* graphNode;
+
+    if (sceneNode.meshIndex != -1)
+    {
+        Mesh& mesh = model.meshes.at(sceneNode.meshIndex);
+
+        uuid32_t meshID = mesh.meshID;
+        uint32_t instanceID = mesh.mesh.addInstance({}, {});
+
+        graphNode = new MeshNode(NodeType::Mesh, sceneNode.name, sceneNode.transformation, parent,
+                                 model.id, meshID, instanceID);
+    }
+    else
+    {
+        graphNode = new GraphNode(NodeType::Empty, sceneNode.name, sceneNode.transformation, parent, model.id);
+    }
+
+    for (const auto& child : sceneNode.children)
+        graphNode->addChild(createModelGraphImpl(model, child, graphNode));
+
+    return graphNode;
+}
+
+void Editor::createModelGraph(Model &model)
+{
+    for (const auto& sceneNode : model.scenes)
+    {
+        GraphNode* graphNode = createModelGraphImpl(model, sceneNode, nullptr);
+        mSceneGraph.addNode(graphNode);
+    }
 }
 
 void Editor::createEmptyNode()
 {
-    mSceneGraph.addNode(new SceneNode(NodeType::Empty, "Empty Node", glm::identity<glm::mat4>(), nullptr));
+    mSceneGraph.addNode(new GraphNode(NodeType::Empty, "Empty Node", glm::identity<glm::mat4>(), nullptr));
 }
 
 // todo: implement properly
@@ -815,124 +606,285 @@ void Editor::createPointLight()
     mSceneGraph.addNode(new PointLight(lightSpecification));
 }
 
-void Editor::lightShadowOptions(LightBase *light)
+void Editor::assetPanel()
 {
-    ImGui::SeparatorText("Shadow Options");
+    ImGui::Begin("Assets", &mShowAssetPanel);
 
-    if (ImGui::BeginCombo("Shadow Option", toStr(light->shadowOption)))
+    assetPanelPopup();
+
+    for (const auto& [modelID, model] : mRenderer.mModels)
     {
-        for (uint32_t i = 0; i < ShadowOptionCount; ++i)
-        {
-            bool selected = light->shadowOption == i;
-
-            if (ImGui::Selectable(toStr(static_cast<ShadowOption>(i)), selected))
-                light->shadowOption = static_cast<ShadowOption>(i);
-        }
-
-        ImGui::EndCombo();
+        ImGui::Selectable(model->name.c_str(), mSelectedObjectID == modelID);
+        lastItemClicked(modelID);
+        modelDragDropSource(modelID);
     }
 
-    if (light->shadowOption == ShadowOptionSoftShadows)
-    {
-        if (ImGui::BeginCombo("Shadow Softness", toStr(light->shadowSoftness)))
-        {
-            for (uint32_t i = 0; i < ShadowSoftnessCount; ++i)
-            {
-                bool selected = light->shadowSoftness == i;
-
-                if (ImGui::Selectable(toStr(static_cast<ShadowSoftness>(i)), selected))
-                    light->shadowSoftness = static_cast<ShadowSoftness>(i);
-            }
-
-            ImGui::EndCombo();
-        }
-    }
-
-    if (light->shadowOption != ShadowOptionNoShadows)
-    {
-        ImGui::SliderFloat("Strength", &light->shadowStrength, 0.001f, 1.f);
-        ImGui::SliderFloat("Bias", &light->shadowBias, 0.001f, 1.f);
-    }
+    ImGui::End();
 }
 
-void Editor::sceneGraphPopup()
+void Editor::assetPanelPopup()
 {
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        ImGui::OpenPopup("sceneGraphPopup");
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        ImGui::OpenPopup("assetPanelPopup");
 
-    if (ImGui::BeginPopup("sceneGraphPopup"))
+    if (ImGui::BeginPopup("assetPanelPopup"))
     {
-        if (ImGui::MenuItem("Cut##sceneGraph", nullptr, false, false))
-            nullptr;
-
-        if (ImGui::MenuItem("Copy##sceneGraph", nullptr, false, false))
-            nullptr;
-
-        if (ImGui::MenuItem("Paste##sceneGraph", nullptr, false, false))
-            nullptr;
-
-        if (ImGui::MenuItem("Paste as Child##sceneGraph", nullptr, false, false))
-            nullptr;
+        if (ImGui::MenuItem("Import Model##assetPanel"))
+            importModel();
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Rename##sceneGraph", nullptr, false, false))
+        bool modelSelected = isModelSelected();
+
+        if (ImGui::MenuItem("Delete##assetPanel", nullptr, false, modelSelected))
+            deleteSelectedModel();
+
+        if (ImGui::MenuItem("Rename##assetPanel", nullptr, false, modelSelected))
             nullptr;
-
-        if (ImGui::MenuItem("Duplicate##sceneGraph", nullptr, false, false))
-            nullptr;
-
-        if (ImGui::MenuItem("Delete##sceneGraph", nullptr, false, nodeSelected()))
-            deleteSelectedNode();
-
-        ImGui::Separator();
-
-        if (ImGui::MenuItem("Create Empty##sceneGraph"))
-            createEmptyNode();
-
-        if (ImGui::BeginMenu("Create Light"))
-        {
-            if (ImGui::MenuItem("Directional Light##sceneGraph"))
-                createDirectionalLight();
-
-            if (ImGui::MenuItem("Point Light##sceneGraph"))
-                createPointLight();
-
-            if (ImGui::MenuItem("Spot Light##sceneGraph"))
-                createSpotLight();
-
-            ImGui::EndMenu();
-        }
 
         ImGui::EndPopup();
     }
 }
 
-bool Editor::nodeSelected()
+//void Editor::materialInspector(uuid32_t materialID)
+//{
+//    static constexpr ImGuiColorEditFlags sColorEditFlags {
+//        ImGuiColorEditFlags_DisplayRGB |
+//        ImGuiColorEditFlags_AlphaBar
+//    };
+//
+//    index_t matIndex = mResourceManager->getMatIndex(materialID);
+//    Material& material = mResourceManager->mMaterialArray.at(matIndex);
+//
+//    ImGui::Text("Asset Type: Material");
+//    ImGui::Text("Name: %s", mResourceManager->mMaterialNames.at(materialID).c_str());
+//    ImGui::Separator();
+//
+//    bool matNeedsUpdate = false;
+//
+//    if (ImGui::CollapsingHeader("Material Textures", ImGuiTreeNodeFlags_DefaultOpen))
+//    {
+//        if (materialTextureInspector(material.baseColorTexIndex, "Base Color"))
+//            matNeedsUpdate = true;
+//        if (materialTextureInspector(material.metallicRoughnessTexIndex, "Metallic Roughness"))
+//            matNeedsUpdate = true;
+//        if (materialTextureInspector(material.normalTexIndex, "Normal"))
+//            matNeedsUpdate = true;
+//        if (materialTextureInspector(material.aoTexIndex, "Ambient Occlusion"))
+//            matNeedsUpdate = true;
+//        if (materialTextureInspector(material.emissionTexIndex, "Emission"))
+//            matNeedsUpdate = true;
+//    }
+//
+//    if (ImGui::CollapsingHeader("Factors", ImGuiTreeNodeFlags_DefaultOpen))
+//    {
+//        if (ImGui::ColorEdit4("Base Color Factor", &material.baseColorFactor[0], sColorEditFlags))
+//            matNeedsUpdate = true;
+//
+//        if (ImGui::ColorEdit3("Emission Factor", &material.emissionFactor[0], sColorEditFlags))
+//            matNeedsUpdate = true;
+//
+//        if (ImGui::SliderFloat("Metallic Factor", &material.metallicFactor, 0.f, 1.f))
+//            matNeedsUpdate = true;
+//
+//        if (ImGui::SliderFloat("Roughness Factor", &material.roughnessFactor, 0.f, 1.f))
+//            matNeedsUpdate = true;
+//
+//        if (ImGui::SliderFloat("Occlusion Factor", &material.occlusionFactor, 0.f, 1.f))
+//            matNeedsUpdate = true;
+//    }
+//
+//    if (ImGui::CollapsingHeader("Texture Coordinates", ImGuiTreeNodeFlags_DefaultOpen))
+//    {
+//        if (ImGui::DragFloat2("Tiling", &material.tiling[0], 0.01f))
+//            matNeedsUpdate = true;
+//
+//        if (ImGui::DragFloat2("Offset", &material.offset[0], 0.01f))
+//            matNeedsUpdate = true;
+//    }
+//
+//    if (matNeedsUpdate)
+//        mResourceManager->updateMaterial(matIndex);
+//}
+
+//bool Editor::materialTextureInspector(index_t &textureIndex, std::string label)
+//{
+//    static constexpr ImVec2 sImageSize = ImVec2(20.f, 20.f);
+//    static constexpr ImVec2 sTooltipImageSize = ImVec2(250.f, 250.f);
+//    static constexpr ImVec2 sImageButtonFramePadding = ImVec2(2.f, 2.f);
+//    static const ImVec2 sTextSize = ImGui::CalcTextSize("H");
+//
+//    uuid32_t textureID = mResourceManager->getTexIDFromIndex(textureIndex);
+//    std::shared_ptr<VulkanTexture> texture = mResourceManager->getTexture(textureID);
+//    VkDescriptorSet textureDescriptorSet = mResourceManager->getTextureDescriptorSet(textureID);
+//
+//    bool matNeedsUpdate = false;
+//
+//    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, sImageButtonFramePadding);
+//    if (ImGui::ImageButton((ImTextureID)textureDescriptorSet, sImageSize))
+//        ImGui::OpenPopup(label.c_str());
+//    ImGui::PopStyleVar();
+//
+//    if (ImGui::BeginPopup(label.c_str()))
+//    {
+//        ImGui::SeparatorText("Select Texture:");
+//
+//        if (auto selectedTexID = textureCombo(textureID))
+//        {
+//            textureIndex = mResourceManager->getTextureIndex(*selectedTexID);
+//            matNeedsUpdate = true;
+//        }
+//
+//        ImGui::EndPopup();
+//    }
+//
+//    if (textureDragDropTarget(textureIndex))
+//        matNeedsUpdate = true;
+//
+//    if (ImGui::BeginItemTooltip())
+//    {
+//        ImGui::Image((ImTextureID)textureDescriptorSet, sTooltipImageSize);
+//        ImGui::EndTooltip();
+//    }
+//
+//    ImGui::SameLine();
+//    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + sImageSize.y / 2.f - sTextSize.y / 2.f + 1.f);
+//    ImGui::Text("%s | (%s)", label.c_str(), mResourceManager->mTextureNames.at(textureID).c_str());
+//
+//    return matNeedsUpdate;
+//}
+
+void Editor::sceneNodeDragDropSource(GraphNode *node)
+{
+    if (ImGui::BeginDragDropSource())
+    {
+        ImGui::SetDragDropPayload("SceneNode", &node, sizeof(GraphNode*));
+        ImGui::Text(std::format("{} (Scene Node)", node->name()).c_str());
+        ImGui::EndDragDropSource();
+    }
+}
+
+void Editor::sceneNodeDragDropTarget(GraphNode *node)
+{
+    if (ImGui::BeginDragDropTarget())
+    {
+        checkPayloadType("SceneNode");
+
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SceneNode"))
+        {
+            GraphNode* transferNode = *(GraphNode**)payload->Data;
+
+            transferNode->orphan();
+            transferNode->markDirty();
+
+            node->addChild(transferNode);
+        }
+
+        ImGui::EndDragDropTarget();
+    }
+}
+
+void Editor::modelDragDropSource(uuid32_t modelID)
+{
+    if (ImGui::BeginDragDropSource())
+    {
+        ImGui::SetDragDropPayload("Model", &modelID, sizeof(uuid32_t));
+        ImGui::Text("%s (Model)", mRenderer.mModels.at(modelID)->name.c_str());
+        ImGui::EndDragDropSource();
+    }
+}
+
+void Editor::modelDragDropTarget()
+{
+    if (ImGui::BeginDragDropTarget())
+    {
+        checkPayloadType("Model");
+
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Model"))
+        {
+            uuid32_t modelID = *(uuid32_t*)payload->Data;
+            Model& model = *mRenderer.mModels.at(modelID);
+            createModelGraph(model);
+        }
+
+        ImGui::EndDragDropTarget();
+    }
+}
+
+//void Editor::textureInspector(uuid32_t textureID)
+//{
+//    auto texture = mResourceManager->getTexture(textureID);
+//    VkDescriptorSet textureDescriptorSet = mResourceManager->getTextureDescriptorSet(textureID);
+//
+//    const ImVec2 textureSize(texture->vulkanImage.width, texture->vulkanImage.height);
+//
+//    ImGui::Text("Asset Type: Texture");
+//    ImGui::Text("Name: %s", mResourceManager->mTextureNames.at(textureID).c_str());
+//
+//    ImGui::SeparatorText("Texture Info");
+//
+//    ImGui::Text("Format: %s", toStr(texture->vulkanImage.format));
+//    ImGui::Text("Filter Mode: %s", toStr(texture->vulkanSampler.filterMode));
+//    ImGui::Text("Wrap Mode: %s", toStr(texture->vulkanSampler.wrapMode));
+//    ImGui::Text("Size: %dx%d", (int)textureSize.x, (int)textureSize.y);
+//
+//    ImGui::SeparatorText("Preview");
+//
+//    float windowWidth = ImGui::GetContentRegionAvail().x;
+//    float newHeight = (windowWidth / textureSize.x) * textureSize.y;
+//    float xPadding = (ImGui::GetContentRegionAvail().x - windowWidth) * 0.5f;
+//    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xPadding);
+//    ImGui::Image((ImTextureID)textureDescriptorSet, ImVec2(windowWidth, newHeight));
+//}
+
+void Editor::importModel()
+{
+    std::filesystem::path path = fileDialog("All Files");
+
+    if (!path.empty())
+    {
+        mRenderer.importModel(path);
+    }
+}
+
+void Editor::checkPayloadType(const char *type)
+{
+    const ImGuiPayload* payload = ImGui::GetDragDropPayload();
+
+    if (payload && strcmp(payload->DataType, type) != 0)
+        ImGui::SetMouseCursor(ImGuiMouseCursor_NotAllowed);
+}
+
+bool Editor::lastItemClicked(uuid32_t id)
+{
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) || ImGui::IsItemClicked(ImGuiMouseButton_Right))
+    {
+        mSelectedObjectID = id;
+        return true;
+    }
+
+    return false;
+}
+
+bool Editor::isNodeSelected()
 {
     return UUIDRegistry::isSceneNode(mSelectedObjectID);
 }
 
-void Editor::deleteSelectedNode()
+bool Editor::isModelSelected()
 {
-    mSceneGraph.deleteNode(mSelectedObjectID);
-    mSelectedObjectID = 0;
+    return UUIDRegistry::isModel(mSelectedObjectID);
 }
 
-void Editor::deleteSelectedModel()
+std::optional<uuid32_t> Editor::selectModel()
 {
-    mResourceManager->deleteModel(mSelectedObjectID);
-    mSelectedObjectID = 0;
-}
+    ImGui::SeparatorText("Select Model:");
 
-void Editor::deleteSelectedMaterial()
-{
-    mResourceManager->deleteMaterial(mSelectedObjectID);
-    mSelectedObjectID = 0;
-}
+    for (const auto& [modelID, model] : mRenderer.mModels)
+    {
+        if (ImGui::MenuItem(model->name.c_str()))
+            return modelID;
+    }
 
-void Editor::deleteSelectedTexture()
-{
-    mResourceManager->deleteTexture(mSelectedObjectID);
-    mSelectedObjectID = 0;
+    return std::nullopt;
 }

@@ -33,6 +33,12 @@ void Renderer::importModel(const std::filesystem::path &path)
     mLoadedModelFutures.push_back(ModelImporter::loadModel(path, &mRenderDevice, callback));
 }
 
+void Renderer::deleteModel(uuid32_t id)
+{
+    SNS::publishMessage(Topic::Type::Renderer, Message::modelDeleted(id));
+    mModels.erase(id);
+}
+
 void Renderer::processMainThreadTasks()
 {
     while (auto task = mTaskQueue.pop())
@@ -44,8 +50,11 @@ void Renderer::processMainThreadTasks()
         {
             auto model = itr->get();
 
-            mModels.emplace(UUIDRegistry::generateModelID(), model);
+            uuid32_t modelID = UUIDRegistry::generateModelID();
 
+            mModels.emplace(modelID, model);
+
+            model->id = modelID;
             model->createMaterialsUBO(mRenderDevice);
             model->createTextureDescriptorSets(mRenderDevice, mDisplayTexturesDSLayout);
             model->createMaterialsDescriptorSet(mRenderDevice, mMaterialsDsLayout);
@@ -102,7 +111,7 @@ void Renderer::createMaterialDsLayout()
     };
 
     VkDescriptorBindingFlagsEXT descriptorBindingFlags[2] {
-        VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT,
+        0,
         VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
     };
 

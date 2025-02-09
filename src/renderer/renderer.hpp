@@ -17,9 +17,11 @@ public:
     ~Renderer();
 
     void importModel(const std::filesystem::path& path);
+    void deleteModel(uuid32_t id);
     void processMainThreadTasks();
 
 private:
+
     void createDisplayTexturesDsLayout();
     void createMaterialDsLayout();
 

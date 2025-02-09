@@ -11,29 +11,26 @@
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_vulkan.h>
 #include <imgui/ImGuizmo.h>
+#include <glm/gtx/matrix_decompose.hpp>
 #include "../utils/utils.hpp"
-#include "../resource/resource_manager.hpp"
 #include "../scene_graph/scene_graph.hpp"
 #include "../scene_graph/light_node.hpp"
 #include "../scene_graph/mesh_node.hpp"
+#include "../renderer/renderer.hpp"
 #include "../renderer/model.hpp"
 #include "camera.hpp"
 
-class Renderer;
-class ResourceManager;
-
-// todo: disable modifications to default resources
 // todo: resize camera
-// todo: when the selected model gets deleted, assign 0 to mSelectedObjectID
 class Editor
 {
 public:
-    Editor(std::shared_ptr<Renderer> renderer, std::shared_ptr<ResourceManager> resourceManager);
+    Editor(Renderer& renderer);
     ~Editor();
 
     void update(float dt);
 
 private:
+    void imguiEvents();
     void mainMenuBar();
     void cameraPanel();
     void rendererPanel();
@@ -42,60 +39,53 @@ private:
 
     void sceneGraphPanel();
     void sceneGraphPopup();
-    void sceneNodeRecursive(SceneNode* node);
-    void checkPayloadType(const char* type);
-    SceneNode* createModelGraph(std::shared_ptr<Model> model, const Model::Node& modelNode, SceneNode* parent);
+    void sceneNodeRecursive(GraphNode* node);
+    void createModelGraph(Model& model);
     void createEmptyNode();
     void createDirectionalLight();
     void createSpotLight();
     void createPointLight();
 
-    void deleteSelectedNode();
-    void deleteSelectedModel();
-    void deleteSelectedMaterial();
-    void deleteSelectedTexture();
-
     void assetPanel();
-    void displayModels();
-    void displayMaterials();
-    void displayTextures();
+    void assetPanelPopup();
 
     void inspectorPanel();
-    void modelInspector(uuid64_t modelID);
-    void materialInspector(uuid64_t materialID);
-    bool materialTextureInspector(index_t& textureIndex, std::string label);
-    void textureInspector(uuid64_t textureID);
-    void sceneNodeInspector(SceneNode* node);
-    void emptyNodeInspector(SceneNode* node);
-    void meshNodeInspector(SceneNode* node);
-    void dirLightInspector(SceneNode* node);
-    void pointLightInspector(SceneNode* node);
-    void spotLightInspector(SceneNode* node);
-    void nodeTransform(SceneNode* node);
+    void modelInspector(uuid32_t modelID);
+    void sceneNodeInspector(GraphNode* node);
+    void emptyNodeInspector(GraphNode* node);
+    void meshNodeInspector(GraphNode* node);
+    void dirLightInspector(GraphNode* node);
+    void pointLightInspector(GraphNode* node);
+    void spotLightInspector(GraphNode* node);
+    void nodeTransform(GraphNode* node);
     void lightOptions(LightBase* light);
     void lightShadowOptions(LightBase* light);
 
     void viewPort();
 
-    void sceneNodeDragDropSource(SceneNode* node);
-    void sceneNodeDragDropTarget(SceneNode* node);
-    void modelDragDropSource(uuid64_t modelID);
+    void deleteSelectedObject();
+    void deleteSelectedNode();
+    void deleteSelectedModel();
+
+    void sceneNodeDragDropSource(GraphNode* node);
+    void sceneNodeDragDropTarget(GraphNode* node);
+    void modelDragDropSource(uuid32_t modelID);
     void modelDragDropTarget();
-    void textureDragDropSource(uuid64_t textureID);
-    bool textureDragDropTarget(index_t& textureIndex);
 
-    bool nodeSelected();
-
-    std::optional<uuid64_t> textureCombo(uuid64_t selectedTextureID);
-
+    void importModel();
+    void checkPayloadType(const char* type);
+    std::optional<uuid32_t> selectModel();
+    bool lastItemClicked(uuid32_t id);
+    bool isNodeSelected();
+    bool isModelSelected();
+    
 private:
-    std::shared_ptr<Renderer> mRenderer;
-    std::shared_ptr<ResourceManager> mResourceManager;
+    Renderer& mRenderer;
 
     Camera mCamera;
     SceneGraph mSceneGraph;
 
-    uuid64_t mSelectedObjectID;
+    uuid32_t mSelectedObjectID;
     float mDt{};
 
     bool mShowViewport;

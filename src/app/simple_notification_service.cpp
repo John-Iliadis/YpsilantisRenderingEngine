@@ -4,6 +4,21 @@
 
 #include "simple_notification_service.hpp"
 
+Message Message::modelDeleted(uuid32_t modelID)
+{
+    return Message(std::in_place_type_t<Message::ModelDeleted>(), modelID);
+}
+
+Message Message::meshInstanceUpdate(uuid32_t meshID, uuid32_t objectID, uint32_t instanceID, glm::mat4 transformation)
+{
+    return Message(std::in_place_type_t<Message::MeshInstanceUpdate>(), meshID, objectID, instanceID, transformation);
+}
+
+Message Message::removeMeshInstance(uuid32_t meshID, uint32_t instanceID)
+{
+    return Message(std::in_place_type_t<Message::RemoveMeshInstance>(), meshID, instanceID);
+}
+
 void Topic::addSubscriber(SubscriberSNS *subscriber)
 {
     mSubscribers.insert(subscriber);

@@ -13,51 +13,26 @@ class Message
 public:
     struct ModelDeleted
     {
-        uuid64_t modelID;
-        std::unordered_set<uuid64_t> meshIDs;
-    };
-
-    struct MaterialDeleted
-    {
-        uuid64_t materialID;
-        index_t removeIndex;
-        std::optional<index_t> transferIndex;
-    };
-
-    struct TextureDeleted
-    {
-        uuid64_t textureID;
-        index_t removedIndex;
-        std::optional<index_t> transferIndex;
+        uuid32_t modelID;
     };
 
     struct MeshInstanceUpdate
     {
-        uuid64_t meshID;
-        uuid64_t objectID;
+        uuid32_t meshID;
+        uuid32_t objectID;
         uint32_t instanceID;
-        index_t matIndex;
         glm::mat4 transformation;
     };
 
     struct RemoveMeshInstance
     {
-        uuid64_t meshID;
+        uuid32_t meshID;
         uint32_t instanceID;
     };
 
-    struct MaterialRemap
-    {
-        uint32_t newMatIndex;
-        std::string matName;
-    };
-
     std::variant<ModelDeleted,
-        MaterialDeleted,
-        TextureDeleted,
         MeshInstanceUpdate,
-        RemoveMeshInstance,
-        MaterialRemap> message;
+        RemoveMeshInstance> message;
 
     template<typename T>
     Message(const T& message) : message(message) {}
@@ -74,11 +49,9 @@ public:
     template<typename T>
     const T* getIf() const { return std::get_if<T>(&message); }
 
-    template<typename T, typename... Args>
-    static Message create(Args&&... args)
-    {
-        return Message(std::in_place_type<T>, std::forward<Args>(args)...);
-    }
+    static Message modelDeleted(uuid32_t modelID);
+    static Message meshInstanceUpdate(uuid32_t meshID, uuid32_t objectID, uint32_t instanceID, glm::mat4 transformation);
+    static Message removeMeshInstance(uuid32_t meshID, uint32_t instanceID);
 };
 
 class SubscriberSNS;
@@ -90,7 +63,7 @@ public:
         None = 0,
         Editor,
         SceneGraph,
-        Resources,
+        Renderer,
         Count
     };
 
