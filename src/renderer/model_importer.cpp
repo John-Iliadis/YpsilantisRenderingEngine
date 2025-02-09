@@ -10,9 +10,9 @@
 // todo: error handling
 // todo: handle texture loading fails
 // todo: handle "Load error: No LoadImageData callback specified"
+// todo: load lights
 
-// todo: fix double root node bug
-// todo: fix texture debug name bug
+// todo: fix node transformation bug
 
 namespace ModelImporter
 {
@@ -24,13 +24,7 @@ namespace ModelImporter
 
             model->name = path.filename().string();
             model->path = path;
-
-            // load scene root nodes
-            for (const tinygltf::Scene& scene : gltfModel->scenes)
-            {
-                SceneNode rootSceneNode = createRootSceneNode(*gltfModel, scene);
-                model->scenes.push_back(std::move(rootSceneNode));
-            }
+            model->scenes = loadScenes(*gltfModel);
 
             // load mesh data
             std::vector<std::future<MeshData>> meshDataFutures;
@@ -91,10 +85,34 @@ namespace ModelImporter
         return model;
     }
 
+    std::vector<SceneNode> loadScenes(const tinygltf::Model& gltfModel)
+    {
+        std::vector<SceneNode> rootNodes;
+
+        if (gltfModel.scenes.size() == 1)
+        {
+            const tinygltf::Scene& scene = gltfModel.scenes.at(0);
+            const tinygltf::Node& root = gltfModel.nodes.at(scene.nodes.at(0));
+
+            SceneNode rootSceneNode = createRootSceneNode(gltfModel, root);
+            rootNodes.push_back(std::move(rootSceneNode));
+        }
+        else
+        {
+            for (const tinygltf::Scene& scene : gltfModel.scenes)
+            {
+                SceneNode rootSceneNode = createRootSceneNode(gltfModel, scene);
+                rootNodes.push_back(std::move(rootSceneNode));
+            }
+        }
+
+        return rootNodes;
+    }
+
     SceneNode createRootSceneNode(const tinygltf::Model& gltfModel, const tinygltf::Scene& gltfScene)
     {
         SceneNode sceneNode {
-            .name = gltfScene.name,
+            .name = gltfScene.name.empty()? "Unnamed" : gltfScene.name,
             .transformation = glm::identity<glm::mat4>(),
             .meshIndex = -1
         };
@@ -111,13 +129,16 @@ namespace ModelImporter
     SceneNode createRootSceneNode(const tinygltf::Model& gltfModel, const tinygltf::Node& gltfNode)
     {
         SceneNode sceneNode {
-            .name = gltfNode.name,
+            .name = gltfNode.name.empty()? "Unnamed" : gltfNode.name,
             .transformation = getNodeTransformation(gltfNode),
             .meshIndex = gltfNode.mesh
         };
 
-        for (size_t i = 0; i < gltfNode.children.size(); ++i)
-            sceneNode.children.push_back(createRootSceneNode(gltfModel, gltfModel.nodes.at(i)));
+        for (int32_t childIndex : gltfNode.children)
+        {
+            const tinygltf::Node& gltfChildNode = gltfModel.nodes.at(childIndex);
+            sceneNode.children.push_back(createRootSceneNode(gltfModel, gltfChildNode));
+        }
 
         return sceneNode;
     }
@@ -134,18 +155,20 @@ namespace ModelImporter
         {
             if (!gltfNode.translation.empty())
             {
-                transformation = glm::translate(transformation, glm::make_vec3((float*)gltfNode.translation.data()));
+                glm::dvec3 translation = glm::make_vec3(gltfNode.translation.data());
+                transformation = glm::translate(transformation, static_cast<glm::vec3>(translation));
             }
 
             if (!gltfNode.rotation.empty())
             {
-                glm::quat q = glm::make_quat(gltfNode.rotation.data());
-                transformation *= glm::mat4(q);
+                glm::dquat q = glm::make_quat(gltfNode.rotation.data());
+                transformation *= glm::mat4(static_cast<glm::quat>(q));
             }
 
             if (!gltfNode.scale.empty())
             {
-                transformation = glm::scale(transformation, glm::make_vec3((float*)gltfNode.scale.data()));
+                glm::dvec3 scale = glm::make_vec3(gltfNode.scale.data());
+                transformation = glm::scale(transformation, static_cast<glm::vec3>(scale));
             }
         }
 
@@ -156,7 +179,7 @@ namespace ModelImporter
     {
         Mesh mesh {
             .meshID = UUIDRegistry::generateMeshID(),
-            .name = meshData.name,
+            .name = meshData.name.empty()? "Unnamed" : meshData.name,
             .mesh = InstancedMesh(*renderDevice, meshData.vertices, meshData.indices),
             .materialIndex = meshData.materialIndex
         };
@@ -328,10 +351,6 @@ namespace ModelImporter
 
             return imageData;
         });
-
-        const tinygltf::Image& image = gltfModel.images.at(texture.source);
-
-//        std::filesystem::path
     }
 
     TextureWrap getWrapMode(int wrapMode)
@@ -396,7 +415,7 @@ namespace ModelImporter
             .generateMipMaps = true
         };
 
-        Texture texture {.name = imageData->loadedImage.path().string()};
+        Texture texture {.name = imageData->loadedImage.path().filename().string()};
 
         VulkanTexture vkTexture(*renderDevice, textureSpecification, imageData->loadedImage.data());
         vkTexture.vulkanImage.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);

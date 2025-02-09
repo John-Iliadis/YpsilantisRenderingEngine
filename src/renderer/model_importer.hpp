@@ -44,6 +44,7 @@ namespace ModelImporter
 
     std::shared_ptr<tinygltf::Model> loadGltfScene(const std::filesystem::path& path);
 
+    std::vector<SceneNode> loadScenes(const tinygltf::Model& gltfModel);
     SceneNode createRootSceneNode(const tinygltf::Model& gltfModel, const tinygltf::Scene& gltfScene);
     SceneNode createRootSceneNode(const tinygltf::Model& gltfModel, const tinygltf::Node& gltfNode);
 
