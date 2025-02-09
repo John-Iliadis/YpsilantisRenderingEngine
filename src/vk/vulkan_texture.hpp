@@ -77,12 +77,14 @@ public:
     VulkanTexture(const VulkanRenderDevice& renderDevice, const TextureSpecification& specification, const void* data);
     ~VulkanTexture();
 
-    VulkanTexture(VulkanTexture&&) noexcept = default;
-    VulkanTexture& operator=(VulkanTexture&&) noexcept = default;
+    VulkanTexture(VulkanTexture&& other) noexcept;
+    VulkanTexture& operator=(VulkanTexture&& other) noexcept;
 
     void uploadImageData(const void* data);
     void generateMipMaps();
     void setDebugName(const std::string& debugName);
+
+    void swap(VulkanTexture& other) noexcept;
 
 private:
     const VulkanRenderDevice* mRenderDevice;

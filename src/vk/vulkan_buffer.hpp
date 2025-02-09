@@ -61,7 +61,6 @@ public:
 private:
     VkBuffer createBuffer(BufferType type);
     VkDeviceMemory allocateBufferMemory(MemoryType type, VkBuffer buffer);
-    void destroy();
 
 private:
     const VulkanRenderDevice* mRenderDevice;

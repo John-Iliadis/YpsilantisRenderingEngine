@@ -52,9 +52,6 @@ public:
     void swap(VulkanImage& other) noexcept;
 
 private:
-    void destroy();
-
-private:
     const VulkanRenderDevice* mRenderDevice;
 };
 

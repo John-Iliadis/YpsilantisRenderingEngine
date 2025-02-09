@@ -129,7 +129,13 @@ VulkanBuffer::VulkanBuffer(const VulkanRenderDevice &renderDevice,
 
 VulkanBuffer::~VulkanBuffer()
 {
-    destroy();
+    if (mRenderDevice)
+    {
+        vkDestroyBuffer(mRenderDevice->device, mBuffer, nullptr);
+        vkFreeMemory(mRenderDevice->device, mMemory, nullptr);
+        mSize = 0;
+        mRenderDevice = nullptr;
+    }
 }
 
 VulkanBuffer::VulkanBuffer(VulkanBuffer &&other) noexcept
@@ -141,11 +147,7 @@ VulkanBuffer::VulkanBuffer(VulkanBuffer &&other) noexcept
 VulkanBuffer &VulkanBuffer::operator=(VulkanBuffer &&other) noexcept
 {
     if (this != &other)
-    {
-        destroy();
         swap(other);
-    }
-
     return *this;
 }
 
@@ -215,15 +217,6 @@ VkDeviceMemory VulkanBuffer::allocateBufferMemory(MemoryType type, VkBuffer buff
     vkBindBufferMemory(mRenderDevice->device, buffer, memory, 0);
 
     return memory;
-}
-
-void VulkanBuffer::destroy()
-{
-    vkDestroyBuffer(mRenderDevice->device, mBuffer, nullptr);
-    vkFreeMemory(mRenderDevice->device, mMemory, nullptr);
-    mSize = 0;
-
-    mRenderDevice = nullptr;
 }
 
 void VulkanBuffer::setDebugName(const std::string &debugName)

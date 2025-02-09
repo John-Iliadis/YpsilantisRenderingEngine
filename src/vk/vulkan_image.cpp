@@ -92,7 +92,20 @@ VulkanImage::VulkanImage(const VulkanRenderDevice &renderDevice,
 
 VulkanImage::~VulkanImage()
 {
-    destroy();
+    if (mRenderDevice)
+    {
+        vkDestroyImageView(mRenderDevice->device, imageView, nullptr);
+        vkDestroyImage(mRenderDevice->device, image, nullptr);
+        vkFreeMemory(mRenderDevice->device, memory, nullptr);
+
+        width = 0;
+        height = 0;
+        mipLevels = 0;
+        layerCount = 0;
+
+        format = VK_FORMAT_UNDEFINED;
+        layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    }
 }
 
 VulkanImage::VulkanImage(VulkanImage &&other) noexcept
@@ -104,16 +117,13 @@ VulkanImage::VulkanImage(VulkanImage &&other) noexcept
 VulkanImage &VulkanImage::operator=(VulkanImage &&other) noexcept
 {
     if (this != &other)
-    {
-        destroy();
         swap(other);
-    }
-
     return *this;
 }
 
 void VulkanImage::swap(VulkanImage &other) noexcept
 {
+    std::swap(mRenderDevice, other.mRenderDevice);
     std::swap(image, other.image);
     std::swap(imageView, other.imageView);
     std::swap(memory, other.memory);
@@ -124,21 +134,6 @@ void VulkanImage::swap(VulkanImage &other) noexcept
     std::swap(format, other.format);
     std::swap(layout, other.layout);
     std::swap(imageAspect, other.imageAspect);
-}
-
-void VulkanImage::destroy()
-{
-    vkDestroyImageView(mRenderDevice->device, imageView, nullptr);
-    vkDestroyImage(mRenderDevice->device, image, nullptr);
-    vkFreeMemory(mRenderDevice->device, memory, nullptr);
-
-    width = 0;
-    height = 0;
-    mipLevels = 0;
-    layerCount = 0;
-
-    format = VK_FORMAT_UNDEFINED;
-    layout = VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
 void VulkanImage::transitionLayout(VkImageLayout newLayout)

@@ -76,7 +76,10 @@ VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const Textu
 
 VulkanTexture::~VulkanTexture()
 {
-    vkDestroySampler(mRenderDevice->device, vulkanSampler.sampler, nullptr);
+    if (mRenderDevice)
+    {
+        vkDestroySampler(mRenderDevice->device, vulkanSampler.sampler, nullptr);
+    }
 }
 
 void VulkanTexture::uploadImageData(const void *data)
@@ -178,6 +181,26 @@ void VulkanTexture::setDebugName(const std::string &debugName)
 {
     vulkanImage.setDebugName(debugName);
     setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_SAMPLER, debugName, vulkanSampler.sampler);
+}
+
+VulkanTexture::VulkanTexture(VulkanTexture&& other) noexcept
+    : VulkanTexture()
+{
+    swap(other);
+}
+
+VulkanTexture &VulkanTexture::operator=(VulkanTexture&& other) noexcept
+{
+    if (this != &other)
+        swap(other);
+    return *this;
+}
+
+void VulkanTexture::swap(VulkanTexture &other) noexcept
+{
+    std::swap(mRenderDevice, other.mRenderDevice);
+    std::swap(vulkanSampler, other.vulkanSampler);
+    vulkanImage.swap(other.vulkanImage);
 }
 
 uint32_t calculateMipLevels(uint32_t width, uint32_t height)
