@@ -134,3 +134,8 @@ void GraphNode::updateGlobalTransform()
     for (auto child : mChildren)
         child->updateGlobalTransform();
 }
+
+void GraphNode::setName(const std::string &name)
+{
+    mName = name;
+}

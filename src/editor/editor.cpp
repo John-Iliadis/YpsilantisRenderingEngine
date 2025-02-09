@@ -429,6 +429,8 @@ void Editor::sceneGraphPopup()
 
     if (ImGui::BeginPopup("sceneGraphPopup"))
     {
+        bool nodeSelected = isNodeSelected();
+
         if (ImGui::MenuItem("Cut##sceneGraph", nullptr, false, false))
             nullptr;
 
@@ -443,13 +445,17 @@ void Editor::sceneGraphPopup()
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Rename##sceneGraph", nullptr, false, false))
-            nullptr;
+        ImGui::MenuItem("Rename##sceneGraph", nullptr, false, nodeSelected);
+        if (ImGui::IsItemClicked())
+        {
+            ImGui::OpenPopup("RenameDialog##sceneGraph");
+            resetBuffer();
+        }
 
         if (ImGui::MenuItem("Duplicate##sceneGraph", nullptr, false, false))
             nullptr;
 
-        if (ImGui::MenuItem("Delete##sceneGraph", nullptr, false, isNodeSelected()))
+        if (ImGui::MenuItem("Delete##sceneGraph", nullptr, false, nodeSelected))
             deleteSelectedNode();
 
         ImGui::Separator();
@@ -460,20 +466,6 @@ void Editor::sceneGraphPopup()
         ImGui::MenuItem("Create from Model##sceneGraph", nullptr, false, !mRenderer.mModels.empty());
         if (ImGui::IsItemClicked())
             ImGui::OpenPopup("SelectModel##sceneGraph");
-
-        if (ImGui::BeginPopup("SelectModel##sceneGraph"))
-        {
-            std::optional<uuid32_t> modelID = selectModel();
-
-            ImGui::EndPopup();
-
-            if (modelID.has_value())
-            {
-                auto& model = *mRenderer.mModels.at(*modelID);
-                createModelGraph(model);
-                ImGui::CloseCurrentPopup();
-            }
-        }
 
         if (ImGui::BeginMenu("Create Light"))
         {
@@ -487,6 +479,34 @@ void Editor::sceneGraphPopup()
                 createSpotLight();
 
             ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginPopup("RenameDialog##sceneGraph"))
+        {
+            std::optional<std::string> newName = renameDialog();
+
+            ImGui::EndPopup();
+
+            if (newName)
+            {
+                GraphNode& node = *mSceneGraph.searchNode(mSelectedObjectID);
+                node.setName(newName.value());
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (ImGui::BeginPopup("SelectModel##sceneGraph"))
+        {
+            std::optional<uuid32_t> modelID = selectModel();
+
+            ImGui::EndPopup();
+
+            if (modelID.has_value())
+            {
+                auto& model = *mRenderer.mModels.at(*modelID);
+                createModelGraph(model);
+                ImGui::CloseCurrentPopup();
+            }
         }
 
         ImGui::EndPopup();
@@ -639,120 +659,30 @@ void Editor::assetPanelPopup()
         if (ImGui::MenuItem("Delete##assetPanel", nullptr, false, modelSelected))
             deleteSelectedModel();
 
-        if (ImGui::MenuItem("Rename##assetPanel", nullptr, false, modelSelected))
-            nullptr;
+        ImGui::MenuItem("Rename##assetPanel", nullptr, false, modelSelected);
+        if (ImGui::IsItemClicked())
+        {
+            ImGui::OpenPopup("RenameDialog##assetPanel");
+            resetBuffer();
+        }
+
+        if (ImGui::BeginPopup("RenameDialog##assetPanel"))
+        {
+            std::optional<std::string> newName = renameDialog();
+
+            ImGui::EndPopup();
+
+            if (newName)
+            {
+                Model& model = *mRenderer.mModels.at(mSelectedObjectID);
+                model.name = newName.value();
+                ImGui::CloseCurrentPopup();
+            }
+        }
 
         ImGui::EndPopup();
     }
 }
-
-//void Editor::materialInspector(uuid32_t materialID)
-//{
-//    static constexpr ImGuiColorEditFlags sColorEditFlags {
-//        ImGuiColorEditFlags_DisplayRGB |
-//        ImGuiColorEditFlags_AlphaBar
-//    };
-//
-//    index_t matIndex = mResourceManager->getMatIndex(materialID);
-//    Material& material = mResourceManager->mMaterialArray.at(matIndex);
-//
-//    ImGui::Text("Asset Type: Material");
-//    ImGui::Text("Name: %s", mResourceManager->mMaterialNames.at(materialID).c_str());
-//    ImGui::Separator();
-//
-//    bool matNeedsUpdate = false;
-//
-//    if (ImGui::CollapsingHeader("Material Textures", ImGuiTreeNodeFlags_DefaultOpen))
-//    {
-//        if (materialTextureInspector(material.baseColorTexIndex, "Base Color"))
-//            matNeedsUpdate = true;
-//        if (materialTextureInspector(material.metallicRoughnessTexIndex, "Metallic Roughness"))
-//            matNeedsUpdate = true;
-//        if (materialTextureInspector(material.normalTexIndex, "Normal"))
-//            matNeedsUpdate = true;
-//        if (materialTextureInspector(material.aoTexIndex, "Ambient Occlusion"))
-//            matNeedsUpdate = true;
-//        if (materialTextureInspector(material.emissionTexIndex, "Emission"))
-//            matNeedsUpdate = true;
-//    }
-//
-//    if (ImGui::CollapsingHeader("Factors", ImGuiTreeNodeFlags_DefaultOpen))
-//    {
-//        if (ImGui::ColorEdit4("Base Color Factor", &material.baseColorFactor[0], sColorEditFlags))
-//            matNeedsUpdate = true;
-//
-//        if (ImGui::ColorEdit3("Emission Factor", &material.emissionFactor[0], sColorEditFlags))
-//            matNeedsUpdate = true;
-//
-//        if (ImGui::SliderFloat("Metallic Factor", &material.metallicFactor, 0.f, 1.f))
-//            matNeedsUpdate = true;
-//
-//        if (ImGui::SliderFloat("Roughness Factor", &material.roughnessFactor, 0.f, 1.f))
-//            matNeedsUpdate = true;
-//
-//        if (ImGui::SliderFloat("Occlusion Factor", &material.occlusionFactor, 0.f, 1.f))
-//            matNeedsUpdate = true;
-//    }
-//
-//    if (ImGui::CollapsingHeader("Texture Coordinates", ImGuiTreeNodeFlags_DefaultOpen))
-//    {
-//        if (ImGui::DragFloat2("Tiling", &material.tiling[0], 0.01f))
-//            matNeedsUpdate = true;
-//
-//        if (ImGui::DragFloat2("Offset", &material.offset[0], 0.01f))
-//            matNeedsUpdate = true;
-//    }
-//
-//    if (matNeedsUpdate)
-//        mResourceManager->updateMaterial(matIndex);
-//}
-
-//bool Editor::materialTextureInspector(index_t &textureIndex, std::string label)
-//{
-//    static constexpr ImVec2 sImageSize = ImVec2(20.f, 20.f);
-//    static constexpr ImVec2 sTooltipImageSize = ImVec2(250.f, 250.f);
-//    static constexpr ImVec2 sImageButtonFramePadding = ImVec2(2.f, 2.f);
-//    static const ImVec2 sTextSize = ImGui::CalcTextSize("H");
-//
-//    uuid32_t textureID = mResourceManager->getTexIDFromIndex(textureIndex);
-//    std::shared_ptr<VulkanTexture> texture = mResourceManager->getTexture(textureID);
-//    VkDescriptorSet textureDescriptorSet = mResourceManager->getTextureDescriptorSet(textureID);
-//
-//    bool matNeedsUpdate = false;
-//
-//    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, sImageButtonFramePadding);
-//    if (ImGui::ImageButton((ImTextureID)textureDescriptorSet, sImageSize))
-//        ImGui::OpenPopup(label.c_str());
-//    ImGui::PopStyleVar();
-//
-//    if (ImGui::BeginPopup(label.c_str()))
-//    {
-//        ImGui::SeparatorText("Select Texture:");
-//
-//        if (auto selectedTexID = textureCombo(textureID))
-//        {
-//            textureIndex = mResourceManager->getTextureIndex(*selectedTexID);
-//            matNeedsUpdate = true;
-//        }
-//
-//        ImGui::EndPopup();
-//    }
-//
-//    if (textureDragDropTarget(textureIndex))
-//        matNeedsUpdate = true;
-//
-//    if (ImGui::BeginItemTooltip())
-//    {
-//        ImGui::Image((ImTextureID)textureDescriptorSet, sTooltipImageSize);
-//        ImGui::EndTooltip();
-//    }
-//
-//    ImGui::SameLine();
-//    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + sImageSize.y / 2.f - sTextSize.y / 2.f + 1.f);
-//    ImGui::Text("%s | (%s)", label.c_str(), mResourceManager->mTextureNames.at(textureID).c_str());
-//
-//    return matNeedsUpdate;
-//}
 
 void Editor::sceneNodeDragDropSource(GraphNode *node)
 {
@@ -811,32 +741,6 @@ void Editor::modelDragDropTarget()
     }
 }
 
-//void Editor::textureInspector(uuid32_t textureID)
-//{
-//    auto texture = mResourceManager->getTexture(textureID);
-//    VkDescriptorSet textureDescriptorSet = mResourceManager->getTextureDescriptorSet(textureID);
-//
-//    const ImVec2 textureSize(texture->vulkanImage.width, texture->vulkanImage.height);
-//
-//    ImGui::Text("Asset Type: Texture");
-//    ImGui::Text("Name: %s", mResourceManager->mTextureNames.at(textureID).c_str());
-//
-//    ImGui::SeparatorText("Texture Info");
-//
-//    ImGui::Text("Format: %s", toStr(texture->vulkanImage.format));
-//    ImGui::Text("Filter Mode: %s", toStr(texture->vulkanSampler.filterMode));
-//    ImGui::Text("Wrap Mode: %s", toStr(texture->vulkanSampler.wrapMode));
-//    ImGui::Text("Size: %dx%d", (int)textureSize.x, (int)textureSize.y);
-//
-//    ImGui::SeparatorText("Preview");
-//
-//    float windowWidth = ImGui::GetContentRegionAvail().x;
-//    float newHeight = (windowWidth / textureSize.x) * textureSize.y;
-//    float xPadding = (ImGui::GetContentRegionAvail().x - windowWidth) * 0.5f;
-//    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xPadding);
-//    ImGui::Image((ImTextureID)textureDescriptorSet, ImVec2(windowWidth, newHeight));
-//}
-
 void Editor::importModel()
 {
     std::filesystem::path path = fileDialog("All Files");
@@ -853,6 +757,38 @@ void Editor::checkPayloadType(const char *type)
 
     if (payload && strcmp(payload->DataType, type) != 0)
         ImGui::SetMouseCursor(ImGuiMouseCursor_NotAllowed);
+}
+
+std::optional<uuid32_t> Editor::selectModel()
+{
+    ImGui::SeparatorText("Select Model:");
+
+    for (const auto& [modelID, model] : mRenderer.mModels)
+    {
+        if (ImGui::MenuItem(model->name.c_str()))
+            return modelID;
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> Editor::renameDialog()
+{
+    std::optional<std::string> str;
+
+    ImGui::SeparatorText("Enter Name:");
+
+    ImGui::InputText("##renameDialogTextInput", mBuffer.data(), mBuffer.size());
+
+    ImGui::BeginDisabled(mBuffer[0] == '\0');
+    if (ImGui::Button("Submit##renameDialog") || (mBuffer[0] != '\0' && ImGui::IsKeyPressed(ImGuiKey_Enter)))
+    {
+        str = mBuffer.data();
+        resetBuffer();
+    }
+    ImGui::EndDisabled();
+
+    return str;
 }
 
 bool Editor::lastItemClicked(uuid32_t id)
@@ -876,15 +812,7 @@ bool Editor::isModelSelected()
     return UUIDRegistry::isModel(mSelectedObjectID);
 }
 
-std::optional<uuid32_t> Editor::selectModel()
+void Editor::resetBuffer()
 {
-    ImGui::SeparatorText("Select Model:");
-
-    for (const auto& [modelID, model] : mRenderer.mModels)
-    {
-        if (ImGui::MenuItem(model->name.c_str()))
-            return modelID;
-    }
-
-    return std::nullopt;
+    mBuffer.fill('\0');
 }

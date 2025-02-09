@@ -74,6 +74,8 @@ private:
 
     void importModel();
     void checkPayloadType(const char* type);
+    void resetBuffer();
+    std::optional<std::string> renameDialog();
     std::optional<uuid32_t> selectModel();
     bool lastItemClicked(uuid32_t id);
     bool isNodeSelected();
@@ -87,6 +89,7 @@ private:
 
     uuid32_t mSelectedObjectID;
     float mDt{};
+    std::array<char, 256> mBuffer;
 
     bool mShowViewport;
     bool mShowAssetPanel;

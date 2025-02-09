@@ -46,6 +46,7 @@ public:
 
     const glm::mat4& localTransform() const;
     const glm::mat4& globalTransform();
+    void setName(const std::string& name);
     void setLocalTransform(const glm::mat4& transform);
     virtual void updateGlobalTransform();
 
