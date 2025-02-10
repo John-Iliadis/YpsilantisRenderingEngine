@@ -152,7 +152,7 @@ void Editor::cameraPanel()
 
 void Editor::inspectorPanel()
 {
-    ImGui::Begin("Inspector", &mShowInspectorPanel, ImGuiWindowFlags_NoScrollbar);
+    ImGui::Begin("Inspector", &mShowInspectorPanel);
 
     if (auto objectType = UUIDRegistry::getObjectType(mSelectedObjectID))
     {
@@ -170,10 +170,130 @@ void Editor::inspectorPanel()
 
 void Editor::modelInspector(uuid32_t modelID)
 {
-    auto model = mRenderer.mModels.at(modelID);
+    auto& model = *mRenderer.mModels.at(modelID);
 
     ImGui::Text("Asset Type: Model");
-    ImGui::Text("Name: %s", model->name.c_str());
+    ImGui::Text("Name: %s", model.name.c_str());
+
+    ImGui::SeparatorText("Info");
+
+    ImGui::Text("Mesh Count: %zu", model.meshes.size());
+    ImGui::Text("Material Count: %zu", model.materials.size());
+    ImGui::Text("Texture Count: %zu", model.textures.size());
+
+    if (!model.materials.empty())
+    {
+        static std::unordered_map<uuid32_t, uint32_t> sSelectedMatIndex;
+        if (!sSelectedMatIndex.contains(modelID))
+            sSelectedMatIndex[modelID] = 0;
+
+        ImGui::SeparatorText("Materials");
+        ImGui::BeginChild("LeftMaterialPanel", ImVec2(150.f, 0.f), ImGuiChildFlags_Border | ImGuiChildFlags_ResizeX);
+
+        for (uint32_t i = 0; i < model.materials.size(); ++i)
+        {
+            const std::string& matName = model.materialNames.at(i);
+
+            bool selected = i == sSelectedMatIndex.at(modelID);
+
+            if (ImGui::Selectable(matName.c_str(), selected))
+                sSelectedMatIndex.at(modelID) = i;
+        }
+
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+        ImGui::BeginChild("RightMaterialsPanel", ImVec2(), ImGuiChildFlags_Border);
+
+        uint32_t selectedMaterialIndex = sSelectedMatIndex.at(modelID);
+
+        Material& mat = model.materials.at(selectedMaterialIndex);
+        std::string& name = model.materialNames.at(selectedMaterialIndex);
+        bool matNeedsUpdate = false;
+
+        ImGui::SeparatorText("Material Textures");
+
+        if (mat.baseColorTexIndex != -1) matTexInspector("Base Color", model.textures.at(mat.baseColorTexIndex));
+        if (mat.metallicRoughnessTexIndex != -1) matTexInspector("Metallic Roughness", model.textures.at(mat.metallicRoughnessTexIndex));
+        if (mat.normalTexIndex != -1) matTexInspector("Normal", model.textures.at(mat.normalTexIndex));
+        if (mat.aoTexIndex != -1) matTexInspector("AO", model.textures.at(mat.aoTexIndex));
+        if (mat.emissionTexIndex != -1) matTexInspector("Emission", model.textures.at(mat.emissionTexIndex));
+
+        ImGui::SeparatorText("Material Factors");
+
+        static constexpr ImGuiColorEditFlags sColorEditFlags {
+            ImGuiColorEditFlags_DisplayRGB |
+            ImGuiColorEditFlags_AlphaBar
+        };
+
+        if (ImGui::ColorEdit4("Base Color", glm::value_ptr(mat.baseColorFactor), sColorEditFlags))
+            matNeedsUpdate = true;
+
+        if (ImGui::ColorEdit3("Emission", glm::value_ptr(mat.emissionFactor), sColorEditFlags))
+            matNeedsUpdate = true;
+
+        if (ImGui::SliderFloat("Metallic", &mat.metallicFactor, 0.f, 1.f))
+            matNeedsUpdate = true;
+
+        if (ImGui::SliderFloat("Roughness", &mat.roughnessFactor, 0.f, 1.f))
+            matNeedsUpdate = true;
+
+        if (ImGui::SliderFloat("AO", &mat.occlusionFactor, 0.f, 1.f))
+            matNeedsUpdate = true;
+
+        ImGui::SeparatorText("Texture Coordinates");
+
+        if (ImGui::DragFloat2("Tiling", glm::value_ptr(mat.tiling), 0.01f))
+            matNeedsUpdate = true;
+
+        if (ImGui::DragFloat2("Offset", glm::value_ptr(mat.offset), 0.01f))
+            matNeedsUpdate = true;
+
+        ImGui::EndChild();
+
+        if (matNeedsUpdate)
+            model.updateMaterial(selectedMaterialIndex);
+    }
+}
+
+void Editor::matTexInspector(const char* label, const Texture& texture)
+{
+    static constexpr ImVec2 sImageSize = ImVec2(20.f, 20.f);
+    static constexpr ImVec2 sTooltipImageSize = ImVec2(250.f, 250.f);
+    static constexpr ImVec2 sImageButtonFramePadding = ImVec2(2.f, 2.f);
+    static const ImVec2 sTextSize = ImGui::CalcTextSize("H");
+
+    ImTextureID texHandle = reinterpret_cast<ImTextureID>(texture.descriptorSet);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, sImageButtonFramePadding);
+    ImGui::ImageButton(texHandle, sImageSize);
+    ImGui::PopStyleVar();
+
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::Text(texture.name.c_str());
+        ImGui::Separator();
+
+        ImGui::Text("Size: %lux%lu", texture.vulkanTexture.vulkanImage.width, texture.vulkanTexture.vulkanImage.height);
+        ImGui::Text("Wrap U: %s", toStr(texture.vulkanTexture.vulkanSampler.wrapS));
+        ImGui::Text("Wrap V: %s", toStr(texture.vulkanTexture.vulkanSampler.wrapT));
+        ImGui::Text("Mag filter: %s", toStr(texture.vulkanTexture.vulkanSampler.magFilter));
+        ImGui::Text("Min filter: %s", toStr(texture.vulkanTexture.vulkanSampler.minFilter));
+        ImGui::Separator();
+
+        float textureWidth = static_cast<float>(texture.vulkanTexture.vulkanImage.width);
+        float textureHeight = static_cast<float>(texture.vulkanTexture.vulkanImage.height);
+        float aspectRatio = (textureWidth > 0) ? (textureHeight / textureWidth) : 1.0f;
+        float tooltipImageWidth = glm::max(250.f, ImGui::CalcTextSize(texture.name.c_str()).x);
+        float tooltipImageHeight = tooltipImageWidth * aspectRatio;
+
+        ImGui::Image(texHandle, ImVec2(tooltipImageWidth, tooltipImageHeight));
+        ImGui::EndTooltip();
+    }
+
+    ImGui::SameLine();
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.f);
+    ImGui::Text("%s: %s", label, texture.name.c_str());
 }
 
 void Editor::sceneNodeInspector(GraphNode *node)
@@ -322,6 +442,7 @@ void Editor::debugPanel()
 }
 
 // todo: improve drag drop area
+// todo: improve node sorting
 void Editor::sceneGraphPanel()
 {
     ImGui::Begin("Scene Graph", &mShowSceneGraph);
@@ -341,9 +462,6 @@ void Editor::sceneGraphPanel()
     mSceneGraph.updateTransforms();
 }
 
-// todo: fix bugs
-// todo fix bug: copied node gets deleted and then getting pasted
-// todo: test
 void Editor::sceneGraphPopup()
 {
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))

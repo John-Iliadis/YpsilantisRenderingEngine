@@ -27,6 +27,8 @@ struct Material
     alignas(4) float occlusionFactor;
     alignas(16) glm::vec4 baseColorFactor;
     alignas(16) glm::vec4 emissionFactor;
+    alignas(8) glm::vec2 tiling;
+    alignas(8) glm::vec2 offset;
 };
 
 struct SceneNode
@@ -69,13 +71,15 @@ public:
     Model();
     ~Model() = default;
 
-    Mesh& getMesh(uuid32_t meshID);
+    void updateMaterial(index_t matIndex);
 
     void createMaterialsUBO(const VulkanRenderDevice& renderDevice);
     void createTextureDescriptorSets(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout);
     void createMaterialsDescriptorSet(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout);
 
     void render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout);
+
+    Mesh& getMesh(uuid32_t meshID);
 
 private:
     VkDescriptorSet mMaterialsDS;

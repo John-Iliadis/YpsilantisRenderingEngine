@@ -308,7 +308,9 @@ namespace ModelImporter
                 .roughnessFactor = static_cast<float>(gltfMaterial.pbrMetallicRoughness.roughnessFactor),
                 .occlusionFactor = static_cast<float>(gltfMaterial.occlusionTexture.strength),
                 .baseColorFactor = glm::make_vec4(gltfMaterial.pbrMetallicRoughness.baseColorFactor.data()),
-                .emissionFactor = glm::vec4(glm::make_vec3(gltfMaterial.emissiveFactor.data()), 0.f)
+                .emissionFactor = glm::vec4(glm::make_vec3(gltfMaterial.emissiveFactor.data()), 0.f),
+                .tiling = glm::vec2(1.f),
+                .offset = glm::vec2(0.f)
             };
 
             materialData.materials.push_back(material);

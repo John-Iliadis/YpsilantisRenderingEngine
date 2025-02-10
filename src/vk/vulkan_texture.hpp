@@ -61,8 +61,9 @@ struct VulkanSampler
     TextureWrap wrapR;
 };
 
-const char* toStr(VkFormat format);
 const char* toStr(TextureWrap wrapMode);
+const char* toStr(TextureMagFilter magFilter);
+const char* toStr(TextureMinFilter minFilter);
 
 // todo: improve
 class VulkanTexture

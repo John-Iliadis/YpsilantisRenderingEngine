@@ -15,24 +15,38 @@ static VkDeviceSize formatSize(VkFormat format)
     }
 }
 
-const char* toStr(VkFormat format)
-{
-    switch (format)
-    {
-        case VK_FORMAT_R8G8B8A8_UNORM: return "RBGA8";
-        case VK_FORMAT_R32G32B32A32_SFLOAT: return "RGBA32F";
-        default: return "Unknown";
-    }
-}
-
 const char* toStr(TextureWrap wrapMode)
 {
     switch (wrapMode)
     {
-        ENUM_CASE(TextureWrap, Repeat)
-        ENUM_CASE(TextureWrap, MirroredRepeat)
-        ENUM_CASE(TextureWrap, ClampToEdge)
-        ENUM_CASE(TextureWrap, ClampToBorder)
+        case TextureWrap::Repeat: return "Repeat";
+        case TextureWrap::MirroredRepeat: return "Mirrored Repeat";
+        case TextureWrap::ClampToEdge: return "Clamp to Edge";
+        case TextureWrap::ClampToBorder: return "Clamp to Border";
+        default: return "Unknown";
+    }
+}
+
+const char* toStr(TextureMagFilter magFilter)
+{
+    switch (magFilter)
+    {
+        case TextureMagFilter::Nearest: return "Nearest";
+        case TextureMagFilter::Linear: return "Linear";
+        default: return "Unknown";
+    }
+}
+
+const char* toStr(TextureMinFilter minFilter)
+{
+    switch (minFilter)
+    {
+        case TextureMinFilter::Nearest: return "Nearest";
+        case TextureMinFilter::Linear: return "Linear";
+        case TextureMinFilter::NearestMipmapNearest: return "Nearest Mipmap Linear";
+        case TextureMinFilter::LinearMipmapNearest: return "Linear Mipmap Nearest";
+        case TextureMinFilter::NearestMipmapLinear: return "Nearest Mipmap Linear";
+        case TextureMinFilter::LinearMipmapLinear: return "Linear Mipmap Linear";
         default: return "Unknown";
     }
 }

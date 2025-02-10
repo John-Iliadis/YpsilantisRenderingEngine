@@ -53,6 +53,7 @@ private:
 
     void inspectorPanel();
     void modelInspector(uuid32_t modelID);
+    void matTexInspector(const char* label, const Texture& texture);
     void sceneNodeInspector(GraphNode* node);
     void emptyNodeInspector(GraphNode* node);
     void meshNodeInspector(GraphNode* node);

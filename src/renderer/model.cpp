@@ -104,3 +104,8 @@ Mesh &Model::getMesh(uuid32_t meshID)
             return mesh;
     return meshes.front();
 }
+
+void Model::updateMaterial(index_t matIndex)
+{
+    mMaterialsUBO.update(matIndex * sizeof(Material), sizeof(Material), &materials.at(matIndex));
+}

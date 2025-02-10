@@ -8,9 +8,6 @@
 #include <glfw/glfw3.h>
 #include <glfw/glfw3native.h>
 
-#define ENUM_CASE(EnumType, value) \
-    case EnumType::value: return #value;
-
 void debugLog(const std::string& logMSG);
 
 void check(bool result, const char* msg, std::source_location location = std::source_location::current());
