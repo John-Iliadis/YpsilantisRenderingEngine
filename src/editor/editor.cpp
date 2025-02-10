@@ -16,6 +16,8 @@ Editor::Editor(Renderer& renderer)
     , mShowRendererPanel(false)
     , mShowConsole(true)
     , mShowDebugPanel(true)
+    , mCopyFlag(CopyFlags::None)
+    , mCopiedNodeID()
 {
 }
 
@@ -180,9 +182,9 @@ void Editor::sceneNodeInspector(GraphNode *node)
     {
         case NodeType::Empty: emptyNodeInspector(node); break;
         case NodeType::Mesh: meshNodeInspector(node); break;
-        case NodeType::DirectionalLight: dirLightInspector(node); break;
-        case NodeType::PointLight: pointLightInspector(node); break;
-        case NodeType::SpotLight: spotLightInspector(node); break;
+        case NodeType::DirectionalLight: nullptr; break;
+        case NodeType::PointLight: nullptr; break;
+        case NodeType::SpotLight: nullptr; break;
         default: assert(false);
     }
 }
@@ -214,54 +216,13 @@ void Editor::meshNodeInspector(GraphNode *node)
 
     ImGui::SeparatorText("Info");
 
-    const auto& model = *mRenderer.mModels.at(meshNode->modelID().value());
-    const auto& mesh = model.getMesh(meshNode->meshID());
+    auto& model = *mRenderer.mModels.at(meshNode->modelID().value());
+    auto& mesh = model.getMesh(meshNode->meshID());
 
     ImGui::Text("Associated Model: %s", model.name.c_str());
     ImGui::Text("Mesh: %s", mesh.name.c_str());
     ImGui::Text("Material: %s", mesh.materialIndex == -1? "None" :
                             model.materialNames.at(mesh.materialIndex).c_str());
-}
-
-void Editor::dirLightInspector(GraphNode *node)
-{
-    DirectionalLight* dirLight = dynamic_cast<DirectionalLight*>(node);
-
-    ImGui::Text("Asset Type: Directional Light");
-    ImGui::Text("Name: %s", node->name().c_str());
-
-    nodeTransform(dirLight);
-
-    lightOptions(dirLight);
-    lightShadowOptions(dirLight);
-}
-
-void Editor::pointLightInspector(GraphNode *node)
-{
-    PointLight* pointLight = dynamic_cast<PointLight*>(node);
-
-    ImGui::Text("Asset Type: Point Light");
-    ImGui::Text("Name: %s", node->name().c_str());
-
-    nodeTransform(pointLight);
-
-    lightOptions(pointLight);
-    ImGui::DragFloat("Range##pointLight", &pointLight->range, 0.1f);
-    lightShadowOptions(pointLight);
-}
-
-void Editor::spotLightInspector(GraphNode *node)
-{
-    SpotLight* spotLight = dynamic_cast<SpotLight*>(node);
-
-    ImGui::Text("Asset Type: Spot Light");
-    ImGui::Text("Name: %s", node->name().c_str());
-
-    nodeTransform(spotLight);
-
-    lightOptions(spotLight);
-    ImGui::DragFloat("Range##spotLight", &spotLight->range, 0.1f);
-    lightShadowOptions(spotLight);
 }
 
 void Editor::nodeTransform(GraphNode *node)
@@ -291,54 +252,6 @@ void Editor::nodeTransform(GraphNode *node)
     {
         ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, glm::value_ptr(mat));
         node->setLocalTransform(mat);
-    }
-}
-
-void Editor::lightOptions(LightBase *light)
-{
-    ImGui::SeparatorText("Lighting Options");
-    ImGui::ColorEdit3("Color##light", glm::value_ptr(light->color), ImGuiColorEditFlags_DisplayRGB);
-    ImGui::DragFloat("Intensity##light", &light->intensity, 0.1f, 0.f);
-    glm::clamp(light->intensity, 0.f, light->intensity);
-}
-
-void Editor::lightShadowOptions(LightBase *light)
-{
-    ImGui::SeparatorText("Shadow Options");
-
-    if (ImGui::BeginCombo("Shadow Option", toStr(light->shadowOption)))
-    {
-        for (uint32_t i = 0; i < ShadowOptionCount; ++i)
-        {
-            bool selected = light->shadowOption == i;
-
-            if (ImGui::Selectable(toStr(static_cast<ShadowOption>(i)), selected))
-                light->shadowOption = static_cast<ShadowOption>(i);
-        }
-
-        ImGui::EndCombo();
-    }
-
-    if (light->shadowOption == ShadowOptionSoftShadows)
-    {
-        if (ImGui::BeginCombo("Shadow Softness", toStr(light->shadowSoftness)))
-        {
-            for (uint32_t i = 0; i < ShadowSoftnessCount; ++i)
-            {
-                bool selected = light->shadowSoftness == i;
-
-                if (ImGui::Selectable(toStr(static_cast<ShadowSoftness>(i)), selected))
-                    light->shadowSoftness = static_cast<ShadowSoftness>(i);
-            }
-
-            ImGui::EndCombo();
-        }
-    }
-
-    if (light->shadowOption != ShadowOptionNoShadows)
-    {
-        ImGui::SliderFloat("Strength", &light->shadowStrength, 0.001f, 1.f);
-        ImGui::SliderFloat("Bias", &light->shadowBias, 0.001f, 1.f);
     }
 }
 
@@ -374,6 +287,12 @@ void Editor::deleteSelectedObject()
 
 void Editor::deleteSelectedNode()
 {
+    if (mSelectedObjectID == mCopiedNodeID)
+    {
+        mCopyFlag = CopyFlags::None;
+        mCopiedNodeID = 0;
+    }
+
     mSceneGraph.deleteNode(mSelectedObjectID);
     mSelectedObjectID = 0;
 }
@@ -422,6 +341,9 @@ void Editor::sceneGraphPanel()
     mSceneGraph.updateTransforms();
 }
 
+// todo: fix bugs
+// todo fix bug: copied node gets deleted and then getting pasted
+// todo: test
 void Editor::sceneGraphPopup()
 {
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
@@ -431,17 +353,18 @@ void Editor::sceneGraphPopup()
     {
         bool nodeSelected = isNodeSelected();
 
-        if (ImGui::MenuItem("Cut##sceneGraph", nullptr, false, false))
-            nullptr;
+        if (ImGui::MenuItem("Cut##sceneGraph", nullptr, false, nodeSelected))
+            cutNode(mSelectedObjectID);
 
-        if (ImGui::MenuItem("Copy##sceneGraph", nullptr, false, false))
-            nullptr;
+        if (ImGui::MenuItem("Copy##sceneGraph", nullptr, false, nodeSelected))
+            copyNode(mSelectedObjectID);
 
-        if (ImGui::MenuItem("Paste##sceneGraph", nullptr, false, false))
-            nullptr;
+        if (ImGui::MenuItem("Paste##sceneGraph", nullptr, false, mCopyFlag != CopyFlags::None))
+            pasteNode(&mSceneGraph.mRoot);
 
-        if (ImGui::MenuItem("Paste as Child##sceneGraph", nullptr, false, false))
-            nullptr;
+        bool enablePasteAsChild = (mCopyFlag != CopyFlags::None) && nodeSelected && (mSelectedObjectID != mCopiedNodeID);
+        if (ImGui::MenuItem("Paste as Child##sceneGraph", nullptr, false, enablePasteAsChild))
+            pasteNode(mSceneGraph.searchNode(mSelectedObjectID));
 
         ImGui::Separator();
 
@@ -452,8 +375,8 @@ void Editor::sceneGraphPopup()
             resetBuffer();
         }
 
-        if (ImGui::MenuItem("Duplicate##sceneGraph", nullptr, false, false))
-            nullptr;
+        if (ImGui::MenuItem("Duplicate##sceneGraph", nullptr, false, nodeSelected))
+            duplicateNode(mSceneGraph.searchNode(mSelectedObjectID));
 
         if (ImGui::MenuItem("Delete##sceneGraph", nullptr, false, nodeSelected))
             deleteSelectedNode();
@@ -470,13 +393,13 @@ void Editor::sceneGraphPopup()
         if (ImGui::BeginMenu("Create Light"))
         {
             if (ImGui::MenuItem("Directional Light##sceneGraph"))
-                createDirectionalLight();
+                nullptr;
 
             if (ImGui::MenuItem("Point Light##sceneGraph"))
-                createPointLight();
+                nullptr;
 
             if (ImGui::MenuItem("Spot Light##sceneGraph"))
-                createSpotLight();
+                nullptr;
 
             ImGui::EndMenu();
         }
@@ -583,47 +506,44 @@ void Editor::createEmptyNode()
     mSceneGraph.addNode(new GraphNode(NodeType::Empty, "Empty Node", glm::identity<glm::mat4>(), nullptr));
 }
 
-// todo: implement properly
-void Editor::createDirectionalLight()
+void Editor::copyNode(uuid32_t nodeID)
 {
-    LightSpecification lightSpecification {
-        .color = glm::vec3(1.f),
-        .intensity = 1.f,
-        .shadowOption = ShadowOptionNoShadows,
-        .shadowSoftness = ShadowSoftnessMedium,
-        .shadowStrength = 1.f,
-        .shadowBias = 0.04f
-    };
-
-    mSceneGraph.addNode(new DirectionalLight(lightSpecification));
+    mCopyFlag = CopyFlags::Copy;
+    mCopiedNodeID = nodeID;
 }
 
-void Editor::createSpotLight()
+void Editor::cutNode(uuid32_t nodeID)
 {
-    LightSpecification lightSpecification {
-        .color = glm::vec3(1.f),
-        .intensity = 1.f,
-        .shadowOption = ShadowOptionNoShadows,
-        .shadowSoftness = ShadowSoftnessMedium,
-        .shadowStrength = 1.f,
-        .shadowBias = 0.04f
-    };
-
-    mSceneGraph.addNode(new SpotLight(lightSpecification));
+    mCopyFlag = CopyFlags::Cut;
+    mCopiedNodeID = nodeID;
 }
 
-void Editor::createPointLight()
+void Editor::pasteNode(GraphNode *parent)
 {
-    LightSpecification lightSpecification {
-        .color = glm::vec3(1.f),
-        .intensity = 1.f,
-        .shadowOption = ShadowOptionNoShadows,
-        .shadowSoftness = ShadowSoftnessMedium,
-        .shadowStrength = 1.f,
-        .shadowBias = 0.04f
-    };
+    if (auto copiedNode = mSceneGraph.searchNode(mCopiedNodeID))
+    {
+        if (mCopyFlag == CopyFlags::Copy)
+        {
+            GraphNode* newNode = copyGraphNode(copiedNode);
+            newNode->orphan();
+            parent->addChild(newNode);
+        }
 
-    mSceneGraph.addNode(new PointLight(lightSpecification));
+        if (mCopyFlag == CopyFlags::Cut)
+        {
+            copiedNode->orphan();
+            parent->addChild(copiedNode);
+        }
+    }
+
+    mCopyFlag = CopyFlags::None;
+    mCopiedNodeID = 0;
+}
+
+void Editor::duplicateNode(GraphNode *node)
+{
+    GraphNode* copyNode = copyGraphNode(node);
+    copyNode->parent()->addChild(copyNode);
 }
 
 void Editor::assetPanel()
@@ -759,6 +679,51 @@ void Editor::checkPayloadType(const char *type)
         ImGui::SetMouseCursor(ImGuiMouseCursor_NotAllowed);
 }
 
+void Editor::resetBuffer()
+{
+    mBuffer.fill('\0');
+}
+
+GraphNode *Editor::copyGraphNode(GraphNode *node)
+{
+    GraphNode* newNode;
+
+    switch (node->type())
+    {
+        case NodeType::Empty:
+        {
+            newNode = new GraphNode(node->type(),
+                                    node->name(),
+                                    node->localTransform(),
+                                    node->parent(),
+                                    node->modelID());
+            break;
+        }
+        case NodeType::Mesh:
+        {
+            MeshNode* meshNode = dynamic_cast<MeshNode*>(node);
+            uuid32_t modelID = meshNode->modelID().value();
+            uint32_t meshID = meshNode->meshID();
+            uint32_t instanceID = mRenderer.mModels.at(modelID)->getMesh(meshID).mesh.addInstance({}, {});
+            newNode = new MeshNode(meshNode->type(),
+                                   meshNode->name(),
+                                   meshNode->localTransform(),
+                                   meshNode->parent(),
+                                   modelID,
+                                   meshID,
+                                   instanceID);
+            break;
+        }
+        default: assert(false);
+    }
+
+    // recursive case
+    for (auto child : node->children())
+        newNode->addChild(copyGraphNode(child));
+
+    return newNode;
+}
+
 std::optional<uuid32_t> Editor::selectModel()
 {
     ImGui::SeparatorText("Select Model:");
@@ -810,9 +775,4 @@ bool Editor::isNodeSelected()
 bool Editor::isModelSelected()
 {
     return UUIDRegistry::isModel(mSelectedObjectID);
-}
-
-void Editor::resetBuffer()
-{
-    mBuffer.fill('\0');
 }

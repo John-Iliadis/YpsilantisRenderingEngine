@@ -14,11 +14,12 @@
 #include <glm/gtx/matrix_decompose.hpp>
 #include "../utils/utils.hpp"
 #include "../scene_graph/scene_graph.hpp"
-#include "../scene_graph/light_node.hpp"
 #include "../scene_graph/mesh_node.hpp"
 #include "../renderer/renderer.hpp"
 #include "../renderer/model.hpp"
 #include "camera.hpp"
+
+enum class CopyFlags;
 
 // todo: resize camera
 class Editor
@@ -42,9 +43,10 @@ private:
     void sceneNodeRecursive(GraphNode* node);
     void createModelGraph(Model& model);
     void createEmptyNode();
-    void createDirectionalLight();
-    void createSpotLight();
-    void createPointLight();
+    void copyNode(uuid32_t nodeID);
+    void cutNode(uuid32_t nodeID);
+    void pasteNode(GraphNode* parent);
+    void duplicateNode(GraphNode* node);
 
     void assetPanel();
     void assetPanelPopup();
@@ -54,12 +56,7 @@ private:
     void sceneNodeInspector(GraphNode* node);
     void emptyNodeInspector(GraphNode* node);
     void meshNodeInspector(GraphNode* node);
-    void dirLightInspector(GraphNode* node);
-    void pointLightInspector(GraphNode* node);
-    void spotLightInspector(GraphNode* node);
     void nodeTransform(GraphNode* node);
-    void lightOptions(LightBase* light);
-    void lightShadowOptions(LightBase* light);
 
     void viewPort();
 
@@ -75,6 +72,7 @@ private:
     void importModel();
     void checkPayloadType(const char* type);
     void resetBuffer();
+    GraphNode* copyGraphNode(GraphNode* node);
     std::optional<std::string> renameDialog();
     std::optional<uuid32_t> selectModel();
     bool lastItemClicked(uuid32_t id);
@@ -88,8 +86,10 @@ private:
     SceneGraph mSceneGraph;
 
     uuid32_t mSelectedObjectID;
-    float mDt{};
+    float mDt;
     std::array<char, 256> mBuffer;
+    CopyFlags mCopyFlag;
+    uuid32_t mCopiedNodeID;
 
     bool mShowViewport;
     bool mShowAssetPanel;
@@ -99,6 +99,13 @@ private:
     bool mShowRendererPanel;
     bool mShowConsole;
     bool mShowDebugPanel;
+};
+
+enum class CopyFlags
+{
+    None,
+    Copy,
+    Cut
 };
 
 #endif //VULKANRENDERINGENGINE_EDITOR_HPP

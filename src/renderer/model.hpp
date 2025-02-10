@@ -69,7 +69,7 @@ public:
     Model();
     ~Model() = default;
 
-    const Mesh& getMesh(uuid32_t meshID) const;
+    Mesh& getMesh(uuid32_t meshID);
 
     void createMaterialsUBO(const VulkanRenderDevice& renderDevice);
     void createTextureDescriptorSets(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout);

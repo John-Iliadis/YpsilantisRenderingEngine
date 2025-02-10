@@ -89,6 +89,11 @@ std::optional<uuid32_t> GraphNode::modelID() const
     return mModelID;
 }
 
+GraphNode *GraphNode::parent() const
+{
+    return mParent;
+}
+
 const std::multiset<GraphNode*>& GraphNode::children() const
 {
     return mChildren;

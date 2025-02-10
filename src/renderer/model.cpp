@@ -97,9 +97,9 @@ void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayou
     }
 }
 
-const Mesh &Model::getMesh(uuid32_t meshID) const
+Mesh &Model::getMesh(uuid32_t meshID)
 {
-    for (const auto& mesh : meshes)
+    for (auto& mesh : meshes)
         if (mesh.meshID == meshID)
             return mesh;
     return meshes.front();

@@ -42,6 +42,7 @@ public:
     NodeType type() const;
     const std::string& name() const;
     std::optional<uuid32_t> modelID() const;
+    GraphNode* parent() const;
     const std::multiset<GraphNode*>& children() const;
 
     const glm::mat4& localTransform() const;
