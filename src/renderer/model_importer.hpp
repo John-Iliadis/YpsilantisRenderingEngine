@@ -8,8 +8,7 @@
 #include <tiny_gltf/tiny_gltf.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include "../utils/async_logger.hpp"
-#include "../utils/loaded_image.hpp"
+ #include "../utils/loaded_image.hpp"
 #include "../utils/utils.hpp"
 #include "vertex.hpp"
 #include "model.hpp"

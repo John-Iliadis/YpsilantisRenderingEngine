@@ -95,25 +95,24 @@ void Editor::mainMenuBar()
     }
 }
 
+// todo: clamp values
 void Editor::cameraPanel()
 {
     ImGui::Begin("Camera", &mShowCameraPanel);
 
+    ImGui::SeparatorText("Settings");
     ImGui::SliderFloat("Field of View", mCamera.fov(), 1.f, 177.f, "%0.f");
-    ImGui::DragFloat("Near Plane", mCamera.nearPlane(), 0.1f, 0.1f, *mCamera.farPlane(), "%.1f");
-    ImGui::DragFloat("Far Plane", mCamera.farPlane(), 0.1f, *mCamera.nearPlane(), FLT_MAX, "%.1f");
-    ImGui::DragFloat("Fly Speed", mCamera.flySpeed(), 1.f, 0.f, FLT_MAX, "%.0f");
-    ImGui::DragFloat("Pan Speed", mCamera.panSpeed(), 1.f, 0.f, FLT_MAX, "%.0f");
-    ImGui::DragFloat("Z Scroll Offset", mCamera.zScrollOffset(), 1.f, 0.f, FLT_MAX, "%.0f");
-    ImGui::DragFloat("Rotate Sensitivity", mCamera.rotateSensitivity(), 1.f, 0.f, FLT_MAX, "%.0f");
+    ImGui::DragFloat("Near Plane", mCamera.nearPlane(), 0.01f, 0.1f, *mCamera.farPlane(), "%.1f");
+    ImGui::DragFloat("Far Plane", mCamera.farPlane(), 0.01f, *mCamera.nearPlane(), FLT_MAX, "%.1f");
+
     ImGui::SeparatorText("Camera Mode");
 
     static int selectedIndex = 0;
     static const std::array<const char*, 3> items {{
-                                                       "First Person",
-                                                       "View",
-                                                       "Edit"
-                                                   }};
+        "First Person",
+        "View",
+        "Edit"
+    }};
 
     {
         ImGui::BeginGroup();
@@ -137,12 +136,30 @@ void Editor::cameraPanel()
         ImGui::EndGroup();
     }
 
+    ImGui::Separator();
+
     if (selectedIndex == 0)
+    {
+        ImGui::DragFloat("Fly Speed", mCamera.flySpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
         mCamera.setState(Camera::FIRST_PERSON);
-    if (selectedIndex == 1)
-        mCamera.setState(Camera::VIEW_MODE);
+    }
+
     if (selectedIndex == 2)
+    {
         mCamera.setState(Camera::EDITOR_MODE);
+    }
+
+    if (selectedIndex == 1 || selectedIndex == 2)
+    {
+        ImGui::DragFloat("Z Scroll Offset", mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.1f");
+        ImGui::DragFloat("Rotate Sensitivity", mCamera.rotateSensitivity(), 0.01f, 0.f, FLT_MAX, "%.1f");
+    }
+
+    if (selectedIndex == 1)
+    {
+        ImGui::DragFloat("Pan Speed", mCamera.panSpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
+        mCamera.setState(Camera::VIEW_MODE);
+    }
 
     ImGui::End();
 }
