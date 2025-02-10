@@ -14,8 +14,8 @@ Editor::Editor(Renderer& renderer)
     , mShowCameraPanel(false)
     , mShowInspectorPanel(true)
     , mShowRendererPanel(false)
-    , mShowConsole(true)
     , mShowDebugPanel(true)
+    , mFPS()
     , mCopyFlag(CopyFlags::None)
     , mCopiedNodeID()
 {
@@ -29,6 +29,7 @@ void Editor::update(float dt)
 
     ImGui::ShowDemoWindow();
 
+    countFPS();
     imguiEvents();
     mainMenuBar();
 
@@ -49,9 +50,6 @@ void Editor::update(float dt)
 
     if (mShowDebugPanel)
         debugPanel();
-
-    if (mShowConsole)
-        console();
 
     if (mShowViewport)
         viewPort();
@@ -88,7 +86,6 @@ void Editor::mainMenuBar()
             ImGui::MenuItem("Camera Panel", nullptr, &mShowCameraPanel);
             ImGui::MenuItem("Inspector", nullptr, &mShowInspectorPanel);
             ImGui::MenuItem("Renderer", nullptr, &mShowRendererPanel);
-            ImGui::MenuItem("Console", nullptr, &mShowConsole);
             ImGui::MenuItem("Debug", nullptr, &mShowDebugPanel);
 
             ImGui::EndMenu();
@@ -385,6 +382,7 @@ void Editor::viewPort()
 
     ImGui::Begin("Viewport", &mShowViewport, windowFlags);
 
+    mViewportSize = ImGui::GetContentRegionAvail();
     mCamera.update(mDt);
 
     ImGui::Dummy(ImGui::GetContentRegionAvail());
@@ -429,15 +427,25 @@ void Editor::rendererPanel()
     ImGui::End();
 }
 
-void Editor::console()
-{
-    ImGui::Begin("Console", &mShowConsole);
-    ImGui::End();
-}
-
 void Editor::debugPanel()
 {
     ImGui::Begin("Debug", &mShowDebugPanel);
+
+    ImGui::Text("GPU: %s", mRenderer.mRenderDevice.getDeviceProperties().deviceName);
+    ImGui::Separator();
+
+    ImGui::Text("FPS: %lu", mFPS);
+    ImGui::Text("Frame time: %.2f ms", mDt * 1000.f);
+    ImGui::Separator();
+
+    ImGui::Text("Window size: %lux%lu px",
+                static_cast<uint32_t>(ImGui::GetIO().DisplaySize.x),
+                static_cast<uint32_t>(ImGui::GetIO().DisplaySize.y));
+    ImGui::Text("Rendering viewport size: %lux%lu px",
+                static_cast<uint32_t>(mViewportSize.x),
+                static_cast<uint32_t>(mViewportSize.y));
+    ImGui::Separator();
+
     ImGui::End();
 }
 
@@ -893,4 +901,21 @@ bool Editor::isNodeSelected()
 bool Editor::isModelSelected()
 {
     return UUIDRegistry::isModel(mSelectedObjectID);
+}
+
+void Editor::countFPS()
+{
+    static float frameCount = 0;
+    static float accumulatedTime = 0.f;
+
+    ++frameCount;
+    accumulatedTime += mDt;
+
+    if (accumulatedTime >= 1.f)
+    {
+        mFPS = frameCount;
+
+        frameCount = 0;
+        accumulatedTime = 0.f;
+    }
 }

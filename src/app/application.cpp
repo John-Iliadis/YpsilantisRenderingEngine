@@ -41,7 +41,6 @@ void Application::run()
         handleEvents();
         update(dt);
         render();
-        countFPS(dt);
     }
 
     vkDeviceWaitIdle(mRenderDevice.device);
@@ -162,23 +161,6 @@ void Application::render()
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         recreateSwapchain();
-}
-
-void Application::countFPS(float dt)
-{
-    static float frameCount = 0;
-    static float accumulatedTime = 0.f;
-
-    ++frameCount;
-    accumulatedTime += dt;
-
-    if (accumulatedTime >= 1.f)
-    {
-        debugLog(std::format("FPS: {}", frameCount));
-
-        frameCount = 0;
-        accumulatedTime = 0.f;
-    }
 }
 
 void Application::createRenderPass()

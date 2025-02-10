@@ -35,7 +35,6 @@ private:
     void mainMenuBar();
     void cameraPanel();
     void rendererPanel();
-    void console();
     void debugPanel();
 
     void sceneGraphPanel();
@@ -79,18 +78,13 @@ private:
     bool lastItemClicked(uuid32_t id);
     bool isNodeSelected();
     bool isModelSelected();
-    
+    void countFPS();
+
 private:
     Renderer& mRenderer;
 
     Camera mCamera;
     SceneGraph mSceneGraph;
-
-    uuid32_t mSelectedObjectID;
-    float mDt;
-    std::array<char, 256> mBuffer;
-    CopyFlags mCopyFlag;
-    uuid32_t mCopiedNodeID;
 
     bool mShowViewport;
     bool mShowAssetPanel;
@@ -98,8 +92,15 @@ private:
     bool mShowCameraPanel;
     bool mShowInspectorPanel;
     bool mShowRendererPanel;
-    bool mShowConsole;
     bool mShowDebugPanel;
+
+    ImVec2 mViewportSize;
+    uuid32_t mSelectedObjectID;
+    float mDt;
+    uint32_t mFPS;
+    std::array<char, 256> mBuffer;
+    CopyFlags mCopyFlag;
+    uuid32_t mCopiedNodeID;
 };
 
 enum class CopyFlags

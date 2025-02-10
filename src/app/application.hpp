@@ -28,8 +28,6 @@ private:
     void fillCommandBuffer(uint32_t imageIndex);
     void render();
 
-    void countFPS(float dt);
-
     void createRenderPass();
     void createSwapchainFramebuffers();
 
