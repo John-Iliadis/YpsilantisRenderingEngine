@@ -34,7 +34,7 @@ InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice,
 {
 }
 
-uint32_t InstancedMesh::addInstance(const glm::mat4 &model, uuid32_t id)
+uint32_t InstancedMesh::addInstance()
 {
     checkResize();
 
@@ -46,13 +46,8 @@ uint32_t InstancedMesh::addInstance(const glm::mat4 &model, uuid32_t id)
     assert(mInstanceIdToIndexMap.emplace(instanceID, instanceIndex).second);
     assert(mInstanceIndexToIdMap.emplace(instanceIndex, instanceID).second);
 
-    InstanceData instanceData {
-        .modelMatrix = model,
-        .normalMatrix = glm::inverseTranspose(glm::mat3(model)),
-        .id = id,
-    };
-
-    mInstanceBuffer.update(instanceIndex * sInstanceSize, sInstanceSize, &instanceData);
+    InstanceData placeholderData;
+    mInstanceBuffer.update(instanceIndex * sInstanceSize, sInstanceSize, &placeholderData);
 
     return instanceID;
 }

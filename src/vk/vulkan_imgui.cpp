@@ -31,6 +31,12 @@ void VulkanImGui::init(const Window &window,
 
     ImGui_ImplGlfw_InitForVulkan(window, true);
     ImGui_ImplVulkan_Init(&initInfo);
+
+    auto& style = ImGui::GetStyle();
+    style.WindowMenuButtonPosition = ImGuiDir_Right;
+    style.ColorButtonPosition = ImGuiDir_Left;
+    style.ChildRounding = 6.f;
+    style.GrabRounding = 3.f;
 }
 
 void VulkanImGui::terminate()

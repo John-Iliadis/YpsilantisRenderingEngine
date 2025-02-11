@@ -28,7 +28,7 @@ public:
                   const std::vector<Vertex>& vertices,
                   const std::vector<uint32_t>& indices);
 
-    uint32_t addInstance(const glm::mat4 &transformation, uuid32_t id);
+    uint32_t addInstance();
     void updateInstance(uint32_t instanceID, const glm::mat4& transformation, uuid32_t id);
     void removeInstance(uint32_t instanceID);
     void setDebugName(const std::string& debugName);

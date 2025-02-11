@@ -272,7 +272,7 @@ void Editor::modelInspector(uuid32_t modelID)
 
 void Editor::matTexInspector(const char* label, const Texture& texture)
 {
-    static constexpr ImVec2 sImageSize = ImVec2(20.f, 20.f);
+    static constexpr ImVec2 sImageSize = ImVec2(30.f, 30.f);
     static constexpr ImVec2 sTooltipImageSize = ImVec2(250.f, 250.f);
     static constexpr ImVec2 sImageButtonFramePadding = ImVec2(2.f, 2.f);
     static const ImVec2 sTextSize = ImGui::CalcTextSize("H");
@@ -306,7 +306,7 @@ void Editor::matTexInspector(const char* label, const Texture& texture)
     }
 
     ImGui::SameLine();
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.f);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 10.f);
     ImGui::Text("%s: %s", label, texture.name.c_str());
 }
 
@@ -473,9 +473,7 @@ void Editor::sceneGraphPanel()
     sceneGraphPopup();
 
     for (auto child : mSceneGraph.mRoot.children())
-    {
         sceneNodeRecursive(child);
-    }
 
     bool nodeHovered = ImGui::IsItemHovered();
     ImGui::Dummy(ImVec2(0, 50.f));
@@ -622,7 +620,7 @@ static GraphNode* createModelGraphImpl(Model& model, const SceneNode& sceneNode,
         Mesh& mesh = model.meshes.at(sceneNode.meshIndex);
 
         uuid32_t meshID = mesh.meshID;
-        uint32_t instanceID = mesh.mesh.addInstance({}, {});
+        uint32_t instanceID = mesh.mesh.addInstance();
 
         graphNode = new MeshNode(NodeType::Mesh, sceneNode.name, sceneNode.transformation, parent,
                                  model.id, meshID, instanceID);
@@ -886,7 +884,7 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
             MeshNode* meshNode = dynamic_cast<MeshNode*>(node);
             uuid32_t modelID = meshNode->modelID().value();
             uint32_t meshID = meshNode->meshID();
-            uint32_t instanceID = mRenderer.mModels.at(modelID)->getMesh(meshID).mesh.addInstance({}, {});
+            uint32_t instanceID = mRenderer.mModels.at(modelID)->getMesh(meshID).mesh.addInstance();
             newNode = new MeshNode(meshNode->type(),
                                    meshNode->name(),
                                    meshNode->localTransform(),
