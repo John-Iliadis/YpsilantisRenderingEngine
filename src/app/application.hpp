@@ -28,21 +28,14 @@ private:
     void fillCommandBuffer(uint32_t imageIndex);
     void render();
 
-    void createRenderPass();
-    void createSwapchainFramebuffers();
-
 private:
     Window mWindow;
     VulkanInstance mInstance;
     VulkanRenderDevice mRenderDevice;
     VulkanSwapchain mSwapchain;
-
+    VulkanImGui mVulkanImGui;
     Renderer mRenderer;
     Editor mEditor;
-    VulkanImGui mVulkanImGui;
-
-    VkRenderPass mRenderPass;
-    std::array<VkFramebuffer, 2> mSwapchainFramebuffers;
 };
 
 #endif //VULKANRENDERINGENGINE_APPLICATION_HPP

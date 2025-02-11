@@ -18,11 +18,11 @@
 class VulkanImGui
 {
 public:
-    void init(const Window& window,
-              const VulkanInstance& instance,
-              const VulkanRenderDevice& renderDevice,
-              VkRenderPass renderPass);
-    void terminate();
+    VulkanImGui(const Window& window,
+                const VulkanInstance& instance,
+                const VulkanRenderDevice& renderDevice,
+                const VulkanSwapchain& swapchain);
+    ~VulkanImGui();
 
     void begin();
     void end();

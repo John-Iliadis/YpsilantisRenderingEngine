@@ -4,10 +4,10 @@
 
 #include "vulkan_imgui.hpp"
 
-void VulkanImGui::init(const Window &window,
-                       const VulkanInstance &instance,
-                       const VulkanRenderDevice &renderDevice,
-                       VkRenderPass renderPass)
+VulkanImGui::VulkanImGui(const Window &window,
+                         const VulkanInstance &instance,
+                         const VulkanRenderDevice &renderDevice,
+                         const VulkanSwapchain &swapchain)
 {
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -23,7 +23,7 @@ void VulkanImGui::init(const Window &window,
         .QueueFamily = renderDevice.getGraphicsQueueFamilyIndex(),
         .Queue = renderDevice.graphicsQueue,
         .DescriptorPool = renderDevice.descriptorPool,
-        .RenderPass = renderPass,
+        .RenderPass = swapchain.renderPass,
         .MinImageCount = 2,
         .ImageCount = 2,
         .MSAASamples = VK_SAMPLE_COUNT_1_BIT
@@ -39,7 +39,7 @@ void VulkanImGui::init(const Window &window,
     style.GrabRounding = 3.f;
 }
 
-void VulkanImGui::terminate()
+VulkanImGui::~VulkanImGui()
 {
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();

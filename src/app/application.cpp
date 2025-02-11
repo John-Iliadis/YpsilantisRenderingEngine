@@ -12,22 +12,13 @@ Application::Application()
     , mInstance()
     , mRenderDevice(mInstance)
     , mSwapchain(mInstance, mRenderDevice)
+    , mVulkanImGui(mWindow, mInstance, mRenderDevice, mSwapchain)
     , mRenderer(mRenderDevice)
     , mEditor(mRenderer)
 {
-    createRenderPass();
-    createSwapchainFramebuffers();
-
-    mVulkanImGui.init(mWindow, mInstance, mRenderDevice, mRenderPass);
 }
 
-Application::~Application()
-{
-    vkDestroyRenderPass(mRenderDevice.device, mRenderPass, nullptr);
-    for (uint32_t i = 0; i < mSwapchainFramebuffers.size(); ++i)
-        vkDestroyFramebuffer(mRenderDevice.device, mSwapchainFramebuffers.at(i), nullptr);
-    mVulkanImGui.terminate();
-}
+Application::~Application() = default;
 
 void Application::run()
 {
@@ -54,11 +45,6 @@ void Application::recreateSwapchain()
     vkDeviceWaitIdle(mRenderDevice.device);
 
     mSwapchain.recreate();
-
-    // swapchain framebuffers
-    for (uint32_t i = 0; i < mSwapchainFramebuffers.size(); ++i)
-        vkDestroyFramebuffer(mRenderDevice.device, mSwapchainFramebuffers.at(i), nullptr);
-    createSwapchainFramebuffers();
 }
 
 void Application::handleEvents()
@@ -98,8 +84,8 @@ void Application::fillCommandBuffer(uint32_t imageIndex)
 
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mRenderPass,
-        .framebuffer = mSwapchainFramebuffers.at(imageIndex),
+        .renderPass = mSwapchain.renderPass,
+        .framebuffer = mSwapchain.framebuffers.at(imageIndex),
         .renderArea = {
             .offset = {0, 0},
             .extent = mSwapchain.getExtent()
@@ -164,65 +150,4 @@ void Application::render()
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         recreateSwapchain();
-}
-
-void Application::createRenderPass()
-{
-    VkAttachmentDescription attachmentDescription {
-        .format = VK_FORMAT_R8G8B8A8_UNORM,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-    };
-
-    VkAttachmentReference attachmentReference {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkSubpassDescription subpassDescription {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &attachmentReference
-    };
-
-    VkRenderPassCreateInfo renderPassCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &attachmentDescription,
-        .subpassCount = 1,
-        .pSubpasses = &subpassDescription
-    };
-
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mRenderPass);
-    vulkanCheck(result, "Failed to create renderpass");
-}
-
-void Application::createSwapchainFramebuffers()
-{
-    for (uint32_t i = 0; i < mSwapchainFramebuffers.size(); ++i)
-    {
-        VkFramebufferCreateInfo framebufferCreateInfo {
-            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            .renderPass = mRenderPass,
-            .attachmentCount = 1,
-            .pAttachments = &mSwapchain.imageViews.at(i),
-            .width = mSwapchain.getExtent().width,
-            .height = mSwapchain.getExtent().height,
-            .layers = 1
-        };
-
-        VkResult result = vkCreateFramebuffer(mRenderDevice.device,
-                                              &framebufferCreateInfo,
-                                              nullptr,
-                                              &mSwapchainFramebuffers.at(i));
-        vulkanCheck(result, "Failed to create swapchain framebuffer");
-
-        setVulkanObjectDebugName(mRenderDevice,
-                                 VK_OBJECT_TYPE_FRAMEBUFFER,
-                                 std::format("Application::mSwapchainFramebuffers.at({})", i),
-                                 mSwapchainFramebuffers.at(i));
-    }
 }
