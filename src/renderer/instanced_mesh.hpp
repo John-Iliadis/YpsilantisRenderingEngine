@@ -34,8 +34,8 @@ public:
     void setDebugName(const std::string& debugName);
     void render(VkCommandBuffer commandBuffer) const;
 
-    static constexpr std::array<VkVertexInputBindingDescription, 2> bindingDescriptions();
-    static constexpr std::array<VkVertexInputAttributeDescription, 13> attributeDescriptions();
+    static std::array<VkVertexInputBindingDescription, 2> bindingDescriptions();
+    static std::array<VkVertexInputAttributeDescription, 13> attributeDescriptions();
 
 private:
     void checkResize();

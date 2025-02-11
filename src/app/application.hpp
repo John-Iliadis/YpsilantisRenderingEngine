@@ -7,7 +7,7 @@
 
 #include "../window/window.hpp"
 #include "../renderer/renderer.hpp"
-#include "../editor/editor.hpp"
+#include "editor.hpp"
 #include "../vk/vulkan_instance.hpp"
 #include "../vk/vulkan_render_device.hpp"
 #include "../vk/vulkan_swapchain.hpp"

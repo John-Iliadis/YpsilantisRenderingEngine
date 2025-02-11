@@ -40,8 +40,8 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_utils.hpp
         src/vk/vulkan_texture.cpp
         src/vk/vulkan_texture.hpp
-        src/editor/camera.cpp
-        src/editor/camera.hpp
+        src/renderer/camera.cpp
+        src/renderer/camera.hpp
         src/renderer/renderer.cpp
         src/renderer/renderer.hpp
         src/vk/vulkan_descriptor.cpp
@@ -60,8 +60,8 @@ add_executable(${PROJECT_NAME}
         src/app/simple_notification_service.cpp
         src/app/uuid_registry.hpp
         src/app/uuid_registry.cpp
-        src/editor/editor.cpp
-        src/editor/editor.hpp
+        src/app/editor.cpp
+        src/app/editor.hpp
         src/renderer/vertex.hpp
         src/utils/loaded_image.cpp
         src/utils/loaded_image.hpp
@@ -110,13 +110,13 @@ target_link_options(${PROJECT_NAME} PRIVATE -static)
 # compile shaders
 set(SHADER_DIR ${PROJECT_SOURCE_DIR}/shaders)
 set(COMPILED_SHADER_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders)
-set(GLSLC_EXE ${DEPENDENCIES_DIR}/glslc/glslc.exe)
-set(SHADER_COMPILE_FLAGS "-o")
+set(GLSLC_EXE "C:/VulkanSDK/1.4.304.0/Bin/glslc.exe")
 
+# todo: fix debug flags
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(SHADER_COMPILE_FLAGS "${SHADER_COMPILE_FLAGS} -g")
+    set(GEN_DEBUG_INFO_FLAG "-g")
 endif()
-    
+
 file(GLOB GLSL_FILES
         ${SHADER_DIR}/*.vert
         ${SHADER_DIR}/*.frag
@@ -129,7 +129,7 @@ foreach (GLSL_FILE ${GLSL_FILES})
 
     add_custom_command(
             OUTPUT ${SPIRV_FILE}
-            COMMAND ${GLSLC_EXE} ${GLSL_FILE} ${SHADER_COMPILE_FLAGS} ${SPIRV_FILE}
+            COMMAND ${GLSLC_EXE} -g ${GLSL_FILE} -o ${SPIRV_FILE}
             DEPENDS ${GLSL_FILE}
             COMMENT "Compiling ${GLSL_FILE} to SPIR-V..."
             VERBATIM

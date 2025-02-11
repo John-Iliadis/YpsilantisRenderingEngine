@@ -6,7 +6,6 @@
 
 Editor::Editor(Renderer& renderer)
     : mRenderer(renderer)
-    , mCamera({}, 30.f, 1920.f, 1080.f)
     , mSelectedObjectID()
     , mShowViewport(true)
     , mShowAssetPanel(true)
@@ -101,9 +100,9 @@ void Editor::cameraPanel()
     ImGui::Begin("Camera", &mShowCameraPanel);
 
     ImGui::SeparatorText("Settings");
-    ImGui::SliderFloat("Field of View", mCamera.fov(), 1.f, 177.f, "%0.f");
-    ImGui::DragFloat("Near Plane", mCamera.nearPlane(), 0.01f, 0.1f, *mCamera.farPlane(), "%.1f");
-    ImGui::DragFloat("Far Plane", mCamera.farPlane(), 0.01f, *mCamera.nearPlane(), FLT_MAX, "%.1f");
+    ImGui::SliderFloat("Field of View", mRenderer.mCamera.fov(), 1.f, 177.f, "%0.f");
+    ImGui::DragFloat("Near Plane", mRenderer.mCamera.nearPlane(), 0.01f, 0.1f, *mRenderer.mCamera.farPlane(), "%.1f");
+    ImGui::DragFloat("Far Plane", mRenderer.mCamera.farPlane(), 0.01f, *mRenderer.mCamera.nearPlane(), FLT_MAX, "%.1f");
 
     ImGui::SeparatorText("Camera Mode");
 
@@ -140,25 +139,25 @@ void Editor::cameraPanel()
 
     if (selectedIndex == 0)
     {
-        ImGui::DragFloat("Fly Speed", mCamera.flySpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
-        mCamera.setState(Camera::FIRST_PERSON);
+        ImGui::DragFloat("Fly Speed", mRenderer.mCamera.flySpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
+        mRenderer.mCamera.setState(Camera::FIRST_PERSON);
     }
 
     if (selectedIndex == 2)
     {
-        mCamera.setState(Camera::EDITOR_MODE);
+        mRenderer.mCamera.setState(Camera::EDITOR_MODE);
     }
 
     if (selectedIndex == 1 || selectedIndex == 2)
     {
-        ImGui::DragFloat("Z Scroll Offset", mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.1f");
-        ImGui::DragFloat("Rotate Sensitivity", mCamera.rotateSensitivity(), 0.01f, 0.f, FLT_MAX, "%.1f");
+        ImGui::DragFloat("Z Scroll Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.1f");
+        ImGui::DragFloat("Rotate Sensitivity", mRenderer.mCamera.rotateSensitivity(), 0.01f, 0.f, FLT_MAX, "%.1f");
     }
 
     if (selectedIndex == 1)
     {
-        ImGui::DragFloat("Pan Speed", mCamera.panSpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
-        mCamera.setState(Camera::VIEW_MODE);
+        ImGui::DragFloat("Pan Speed", mRenderer.mCamera.panSpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
+        mRenderer.mCamera.setState(Camera::VIEW_MODE);
     }
 
     ImGui::End();
@@ -389,8 +388,10 @@ void Editor::nodeTransform(GraphNode *node)
     }
 }
 
+// todo: fix immediately
 void Editor::viewPort()
 {
+    static int init = 2;
     static constexpr ImGuiWindowFlags windowFlags {
         ImGuiWindowFlags_NoDecoration |
         ImGuiWindowFlags_NoScrollbar |
@@ -400,7 +401,16 @@ void Editor::viewPort()
     ImGui::Begin("Viewport", &mShowViewport, windowFlags);
 
     mViewportSize = ImGui::GetContentRegionAvail();
-    mCamera.update(mDt);
+
+    if (init == 0)
+    {
+        mRenderer.resize(mViewportSize.x, mViewportSize.y);
+        init = -1;
+    }
+    else if (init > 0)
+        --init;
+
+    mRenderer.mCamera.update(mDt);
 
     ImGui::Dummy(ImGui::GetContentRegionAvail());
     modelDragDropTarget();

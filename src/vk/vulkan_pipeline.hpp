@@ -24,4 +24,7 @@ private:
 
 VkPipelineShaderStageCreateInfo shaderStageCreateInfo(VkShaderStageFlagBits stage, VkShaderModule module);
 
+void setPipelineDebugName(const VulkanRenderDevice& renderDevice, VkPipeline pipeline, const std::string& name);
+void setPipelineLayoutDebugName(const VulkanRenderDevice& renderDevice, VkPipelineLayout layout, const std::string& name);
+
 #endif //VULKANRENDERINGENGINE_VULKAN_PIPELINE_HPP

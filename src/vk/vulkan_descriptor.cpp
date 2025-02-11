@@ -40,19 +40,6 @@ VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count)
     };
 }
 
-VkDescriptorSetLayoutBinding dsLayoutBinding(uint32_t binding,
-                                             VkDescriptorType type,
-                                             uint32_t descriptorCount,
-                                             VkShaderStageFlags shaderStages)
-{
-    return {
-        .binding = binding,
-        .descriptorType = type,
-        .descriptorCount = descriptorCount,
-        .stageFlags = shaderStages
-    };
-}
-
 void setDsLayoutDebugName(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout, const std::string& debugName)
 {
     setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, debugName, dsLayout);
@@ -61,22 +48,4 @@ void setDsLayoutDebugName(const VulkanRenderDevice& renderDevice, VkDescriptorSe
 void setDSDebugName(const VulkanRenderDevice& renderDevice, VkDescriptorSet ds, const std::string& debugName)
 {
     setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, debugName, ds);
-}
-
-VkDescriptorBufferInfo descriptorBufferInfo(VkBuffer buffer, uint32_t offset, uint32_t range)
-{
-    return {
-        .buffer = buffer,
-        .offset = offset,
-        .range = range
-    };
-}
-
-VkDescriptorImageInfo descriptorImageInfo(VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout)
-{
-    return {
-        .sampler = sampler,
-        .imageView = imageView,
-        .imageLayout = imageLayout
-    };
 }

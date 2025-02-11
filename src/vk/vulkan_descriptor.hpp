@@ -17,19 +17,10 @@ VkDescriptorPool createDescriptorPool(VkDevice device,
 
 VkDescriptorPoolSize descriptorPoolSize(VkDescriptorType type, uint32_t count);
 
-VkDescriptorSetLayoutBinding dsLayoutBinding(uint32_t binding,
-                                             VkDescriptorType type,
-                                             uint32_t descriptorCount,
-                                             VkShaderStageFlags shaderStages);
-
 void setDsLayoutDebugName(const VulkanRenderDevice& renderDevice,
                           VkDescriptorSetLayout dsLayout,
                           const std::string& debugName);
 
 void setDSDebugName(const VulkanRenderDevice& renderDevice, VkDescriptorSet ds, const std::string& debugName);
-
-VkDescriptorBufferInfo descriptorBufferInfo(VkBuffer buffer, uint32_t offset, uint32_t range);
-
-VkDescriptorImageInfo descriptorImageInfo(VkSampler sampler, VkImageView imageView, VkImageLayout imageLayout);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_DESCRIPTOR_HPP

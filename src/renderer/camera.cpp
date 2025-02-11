@@ -267,3 +267,16 @@ void Camera::calculateViewProjection()
     mProjection = glm::perspective(mFovY, mAspectRatio, mNearZ, mFarZ);
     mViewProjection = mProjection * mView;
 }
+
+const CameraRenderData Camera::renderData() const
+{
+    return {
+        .view = mView,
+        .projection = mProjection,
+        .viewProj = mViewProjection,
+        .position = glm::vec4(mPosition, 1.f),
+        .direction = glm::vec4(mBasis[2], 1.f),
+        .nearPlane = mNearZ,
+        .farPlane = mFarZ
+    };
+}

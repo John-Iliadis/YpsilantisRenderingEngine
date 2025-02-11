@@ -28,6 +28,9 @@ void endSingleTimeCommands(const VulkanRenderDevice& renderDevice, VkCommandBuff
 VkSemaphore createSemaphore(const VulkanRenderDevice& renderDevice, const char* tag = nullptr);
 VkFence createFence(const VulkanRenderDevice& renderDevice, bool signaled = false, const char* tag = nullptr);
 
-VkSampleCountFlagBits getMaxSampleCount(const VkPhysicalDeviceProperties& physicalDeviceProperties);
+VkSampleCountFlagBits getMaxSampleCount(const VulkanRenderDevice& renderDevice);
+
+void setRenderpassDebugName(const VulkanRenderDevice& renderDevice, VkRenderPass renderPass, const std::string& name);
+void setFramebufferDebugName(const VulkanRenderDevice& renderDevice, VkFramebuffer framebuffer, const std::string& name);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_UTILS_HPP

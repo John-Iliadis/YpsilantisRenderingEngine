@@ -17,11 +17,10 @@
 #include "../scene_graph/mesh_node.hpp"
 #include "../renderer/renderer.hpp"
 #include "../renderer/model.hpp"
-#include "camera.hpp"
+#include "../renderer/camera.hpp"
 
 enum class CopyFlags;
 
-// todo: resize camera
 class Editor
 {
 public:
@@ -83,8 +82,6 @@ private:
 
 private:
     Renderer& mRenderer;
-
-    Camera mCamera;
     SceneGraph mSceneGraph;
 
     bool mShowViewport;

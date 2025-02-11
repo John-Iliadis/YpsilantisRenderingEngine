@@ -11,6 +11,17 @@
 #include "imgui/imgui.h"
 #include "../utils/utils.hpp"
 
+struct CameraRenderData
+{
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 projection;
+    alignas(16) glm::mat4 viewProj;
+    alignas(16) glm::vec4 position;
+    alignas(16) glm::vec4 direction;
+    alignas(4) float nearPlane;
+    alignas(4) float farPlane;
+};
+
 // todo: add key shortcuts for changing state
 class Camera
 {
@@ -37,6 +48,7 @@ public:
     const glm::vec3& position() const;
     const glm::vec3& front() const;
     const State state() const;
+    const CameraRenderData renderData() const;
 
     float* fov();
     float* nearPlane();

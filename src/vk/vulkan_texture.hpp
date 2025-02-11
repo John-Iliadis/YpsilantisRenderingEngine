@@ -6,6 +6,7 @@
 #define VULKANRENDERINGENGINE_VULKAN_TEXTURE_HPP
 
 #include <glm/glm.hpp>
+#include <imgui/imgui_internal.h>
 #include "vulkan_image.hpp"
 
 enum class TextureWrap

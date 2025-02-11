@@ -103,7 +103,7 @@ void InstancedMesh::render(VkCommandBuffer commandBuffer) const
     vkCmdDrawIndexed(commandBuffer, getIndexCount(mInstanceBuffer), mInstanceCount, 0, 0, 0);
 }
 
-std::array<VkVertexInputBindingDescription, 2> constexpr InstancedMesh::bindingDescriptions()
+std::array<VkVertexInputBindingDescription, 2> InstancedMesh::bindingDescriptions()
 {
     VkVertexInputBindingDescription vertexBindingDescription {
         .binding = 0,
@@ -123,7 +123,7 @@ std::array<VkVertexInputBindingDescription, 2> constexpr InstancedMesh::bindingD
     };
 }
 
-std::array<VkVertexInputAttributeDescription, 13> constexpr InstancedMesh::attributeDescriptions()
+std::array<VkVertexInputAttributeDescription, 13> InstancedMesh::attributeDescriptions()
 {
     std::array<VkVertexInputAttributeDescription, 13> attributeDescriptions;
 

@@ -53,3 +53,13 @@ VkPipelineShaderStageCreateInfo shaderStageCreateInfo(VkShaderStageFlagBits stag
         .pName = "main"
     };
 }
+
+void setPipelineDebugName(const VulkanRenderDevice& renderDevice, VkPipeline pipeline, const std::string& name)
+{
+    setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_PIPELINE, name, pipeline);
+}
+
+void setPipelineLayoutDebugName(const VulkanRenderDevice& renderDevice, VkPipelineLayout layout, const std::string& name)
+{
+    setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_PIPELINE_LAYOUT, name, layout);
+}

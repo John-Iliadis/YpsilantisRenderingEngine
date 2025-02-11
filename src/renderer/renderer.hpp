@@ -7,6 +7,8 @@
 
 #include "../utils/utils.hpp"
 #include "../utils/main_thread_task_queue.hpp"
+#include "../vk/vulkan_pipeline.hpp"
+#include "camera.hpp"
 #include "model_importer.hpp"
 #include "model.hpp"
 
@@ -16,22 +18,90 @@ public:
     Renderer(const VulkanRenderDevice& renderDevice);
     ~Renderer();
 
+    void render();
+
     void importModel(const std::filesystem::path& path);
     void deleteModel(uuid32_t id);
+    void resize(uint32_t width, uint32_t height);
+
     void processMainThreadTasks();
     void releaseResources();
+    void updateCameraUBO();
 
 private:
+    void createColorTextures();
+    void createDepthTextures();
+    void createNormalTextures();
+    void createSsaoTexture();
+    void createTextures();
+    void createClearRenderPass();
 
+    void createPrepassRenderpass();
+    void createPrepassFramebuffer();
+    void createPrepassPipelineLayout();
+    void createPrepassPipeline();
+
+    void createResolveRenderpass();
+    void createResolveFramebuffer();
+
+    void createColorDepthRenderpass();
+    void createColorDepthFramebuffer();
+
+    void createSsaoRenderpass();
+    void createSsaoFramebuffer();
+
+    void createCameraDs();
     void createDisplayTexturesDsLayout();
     void createMaterialDsLayout();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
 
-    VkDescriptorSetLayout mDisplayTexturesDSLayout;
-    VkDescriptorSetLayout mMaterialsDsLayout;
+    uint32_t mWidth;
+    uint32_t mHeight;
+    VkSampleCountFlagBits mSamples;
 
+    // camera
+    Camera mCamera;
+    VulkanBuffer mCameraUBO;
+    VkDescriptorSetLayout mCameraDsLayout{};
+    VkDescriptorSet mCameraDs{};
+
+    // textures
+    VulkanTexture mColorTexture;
+    VulkanTexture mResolvedColorTexture;
+    VulkanTexture mDepthTexture;
+    VulkanTexture mResolvedDepthTexture;
+    VulkanTexture mNormalTexture;
+    VulkanTexture mResolvedNormalTexture;
+
+    VulkanTexture mSkybox;
+    VulkanTexture mSsaoTexture;
+
+    // render passes
+    VkRenderPass mClearRenderpass{};
+    VkRenderPass mPrepassRenderPass{};
+    VkRenderPass mResolveRenderPass{};
+    VkRenderPass mColorDepthRenderpass{};
+    VkRenderPass mSsaoRenderpass{};
+
+    // framebuffers
+    VkFramebuffer mPrepassFramebuffer{};
+    VkFramebuffer mResolveFramebuffer{};
+    VkFramebuffer mColorDepthFramebuffer{};
+    VkFramebuffer mSsaoFramebuffer{};
+
+    // pipeline layouts
+    VkPipelineLayout mPrepassPipelineLayout{};
+
+    // pipelines
+    VkPipeline mPrepassPipeline{};
+
+    // descriptor set layouts
+    VkDescriptorSetLayout mDisplayTexturesDSLayout{};
+    VkDescriptorSetLayout mMaterialsDsLayout{};
+
+    // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
     uuid32_t mDeferDeleteModel{};
 

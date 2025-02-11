@@ -159,10 +159,12 @@ VkFence createFence(const VulkanRenderDevice& renderDevice, bool signaled, const
     return fence;
 }
 
-VkSampleCountFlagBits getMaxSampleCount(const VkPhysicalDeviceProperties& physicalDeviceProperties)
+VkSampleCountFlagBits getMaxSampleCount(const VulkanRenderDevice& renderDevice)
 {
-    VkSampleCountFlags sampleCounts = physicalDeviceProperties.limits.framebufferColorSampleCounts &
-                                      physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+    const auto& deviceProperties = renderDevice.getDeviceProperties();
+
+    VkSampleCountFlags sampleCounts = deviceProperties.limits.framebufferColorSampleCounts &
+                                      deviceProperties.limits.framebufferDepthSampleCounts;
 
     static const VkSampleCountFlagBits flags[] {
         VK_SAMPLE_COUNT_64_BIT,
@@ -178,4 +180,14 @@ VkSampleCountFlagBits getMaxSampleCount(const VkPhysicalDeviceProperties& physic
             return flag;
 
     return VK_SAMPLE_COUNT_1_BIT;
+}
+
+void setRenderpassDebugName(const VulkanRenderDevice& renderDevice, VkRenderPass renderPass, const std::string& name)
+{
+    setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_RENDER_PASS, name, renderPass);
+}
+
+void setFramebufferDebugName(const VulkanRenderDevice& renderDevice, VkFramebuffer framebuffer, const std::string& name)
+{
+    setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_FRAMEBUFFER, name, framebuffer);
 }
