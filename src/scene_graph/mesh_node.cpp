@@ -7,21 +7,19 @@
 MeshNode::MeshNode()
     : GraphNode()
     , mMeshID()
-    , mInstanceID()
 {
 }
 
 MeshNode::MeshNode(NodeType type, const std::string& name, const glm::mat4& transformation, GraphNode* parent,
-                   uuid32_t modelID, uuid32_t meshID, uint32_t instanceID)
+                   uuid32_t modelID, uuid32_t meshID)
     : GraphNode(type, name, transformation, parent, modelID)
     , mMeshID(meshID)
-    , mInstanceID(instanceID)
 {
 }
 
 MeshNode::~MeshNode()
 {
-    SNS::publishMessage(Topic::Type::SceneGraph, Message::RemoveMeshInstance(mMeshID, mInstanceID));
+    SNS::publishMessage(Topic::Type::SceneGraph, Message::RemoveMeshInstance(mMeshID, mID));
 }
 
 void MeshNode::updateGlobalTransform()
@@ -40,10 +38,7 @@ void MeshNode::updateGlobalTransform()
         mDirty = false;
 
         SNS::publishMessage(Topic::Type::SceneGraph,
-                            Message::meshInstanceUpdate(mMeshID,
-                                                        mID,
-                                                        mInstanceID,
-                                                        mGlobalTransform));
+                            Message::meshInstanceUpdate(mMeshID, mID, mGlobalTransform));
     }
 
     for (auto child : mChildren)
@@ -53,9 +48,4 @@ void MeshNode::updateGlobalTransform()
 uuid32_t MeshNode::meshID() const
 {
     return mMeshID;
-}
-
-uint32_t MeshNode::instanceID() const
-{
-    return mInstanceID;
 }

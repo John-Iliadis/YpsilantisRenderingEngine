@@ -19,6 +19,7 @@ public:
     void importModel(const std::filesystem::path& path);
     void deleteModel(uuid32_t id);
     void processMainThreadTasks();
+    void releaseResources();
 
 private:
 
@@ -32,6 +33,7 @@ private:
     VkDescriptorSetLayout mMaterialsDsLayout;
 
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
+    uuid32_t mDeferDeleteModel{};
 
     // async loading
     std::vector<std::future<std::shared_ptr<Model>>> mLoadedModelFutures;

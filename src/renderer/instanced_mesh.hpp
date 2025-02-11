@@ -19,7 +19,7 @@ public:
     {
         glm::mat4 modelMatrix;
         glm::mat3 normalMatrix;
-        uint32_t id;
+        uuid32_t id;
     };
 
 public:
@@ -28,14 +28,14 @@ public:
                   const std::vector<Vertex>& vertices,
                   const std::vector<uint32_t>& indices);
 
-    uint32_t addInstance();
-    void updateInstance(uint32_t instanceID, const glm::mat4& transformation, uuid32_t id);
-    void removeInstance(uint32_t instanceID);
+    void addInstance(uuid32_t id);
+    void updateInstance(uuid32_t id, const glm::mat4& transformation);
+    void removeInstance(uuid32_t id);
     void setDebugName(const std::string& debugName);
     void render(VkCommandBuffer commandBuffer) const;
 
     static constexpr std::array<VkVertexInputBindingDescription, 2> bindingDescriptions();
-    static constexpr std::array<VkVertexInputAttributeDescription, 14> attributeDescriptions();
+    static constexpr std::array<VkVertexInputAttributeDescription, 13> attributeDescriptions();
 
 private:
     void checkResize();
@@ -50,8 +50,8 @@ private:
     uint32_t mInstanceCount;
     uint32_t mInstanceBufferCapacity;
 
-    std::unordered_map<uint32_t, uint32_t> mInstanceIdToIndexMap;
-    std::unordered_map<uint32_t, uint32_t> mInstanceIndexToIdMap;
+    std::unordered_map<uuid32_t, index_t> mInstanceIdToIndexMap;
+    std::unordered_map<index_t, uuid32_t> mInstanceIndexToIdMap;
 };
 
 #endif //VULKANRENDERINGENGINE_INSTANCED_MESH_HPP

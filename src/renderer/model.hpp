@@ -51,7 +51,7 @@ struct Texture
 {
     std::string name;
     VulkanTexture vulkanTexture;
-    VkDescriptorSet descriptorSet; // todo: free these
+    VkDescriptorSet descriptorSet;
 };
 
 class Model : public SubscriberSNS
@@ -68,23 +68,25 @@ public:
     std::vector<Mesh> meshes;
 
 public:
-    Model();
-    ~Model() = default;
+    Model(const VulkanRenderDevice* renderDevice);
+    ~Model();
 
     void updateMaterial(index_t matIndex);
 
-    void createMaterialsUBO(const VulkanRenderDevice& renderDevice);
-    void createTextureDescriptorSets(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout);
-    void createMaterialsDescriptorSet(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout);
+    void notify(const Message &message) override;
+
+    void createMaterialsUBO();
+    void createTextureDescriptorSets(VkDescriptorSetLayout dsLayout);
+    void createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout);
 
     void render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout);
 
     Mesh& getMesh(uuid32_t meshID);
 
 private:
+    const VulkanRenderDevice* mRenderDevice;
     VkDescriptorSet mMaterialsDS;
     VulkanBuffer mMaterialsUBO;
 };
-
 
 #endif //VULKANRENDERINGENGINE_MODEL_HPP

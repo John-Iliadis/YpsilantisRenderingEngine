@@ -82,6 +82,9 @@ void Application::update(float dt)
 
 void Application::fillCommandBuffer(uint32_t imageIndex)
 {
+    vkResetCommandBuffer(mSwapchain.commandBuffer, 0);
+    mRenderer.releaseResources();
+
     VkCommandBufferBeginInfo commandBufferBeginInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,

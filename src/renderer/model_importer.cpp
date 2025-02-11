@@ -18,7 +18,7 @@ namespace ModelImporter
     {
         return std::async(std::launch::async, [path, renderDevice, callback] () {
             std::shared_ptr<tinygltf::Model> gltfModel = loadGltfScene(path);
-            std::shared_ptr<Model> model = std::make_shared<Model>();
+            std::shared_ptr<Model> model = std::make_shared<Model>(renderDevice);
 
             model->name = path.filename().string();
             model->path = path;

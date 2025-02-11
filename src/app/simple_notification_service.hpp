@@ -20,14 +20,13 @@ public:
     {
         uuid32_t meshID;
         uuid32_t objectID;
-        uint32_t instanceID;
         glm::mat4 transformation;
     };
 
     struct RemoveMeshInstance
     {
         uuid32_t meshID;
-        uint32_t instanceID;
+        uuid32_t objectID;
     };
 
     std::variant<ModelDeleted,
@@ -50,8 +49,8 @@ public:
     const T* getIf() const { return std::get_if<T>(&message); }
 
     static Message modelDeleted(uuid32_t modelID);
-    static Message meshInstanceUpdate(uuid32_t meshID, uuid32_t objectID, uint32_t instanceID, glm::mat4 transformation);
-    static Message removeMeshInstance(uuid32_t meshID, uint32_t instanceID);
+    static Message meshInstanceUpdate(uuid32_t meshID, uuid32_t objectID, glm::mat4 transformation);
+    static Message removeMeshInstance(uuid32_t meshID, uuid32_t objectID);
 };
 
 class SubscriberSNS;

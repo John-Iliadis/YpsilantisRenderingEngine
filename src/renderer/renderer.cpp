@@ -36,7 +36,7 @@ void Renderer::importModel(const std::filesystem::path &path)
 void Renderer::deleteModel(uuid32_t id)
 {
     SNS::publishMessage(Topic::Type::Renderer, Message::modelDeleted(id));
-    mModels.erase(id);
+    mDeferDeleteModel = id;
 }
 
 void Renderer::processMainThreadTasks()
@@ -55,9 +55,9 @@ void Renderer::processMainThreadTasks()
             mModels.emplace(modelID, model);
 
             model->id = modelID;
-            model->createMaterialsUBO(mRenderDevice);
-            model->createTextureDescriptorSets(mRenderDevice, mDisplayTexturesDSLayout);
-            model->createMaterialsDescriptorSet(mRenderDevice, mMaterialsDsLayout);
+            model->createMaterialsUBO();
+            model->createTextureDescriptorSets(mDisplayTexturesDSLayout);
+            model->createMaterialsDescriptorSet(mMaterialsDsLayout);
 
             itr = mLoadedModelFutures.erase(itr);
         }
@@ -134,4 +134,13 @@ void Renderer::createMaterialDsLayout()
                                                   &mMaterialsDsLayout);
     vulkanCheck(result, "Failed to create Renderer::mMaterialsDsLayout.");
     setDsLayoutDebugName(mRenderDevice, mMaterialsDsLayout, "Renderer::mMaterialsDsLayout");
+}
+
+void Renderer::releaseResources()
+{
+    if (mDeferDeleteModel)
+    {
+        mModels.erase(mDeferDeleteModel);
+        mDeferDeleteModel = 0;
+    }
 }

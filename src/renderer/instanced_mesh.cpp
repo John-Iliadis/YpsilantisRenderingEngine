@@ -4,12 +4,6 @@
 
 #include "instanced_mesh.hpp"
 
-static uint32_t generateInstanceID()
-{
-    static uint32_t counter = 0;
-    return counter++;
-}
-
 static constexpr uint32_t sInitialInstanceBufferCapacity = 32;
 static constexpr uint32_t sVertexSize = sizeof(Vertex);
 static constexpr uint32_t sInstanceSize = sizeof(InstancedMesh::InstanceData);
@@ -34,42 +28,39 @@ InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice,
 {
 }
 
-uint32_t InstancedMesh::addInstance()
+void InstancedMesh::addInstance(uuid32_t id)
 {
     checkResize();
 
     ++mInstanceCount;
 
-    uint32_t instanceID = generateInstanceID();
     uint32_t instanceIndex = mInstanceCount - 1;
 
-    assert(mInstanceIdToIndexMap.emplace(instanceID, instanceIndex).second);
-    assert(mInstanceIndexToIdMap.emplace(instanceIndex, instanceID).second);
+    assert(mInstanceIdToIndexMap.emplace(id, instanceIndex).second);
+    assert(mInstanceIndexToIdMap.emplace(instanceIndex, id).second);
 
-    InstanceData placeholderData;
+    InstanceData placeholderData {.id = -1u};
     mInstanceBuffer.update(instanceIndex * sInstanceSize, sInstanceSize, &placeholderData);
-
-    return instanceID;
 }
 
-void InstancedMesh::updateInstance(uint32_t instanceID, const glm::mat4& model, uuid32_t id)
+void InstancedMesh::updateInstance(uuid32_t id, const glm::mat4& transformation)
 {
-    uint32_t instanceIndex = mInstanceIdToIndexMap.at(instanceID);
+    uint32_t instanceIndex = mInstanceIdToIndexMap.at(id);
 
     InstanceData instanceData {
-        .modelMatrix = model,
-        .normalMatrix = glm::inverseTranspose(glm::mat3(model)),
+        .modelMatrix = transformation,
+        .normalMatrix = glm::inverseTranspose(glm::mat3(transformation)),
         .id = id,
     };
 
     mInstanceBuffer.update(instanceIndex * sInstanceSize, sInstanceSize, &instanceData);
 }
 
-void InstancedMesh::removeInstance(uint32_t instanceID)
+void InstancedMesh::removeInstance(uuid32_t id)
 {
-    uint32_t removeIndex = mInstanceIdToIndexMap.at(instanceID);
+    uint32_t removeIndex = mInstanceIdToIndexMap.at(id);
 
-    mInstanceIdToIndexMap.erase(instanceID);
+    mInstanceIdToIndexMap.erase(id);
     mInstanceIndexToIdMap.erase(removeIndex);
 
     if (removeIndex != mInstanceCount - 1)
@@ -132,9 +123,9 @@ std::array<VkVertexInputBindingDescription, 2> constexpr InstancedMesh::bindingD
     };
 }
 
-std::array<VkVertexInputAttributeDescription, 14> constexpr InstancedMesh::attributeDescriptions()
+std::array<VkVertexInputAttributeDescription, 13> constexpr InstancedMesh::attributeDescriptions()
 {
-    std::array<VkVertexInputAttributeDescription, 14> attributeDescriptions;
+    std::array<VkVertexInputAttributeDescription, 13> attributeDescriptions;
 
     // Vertex::position
     attributeDescriptions.at(0).location = 0;

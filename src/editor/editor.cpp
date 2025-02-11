@@ -620,10 +620,10 @@ static GraphNode* createModelGraphImpl(Model& model, const SceneNode& sceneNode,
         Mesh& mesh = model.meshes.at(sceneNode.meshIndex);
 
         uuid32_t meshID = mesh.meshID;
-        uint32_t instanceID = mesh.mesh.addInstance();
 
-        graphNode = new MeshNode(NodeType::Mesh, sceneNode.name, sceneNode.transformation, parent,
-                                 model.id, meshID, instanceID);
+        graphNode = new MeshNode(NodeType::Mesh, sceneNode.name, sceneNode.transformation, parent, model.id, meshID);
+
+        mesh.mesh.addInstance(graphNode->id());
     }
     else
     {
@@ -882,16 +882,17 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
         case NodeType::Mesh:
         {
             MeshNode* meshNode = dynamic_cast<MeshNode*>(node);
+
             uuid32_t modelID = meshNode->modelID().value();
             uint32_t meshID = meshNode->meshID();
-            uint32_t instanceID = mRenderer.mModels.at(modelID)->getMesh(meshID).mesh.addInstance();
+
             newNode = new MeshNode(meshNode->type(),
                                    meshNode->name(),
                                    meshNode->localTransform(),
                                    meshNode->parent(),
-                                   modelID,
-                                   meshID,
-                                   instanceID);
+                                   modelID, meshID);
+
+            mRenderer.mModels.at(modelID)->getMesh(meshID).mesh.addInstance(newNode->id());
             break;
         }
         default: assert(false);

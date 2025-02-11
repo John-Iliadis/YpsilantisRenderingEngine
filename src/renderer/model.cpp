@@ -4,35 +4,48 @@
 
 #include "model.hpp"
 
-Model::Model()
-    : mMaterialsDS()
+Model::Model(const VulkanRenderDevice* renderDevice)
+    : SubscriberSNS({Topic::Type::SceneGraph})
+    , mRenderDevice(renderDevice)
+    , mMaterialsDS()
 {
 }
 
-void Model::createMaterialsUBO(const VulkanRenderDevice &renderDevice)
+Model::~Model()
 {
-    mMaterialsUBO = VulkanBuffer(renderDevice,
+    vkFreeDescriptorSets(mRenderDevice->device, mRenderDevice->descriptorPool, 1, &mMaterialsDS);
+    for (auto& texture : textures)
+    {
+        vkFreeDescriptorSets(mRenderDevice->device,
+                             mRenderDevice->descriptorPool,
+                             1, &texture.descriptorSet);
+    }
+}
+
+void Model::createMaterialsUBO()
+{
+    mMaterialsUBO = VulkanBuffer(*mRenderDevice,
                                  sizeof(Material) * materials.size(),
                                  BufferType::Uniform,
                                  MemoryType::GPU);
     mMaterialsUBO.setDebugName(name + " Material UBO");
 }
 
-void Model::createTextureDescriptorSets(const VulkanRenderDevice &renderDevice, VkDescriptorSetLayout dsLayout)
+void Model::createTextureDescriptorSets(VkDescriptorSetLayout dsLayout)
 {
     VkDescriptorSetAllocateInfo dsAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = renderDevice.descriptorPool,
+        .descriptorPool = mRenderDevice->descriptorPool,
         .descriptorSetCount = 1,
         .pSetLayouts = &dsLayout
     };
 
     for (auto& texture : textures)
     {
-        VkResult result = vkAllocateDescriptorSets(renderDevice.device, &dsAllocateInfo, &texture.descriptorSet);
+        VkResult result = vkAllocateDescriptorSets(mRenderDevice->device, &dsAllocateInfo, &texture.descriptorSet);
         vulkanCheck(result, "Failed to allocate texture descriptor set.");
 
-        setDSDebugName(renderDevice, texture.descriptorSet, texture.name);
+        setDSDebugName(*mRenderDevice, texture.descriptorSet, texture.name);
 
         VkDescriptorImageInfo imageInfo {
             .sampler = texture.vulkanTexture.vulkanSampler.sampler,
@@ -50,11 +63,11 @@ void Model::createTextureDescriptorSets(const VulkanRenderDevice &renderDevice, 
             .pImageInfo = &imageInfo
         };
 
-        vkUpdateDescriptorSets(renderDevice.device, 1, &dsWrite, 0, nullptr);
+        vkUpdateDescriptorSets(mRenderDevice->device, 1, &dsWrite, 0, nullptr);
     }
 }
 
-void Model::createMaterialsDescriptorSet(const VulkanRenderDevice &renderDevice, VkDescriptorSetLayout dsLayout)
+void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
 {
     uint32_t descriptorCounts = PerModelMaxTextureCount;
 
@@ -67,17 +80,16 @@ void Model::createMaterialsDescriptorSet(const VulkanRenderDevice &renderDevice,
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext = &variableDescriptorCountAllocInfo,
-        .descriptorPool = renderDevice.descriptorPool,
+        .descriptorPool = mRenderDevice->descriptorPool,
         .descriptorSetCount = 1,
         .pSetLayouts = &dsLayout
     };
 
-    VkResult result = vkAllocateDescriptorSets(renderDevice.device, &descriptorSetAllocateInfo, &mMaterialsDS);
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice->device, &descriptorSetAllocateInfo, &mMaterialsDS);
     vulkanCheck(result, "Failed to create mMaterialsDS.");
-    setDSDebugName(renderDevice, mMaterialsDS, name + " Materials DS");
+    setDSDebugName(*mRenderDevice, mMaterialsDS, name + " Materials DS");
 }
 
-// todo: set cull face
 void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout)
 {
     vkCmdBindDescriptorSets(commandBuffer,
@@ -108,4 +120,19 @@ Mesh &Model::getMesh(uuid32_t meshID)
 void Model::updateMaterial(index_t matIndex)
 {
     mMaterialsUBO.update(matIndex * sizeof(Material), sizeof(Material), &materials.at(matIndex));
+}
+
+void Model::notify(const Message &message)
+{
+    if (const auto m = message.getIf<Message::MeshInstanceUpdate>())
+    {
+        Mesh& mesh = getMesh(m->meshID);
+        mesh.mesh.updateInstance(m->objectID, m->transformation);
+    }
+
+    if (const auto m = message.getIf<Message::RemoveMeshInstance>())
+    {
+        Mesh& mesh = getMesh(m->meshID);
+        mesh.mesh.removeInstance(m->objectID);
+    }
 }
