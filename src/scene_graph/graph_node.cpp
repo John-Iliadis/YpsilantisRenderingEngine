@@ -45,12 +45,14 @@ void GraphNode::setParent(GraphNode *parent)
 void GraphNode::addChild(GraphNode* child)
 {
     child->mParent = this;
-    mChildren.insert(child);
+    mChildren.push_back(child);
 }
 
 void GraphNode::removeChild(GraphNode *child)
 {
-    mChildren.erase(child);
+    for (uint32_t i = 0; i < mChildren.size(); ++i)
+        if (mChildren.at(i) == child)
+            mChildren.erase(mChildren.begin() + i);
 }
 
 void GraphNode::orphan()
@@ -94,7 +96,7 @@ GraphNode *GraphNode::parent() const
     return mParent;
 }
 
-const std::multiset<GraphNode*>& GraphNode::children() const
+const std::vector<GraphNode*>& GraphNode::children() const
 {
     return mChildren;
 }
@@ -113,11 +115,6 @@ void GraphNode::setLocalTransform(const glm::mat4 &transform)
 {
     mLocalTransform = transform;
     markDirty();
-}
-
-bool GraphNode::operator<(const GraphNode* other) const
-{
-    return std::less<std::string>()(mName, other->mName);
 }
 
 void GraphNode::updateGlobalTransform()

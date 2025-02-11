@@ -466,8 +466,6 @@ void Editor::debugPanel()
     ImGui::End();
 }
 
-// todo: improve drag drop area
-// todo: improve node sorting
 void Editor::sceneGraphPanel()
 {
     ImGui::Begin("Scene Graph", &mShowSceneGraph);
@@ -479,8 +477,9 @@ void Editor::sceneGraphPanel()
         sceneNodeRecursive(child);
     }
 
-    ImGui::Dummy(ImGui::GetContentRegionAvail());
-    sceneNodeDragDropTarget(&mSceneGraph.mRoot);
+    bool nodeHovered = ImGui::IsItemHovered();
+    ImGui::Dummy(ImVec2(0, 50.f));
+    sceneNodeDragDropTargetWholeWindow(&mSceneGraph.mRoot, nodeHovered);
 
     ImGui::End();
 
@@ -581,6 +580,10 @@ void Editor::sceneGraphPopup()
 
 void Editor::sceneNodeRecursive(GraphNode *node)
 {
+    static std::unordered_map<GraphNode*, bool> sOpenedState;
+    if (!sOpenedState.contains(node))
+        sOpenedState.emplace(node, false);
+
     ImGuiTreeNodeFlags treeNodeFlags {
         ImGuiTreeNodeFlags_OpenOnArrow |
         ImGuiTreeNodeFlags_OpenOnDoubleClick |
@@ -588,13 +591,13 @@ void Editor::sceneNodeRecursive(GraphNode *node)
         ImGuiTreeNodeFlags_FramePadding
     };
 
-    if (mSelectedObjectID == node->id())
-        treeNodeFlags |= ImGuiTreeNodeFlags_Selected;
-
-    if (node->children().empty())
-        treeNodeFlags |= ImGuiTreeNodeFlags_Leaf;
+    if (mSelectedObjectID == node->id()) treeNodeFlags |= ImGuiTreeNodeFlags_Selected;
+    if (node->children().empty()) treeNodeFlags |= ImGuiTreeNodeFlags_Leaf;
+    if (sOpenedState.at(node)) treeNodeFlags |= ImGuiTreeNodeFlags_DefaultOpen;
 
     bool nodeOpen = ImGui::TreeNodeEx((void*)(intptr_t)node, treeNodeFlags, node->name().c_str());
+
+    sOpenedState.at(node) = nodeOpen;
 
     lastItemClicked(node->id());
 
@@ -663,7 +666,9 @@ void Editor::cutNode(uuid32_t nodeID)
 
 void Editor::pasteNode(GraphNode *parent)
 {
-    if (auto copiedNode = mSceneGraph.searchNode(mCopiedNodeID))
+    GraphNode* copiedNode = mSceneGraph.searchNode(mCopiedNodeID);
+
+    if (copiedNode && !mSceneGraph.hasDescendant(copiedNode, parent))
     {
         if (mCopyFlag == CopyFlags::Copy)
         {
@@ -767,10 +772,44 @@ void Editor::sceneNodeDragDropTarget(GraphNode *node)
         {
             GraphNode* transferNode = *(GraphNode**)payload->Data;
 
-            transferNode->orphan();
-            transferNode->markDirty();
+            if (!mSceneGraph.hasDescendant(transferNode, node))
+            {
+                transferNode->orphan();
+                transferNode->markDirty();
 
-            node->addChild(transferNode);
+                node->addChild(transferNode);
+            }
+        }
+
+        ImGui::EndDragDropTarget();
+    }
+}
+
+void Editor::sceneNodeDragDropTargetWholeWindow(GraphNode *node, bool nodeHovered)
+{
+    if (nodeHovered)
+        return;
+
+    ImRect rect = ImGui::GetCurrentWindow()->InnerRect;
+
+    if (ImGui::BeginDragDropTargetCustom(rect, ImGui::GetID("NodeDragDropTargetWin")))
+    {
+        checkPayloadType("SceneNode");
+
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SceneNode", ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
+        {
+            if (payload->IsDelivery())
+            {
+                GraphNode* transferNode = *(GraphNode**)payload->Data;
+
+                if (!mSceneGraph.hasDescendant(transferNode, node))
+                {
+                    transferNode->orphan();
+                    transferNode->markDirty();
+
+                    node->addChild(transferNode);
+                }
+            }
         }
 
         ImGui::EndDragDropTarget();

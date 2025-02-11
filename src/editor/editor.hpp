@@ -66,6 +66,7 @@ private:
 
     void sceneNodeDragDropSource(GraphNode* node);
     void sceneNodeDragDropTarget(GraphNode* node);
+    void sceneNodeDragDropTargetWholeWindow(GraphNode* node, bool nodeHovered);
     void modelDragDropSource(uuid32_t modelID);
     void modelDragDropTarget();
 

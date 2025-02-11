@@ -20,6 +20,7 @@ public:
     void notify(const Message &message) override;
 
     GraphNode* searchNode(uuid32_t nodeID);
+    bool hasDescendant(GraphNode* current, GraphNode* descendant);
 
 public:
     GraphNode mRoot;

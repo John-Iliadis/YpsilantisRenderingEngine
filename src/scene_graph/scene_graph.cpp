@@ -69,3 +69,14 @@ void SceneGraph::deleteNode(uuid32_t nodeID)
     node->orphan();
     delete node;
 }
+
+bool SceneGraph::hasDescendant(GraphNode *current, GraphNode *descendant)
+{
+    for (auto child : current->children())
+    {
+        if (child == descendant || hasDescendant(child, descendant))
+            return true;
+    }
+
+    return false;
+}

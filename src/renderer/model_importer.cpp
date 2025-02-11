@@ -12,8 +12,6 @@
 // todo: handle "Load error: No LoadImageData callback specified"
 // todo: load lights
 
-// todo: fix node transformation bug
-
 namespace ModelImporter
 {
     std::future<std::shared_ptr<Model>> loadModel(const std::filesystem::path& path, const VulkanRenderDevice* renderDevice, EnqueueCallback callback)
@@ -65,7 +63,7 @@ namespace ModelImporter
 
     std::shared_ptr<tinygltf::Model> loadGltfScene(const std::filesystem::path &path)
     {
-        debugLog("ResourceImporter: Loading " + path.string());
+        debugLog("Loading model: " + path.string());
 
         std::shared_ptr<tinygltf::Model> model = std::make_shared<tinygltf::Model>();
         tinygltf::TinyGLTF loader;
@@ -80,7 +78,7 @@ namespace ModelImporter
         check(error.empty(), std::format("Failed to load model {}\nLoad error: {}", path.string(), error).c_str());
 
         if (!warning.empty())
-            debugLog("ResourceImporter::loadGltfScene: Warning: " + warning);
+            debugLog("Model load warning: " + warning);
 
         return model;
     }
@@ -189,8 +187,9 @@ namespace ModelImporter
 
     std::future<MeshData> createMeshData(const tinygltf::Model& model, const tinygltf::Mesh& gltfMesh)
     {
+        debugLog("Loading mesh: " + gltfMesh.name);
+
         return std::async(std::launch::async, [&model, &gltfMesh] () {
-            debugLog(std::format("ResourceImporter: Loading mesh {}", gltfMesh.name));
 
             MeshData meshData {
                 .name = gltfMesh.name,
@@ -323,7 +322,13 @@ namespace ModelImporter
     // todo: handle load fail
     std::future<std::shared_ptr<ImageData>> loadImageData(const tinygltf::Model& gltfModel, const tinygltf::Texture& texture, const std::filesystem::path& directory)
     {
-        return std::async(std::launch::async, [&gltfModel, &texture, &directory] () {
+        const tinygltf::Image& image = gltfModel.images.at(texture.source);
+
+        std::filesystem::path imagePath = directory / image.uri;
+
+        debugLog("Loading image: " + imagePath.string());
+
+        return std::async(std::launch::async, [&gltfModel, &texture, imagePath] () {
             std::shared_ptr<ImageData> imageData = std::make_shared<ImageData>();
 
             if (texture.sampler != -1)
@@ -342,12 +347,6 @@ namespace ModelImporter
                 imageData->wrapModeS = getWrapMode(-1);
                 imageData->wrapModeT = getWrapMode(-1);
             }
-
-            const tinygltf::Image& image = gltfModel.images.at(texture.source);
-
-            std::filesystem::path imagePath = directory / image.uri;
-
-            debugLog("ModelImporter::loadImageData: Loading " + imagePath.string());
 
             imageData->loadedImage = LoadedImage(imagePath);
 

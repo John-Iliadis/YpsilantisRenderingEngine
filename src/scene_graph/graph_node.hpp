@@ -43,15 +43,13 @@ public:
     const std::string& name() const;
     std::optional<uuid32_t> modelID() const;
     GraphNode* parent() const;
-    const std::multiset<GraphNode*>& children() const;
+    const std::vector<GraphNode*>& children() const;
 
     const glm::mat4& localTransform() const;
     const glm::mat4& globalTransform();
     void setName(const std::string& name);
     void setLocalTransform(const glm::mat4& transform);
     virtual void updateGlobalTransform();
-
-    bool operator<(const GraphNode* other) const;
 
 protected:
     uuid32_t mID;
@@ -63,7 +61,7 @@ protected:
     bool mDirty;
 
     GraphNode* mParent;
-    std::multiset<GraphNode*> mChildren;
+    std::vector<GraphNode*> mChildren;
 };
 
 #endif //VULKANRENDERINGENGINE_SCENE_NODE_HPP
