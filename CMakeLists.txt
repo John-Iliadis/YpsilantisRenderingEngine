@@ -75,6 +75,8 @@ add_executable(${PROJECT_NAME}
         src/scene_graph/scene_graph.hpp
         src/scene_graph/graph_node.cpp
         src/scene_graph/graph_node.hpp
+        src/app/save_data.cpp
+        src/app/save_data.hpp
 )
 
 add_subdirectory(${DEPENDENCY_DIR}/tiny_gltf/)
@@ -110,10 +112,9 @@ target_link_options(${PROJECT_NAME} PRIVATE -static)
 # compile shaders
 set(SHADER_DIR ${PROJECT_SOURCE_DIR}/shaders)
 set(COMPILED_SHADER_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders)
-set(GLSLC_EXE "C:/VulkanSDK/1.4.304.0/Bin/glslc.exe")
+set(GLSLC_EXE ${PROJECT_SOURCE_DIR}/dependencies/glslc/glslc.exe)
 
-# todo: fix debug flags
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(CMAKE_BUILD_TYPE MATCHES Debug)
     set(GEN_DEBUG_INFO_FLAG "-g")
 endif()
 
@@ -129,7 +130,7 @@ foreach (GLSL_FILE ${GLSL_FILES})
 
     add_custom_command(
             OUTPUT ${SPIRV_FILE}
-            COMMAND ${GLSLC_EXE} -g ${GLSL_FILE} -o ${SPIRV_FILE}
+            COMMAND ${GLSLC_EXE} ${GEN_DEBUG_INFO_FLAG} ${GLSL_FILE} -o ${SPIRV_FILE}
             DEPENDS ${GLSL_FILE}
             COMMENT "Compiling ${GLSL_FILE} to SPIR-V..."
             VERBATIM

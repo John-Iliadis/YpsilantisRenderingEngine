@@ -7,15 +7,19 @@
 
 #include "../utils/utils.hpp"
 #include "../utils/main_thread_task_queue.hpp"
+#include "../app/save_data.hpp"
 #include "../vk/vulkan_pipeline.hpp"
 #include "camera.hpp"
 #include "model_importer.hpp"
 #include "model.hpp"
 
+constexpr uint32_t InitialViewportWidth = 1000;
+constexpr uint32_t InitialViewportHeight = 700;
+
 class Renderer
 {
 public:
-    Renderer(const VulkanRenderDevice& renderDevice);
+    Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData);
     ~Renderer();
 
     void render();
@@ -56,6 +60,7 @@ private:
 
 private:
     const VulkanRenderDevice& mRenderDevice;
+    SaveData& mSaveData;
 
     uint32_t mWidth;
     uint32_t mHeight;

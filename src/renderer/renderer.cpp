@@ -4,36 +4,40 @@
 
 #include "renderer.hpp"
 
-Renderer::Renderer(const VulkanRenderDevice& renderDevice)
+Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     : mRenderDevice(renderDevice)
-    , mCamera({}, 30.f, 1920.f, 1080.f)
+    , mSaveData(saveData)
+    , mWidth(InitialViewportWidth)
+    , mHeight(InitialViewportHeight)
+    , mSamples(std::min(VK_SAMPLE_COUNT_8_BIT, getMaxSampleCount(renderDevice)))
     , mCameraUBO(renderDevice, sizeof(CameraRenderData), BufferType::Uniform, MemoryType::GPU)
 {
-//    mWidth = 1;
-//    mHeight = 1;
-//
-//    mSamples = std::min(VK_SAMPLE_COUNT_8_BIT, getMaxSampleCount(renderDevice));
-//
-//    createTextures();
-//    createClearRenderPass();
-//
-//    createPrepassRenderpass();
-//    createPrepassFramebuffer();
-//    createPrepassPipelineLayout();
-//    createPrepassPipeline();
-//
-//    createResolveRenderpass();
-//    createResolveFramebuffer();
-//
-//    createColorDepthRenderpass();
-//    createColorDepthFramebuffer();
-//
-//    createSsaoRenderpass();
-//    createSsaoFramebuffer();
-//
-//    createCameraDs();
-//    createDisplayTexturesDsLayout();
-//    createMaterialDsLayout();
+    if (saveData.contains("viewport"))
+    {
+        mWidth = saveData["viewport"]["width"];
+        mHeight = saveData["viewport"]["height"];
+    }
+
+    createTextures();
+    createClearRenderPass();
+
+    createPrepassRenderpass();
+    createPrepassFramebuffer();
+    createPrepassPipelineLayout();
+    createPrepassPipeline();
+
+    createResolveRenderpass();
+    createResolveFramebuffer();
+
+    createColorDepthRenderpass();
+    createColorDepthFramebuffer();
+
+    createSsaoRenderpass();
+    createSsaoFramebuffer();
+
+    createCameraDs();
+    createDisplayTexturesDsLayout();
+    createMaterialDsLayout();
 }
 
 Renderer::~Renderer()

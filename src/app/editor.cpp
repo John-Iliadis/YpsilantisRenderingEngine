@@ -4,8 +4,9 @@
 
 #include "editor.hpp"
 
-Editor::Editor(Renderer& renderer)
+Editor::Editor(Renderer& renderer, SaveData& saveData)
     : mRenderer(renderer)
+    , mSaveData(saveData)
     , mSelectedObjectID()
     , mShowViewport(true)
     , mShowAssetPanel(true)
@@ -20,7 +21,11 @@ Editor::Editor(Renderer& renderer)
 {
 }
 
-Editor::~Editor() = default;
+Editor::~Editor()
+{
+    mSaveData["viewport"]["width"] = static_cast<uint32_t>(mViewportSize.x);
+    mSaveData["viewport"]["height"] = static_cast<uint32_t>(mViewportSize.y);
+}
 
 void Editor::update(float dt)
 {
@@ -66,7 +71,10 @@ void Editor::mainMenuBar()
     {
         if (ImGui::BeginMenu("File"))
         {
-            if (ImGui::MenuItem("Import Model"))
+            if (ImGui::MenuItem("Import glTF"))
+                importModel();
+
+            if (ImGui::MenuItem("Import glb"))
                 importModel();
 
             ImGui::EndMenu();
@@ -388,27 +396,18 @@ void Editor::nodeTransform(GraphNode *node)
     }
 }
 
-// todo: fix immediately
 void Editor::viewPort()
 {
-    static int init = 2;
     static constexpr ImGuiWindowFlags windowFlags {
         ImGuiWindowFlags_NoDecoration |
         ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoTitleBar
     };
 
+    ImGui::SetNextWindowSize(ImVec2(InitialViewportWidth, InitialViewportHeight), ImGuiCond_FirstUseEver);
     ImGui::Begin("Viewport", &mShowViewport, windowFlags);
 
     mViewportSize = ImGui::GetContentRegionAvail();
-
-    if (init == 0)
-    {
-        mRenderer.resize(mViewportSize.x, mViewportSize.y);
-        init = -1;
-    }
-    else if (init > 0)
-        --init;
 
     mRenderer.mCamera.update(mDt);
 
@@ -725,7 +724,10 @@ void Editor::assetPanelPopup()
 
     if (ImGui::BeginPopup("assetPanelPopup"))
     {
-        if (ImGui::MenuItem("Import Model##assetPanel"))
+        if (ImGui::MenuItem("Import glTF##assetPanel"))
+            importModel();
+
+        if (ImGui::MenuItem("Import glb##assetPanel"))
             importModel();
 
         ImGui::Separator();

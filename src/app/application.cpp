@@ -8,13 +8,14 @@ static constexpr int sInitialWindowWidth = 1920;
 static constexpr int sInitialWindowHeight = 1080;
 
 Application::Application()
-    : mWindow(sInitialWindowWidth, sInitialWindowHeight)
+    : mSaveData()
+    , mWindow(sInitialWindowWidth, sInitialWindowHeight)
     , mInstance()
     , mRenderDevice(mInstance)
     , mSwapchain(mInstance, mRenderDevice)
     , mVulkanImGui(mWindow, mInstance, mRenderDevice, mSwapchain)
-    , mRenderer(mRenderDevice)
-    , mEditor(mRenderer)
+    , mRenderer(mRenderDevice, mSaveData)
+    , mEditor(mRenderer, mSaveData)
 {
 }
 

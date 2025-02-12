@@ -7,12 +7,13 @@
 
 #include "../window/window.hpp"
 #include "../renderer/renderer.hpp"
-#include "editor.hpp"
 #include "../vk/vulkan_instance.hpp"
 #include "../vk/vulkan_render_device.hpp"
 #include "../vk/vulkan_swapchain.hpp"
 #include "../vk/vulkan_imgui.hpp"
 #include "../utils/utils.hpp"
+#include "save_data.hpp"
+#include "editor.hpp"
 
 class Application
 {
@@ -29,6 +30,7 @@ private:
     void render();
 
 private:
+    SaveData mSaveData;
     Window mWindow;
     VulkanInstance mInstance;
     VulkanRenderDevice mRenderDevice;

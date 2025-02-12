@@ -24,7 +24,7 @@ enum class CopyFlags;
 class Editor
 {
 public:
-    Editor(Renderer& renderer);
+    Editor(Renderer& renderer, SaveData& saveData);
     ~Editor();
 
     void update(float dt);
@@ -82,6 +82,7 @@ private:
 
 private:
     Renderer& mRenderer;
+    SaveData& mSaveData;
     SceneGraph mSceneGraph;
 
     bool mShowViewport;
