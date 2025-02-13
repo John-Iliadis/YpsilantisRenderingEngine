@@ -34,6 +34,8 @@ public:
 private:
     void executeClearRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
+    void executeResolveRenderpass(VkCommandBuffer commandBuffer);
+    void setViewport(VkCommandBuffer commandBuffer);
     void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout);
 
     void createColorTextures();

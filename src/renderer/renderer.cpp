@@ -126,6 +126,7 @@ void Renderer::render()
 
     executeClearRenderpass(commandBuffer);
     executePrepass(commandBuffer);
+    executeResolveRenderpass(commandBuffer);
 
     endSingleTimeCommands(mRenderDevice, commandBuffer);
 }
@@ -236,6 +237,7 @@ void Renderer::executeClearRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Clear Renderpass");
+    setViewport(commandBuffer);
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(commandBuffer);
@@ -261,6 +263,7 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Prepass");
+    setViewport(commandBuffer);
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPrepassPipeline);
 
@@ -273,6 +276,63 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
+}
+
+void Renderer::executeResolveRenderpass(VkCommandBuffer commandBuffer)
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mResolveRenderpass,
+        .framebuffer = mResolveFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    beginDebugLabel(commandBuffer, "Resolve Renderpass");
+    setViewport(commandBuffer);
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mResolvePipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mResolvePipelineLayout,
+                            0, 1, &mMultisampledNormalDepthDs,
+                            0, nullptr);
+
+    vkCmdPushConstants(commandBuffer,
+                       mResolvePipelineLayout,
+                       VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(uint32_t),
+                       &mSamples);
+
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::setViewport(VkCommandBuffer commandBuffer)
+{
+    VkViewport viewport {
+        .x = 0,
+        .y = 0,
+        .width = static_cast<float>(mWidth),
+        .height = static_cast<float>(mHeight),
+        .minDepth = 0.f,
+        .maxDepth = 1.f
+    };
+
+    VkRect2D scissor {
+        .offset = {.x = 0, .y = 0},
+        .extent = {.width = mWidth, .height = mHeight}
+    };
+
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 }
 
 void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout)
@@ -331,6 +391,9 @@ void Renderer::createDepthTextures()
     mDepthTexture = VulkanTexture(mRenderDevice, specification);
     mDepthTexture.setDebugName("Renderer::mDepthTexture");
 
+    specification.format = VK_FORMAT_R32_SFLOAT;
+    specification.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    specification.imageAspect = VK_IMAGE_ASPECT_COLOR_BIT;
     specification.samples = VK_SAMPLE_COUNT_1_BIT;
     mResolvedDepthTexture = VulkanTexture(mRenderDevice, specification);
     mResolvedDepthTexture.setDebugName("Renderer::mResolvedDepthTexture");
@@ -922,14 +985,18 @@ void Renderer::createResolveRenderpass()
 
     VkAttachmentReference resolvedDepthAttachmentRef {
         .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    std::array<VkAttachmentReference, 2> colorAttachmentsRef {
+        resolvedNormalAttachmentRef,
+        resolvedDepthAttachmentRef
     };
 
     VkSubpassDescription subpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &resolvedNormalAttachmentRef,
-        .pDepthStencilAttachment = &resolvedDepthAttachmentRef
+        .colorAttachmentCount = static_cast<uint32_t>(colorAttachmentsRef.size()),
+        .pColorAttachments = colorAttachmentsRef.data(),
     };
 
     VkRenderPassCreateInfo renderPassCreateInfo {
@@ -1169,7 +1236,6 @@ void Renderer::createResolvePipelineLayout()
     setPipelineLayoutDebugName(mRenderDevice, mResolvePipelineLayout, "Renderer::mResolvePipelineLayout");
 }
 
-// todo: check if depth works
 void Renderer::createResolvePipeline()
 {
     VulkanShaderModule vertShaderModule(mRenderDevice, "shaders/fullscreen_render.vert.spv");
@@ -1219,8 +1285,7 @@ void Renderer::createResolvePipeline()
     VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable = VK_FALSE,
-        .depthWriteEnable = VK_TRUE,
-//        .depthCompareOp = VK_COMPARE_OP_ALWAYS,
+        .depthWriteEnable = VK_FALSE,
         .stencilTestEnable = VK_FALSE
     };
 
@@ -1232,11 +1297,16 @@ void Renderer::createResolvePipeline()
                           VK_COLOR_COMPONENT_A_BIT
     };
 
+    std::array<VkPipelineColorBlendAttachmentState, 2> colorBlendAttachments {
+        colorBlendAttachmentState,
+        colorBlendAttachmentState
+    };
+
     VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .logicOpEnable = VK_FALSE,
-        .attachmentCount = 1,
-        .pAttachments = &colorBlendAttachmentState
+        .attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size()),
+        .pAttachments = colorBlendAttachments.data()
     };
 
     std::array<VkDynamicState, 2> dynamicStates {
