@@ -30,9 +30,12 @@ public:
 
     void processMainThreadTasks();
     void releaseResources();
-    void updateCameraUBO();
 
 private:
+    void executeClearRenderpass(VkCommandBuffer commandBuffer);
+    void executePrepass(VkCommandBuffer commandBuffer);
+    void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout);
+
     void createColorTextures();
     void createDepthTextures();
     void createNormalTextures();
@@ -40,10 +43,12 @@ private:
     void createPostProcessTexture();
     void createTextures();
     void createCameraDs();
+    void updateCameraUBO();
     void createDisplayTexturesDsLayout();
     void createMaterialDsLayout();
 
     void createClearRenderPass();
+    void createClearFramebuffer();
 
     void createPrepassRenderpass();
     void createPrepassFramebuffer();
@@ -55,7 +60,9 @@ private:
     void createMultisampledNormalDepthDsLayout();
     void createResolvedNormalDepthDsLayout();
     void allocateMultisampledNormalDepthDs();
+    void allocateResolvedNormalDepthDs();
     void updateMultisampledNormalDepthDs();
+    void updateResolvedNormalDepthDs();
     void createResolvePipelineLayout();
     void createResolvePipeline();
 
@@ -120,6 +127,7 @@ private:
     VkRenderPass mPostProcessingRenderpass{};
 
     // framebuffers
+    VkFramebuffer mClearFramebuffer{};
     VkFramebuffer mPrepassFramebuffer{};
     VkFramebuffer mResolveFramebuffer{};
     VkFramebuffer mColorDepthFramebuffer{};
@@ -159,6 +167,7 @@ private:
     // descriptors
     VkDescriptorSet mCameraDs{};
     VkDescriptorSet mMultisampledNormalDepthDs{};
+    VkDescriptorSet mResolvedNormalDepthDs{};
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;

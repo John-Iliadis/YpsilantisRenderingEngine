@@ -79,7 +79,7 @@ public:
     void createTextureDescriptorSets(VkDescriptorSetLayout dsLayout);
     void createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout);
 
-    void render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout);
+    void render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout) const;
 
     Mesh& getMesh(uuid32_t meshID);
 

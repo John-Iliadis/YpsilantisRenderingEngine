@@ -26,6 +26,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createMaterialDsLayout();
 
     createClearRenderPass();
+    createClearFramebuffer();
 
     createPrepassRenderpass();
     createPrepassFramebuffer();
@@ -37,7 +38,9 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createMultisampledNormalDepthDsLayout();
     createResolvedNormalDepthDsLayout();
     allocateMultisampledNormalDepthDs();
+    allocateResolvedNormalDepthDs();
     updateMultisampledNormalDepthDs();
+    updateResolvedNormalDepthDs();
     createResolvePipelineLayout();
     createResolvePipeline();
 
@@ -88,6 +91,7 @@ Renderer::~Renderer()
     vkDestroyPipelineLayout(mRenderDevice.device, mShadingPipelineLayout, nullptr);
     vkDestroyPipelineLayout(mRenderDevice.device, mPostProcessingPipelineLayout, nullptr);
 
+    vkDestroyFramebuffer(mRenderDevice.device, mClearFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mResolveFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mColorDepthFramebuffer, nullptr);
@@ -117,6 +121,13 @@ Renderer::~Renderer()
 void Renderer::render()
 {
     updateCameraUBO();
+
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
+
+    executeClearRenderpass(commandBuffer);
+    executePrepass(commandBuffer);
+
+    endSingleTimeCommands(mRenderDevice, commandBuffer);
 }
 
 void Renderer::importModel(const std::filesystem::path &path)
@@ -149,12 +160,17 @@ void Renderer::resize(uint32_t width, uint32_t height)
     mCamera.resize(width, height);
 
     createTextures();
+
+    createClearFramebuffer();
     createPrepassFramebuffer();
     createResolveFramebuffer();
     createColorDepthFramebuffer();
     createSsaoFramebuffer();
     createShadingFramebuffer();
     createPostProcessingFramebuffer();
+
+    updateMultisampledNormalDepthDs();
+    updateResolvedNormalDepthDs();
 }
 
 void Renderer::processMainThreadTasks()
@@ -193,10 +209,76 @@ void Renderer::releaseResources()
     }
 }
 
-void Renderer::updateCameraUBO()
+void Renderer::executeClearRenderpass(VkCommandBuffer commandBuffer)
 {
-    CameraRenderData renderData(mCamera.renderData());
-    mCameraUBO.update(0, sizeof(CameraRenderData), &renderData);
+    static constexpr VkClearValue colorClear {.color = {0.2f, 0.2f, 0.2f, 1.f}};
+    static constexpr VkClearValue depthClear {.depthStencil = {.depth = 1.f, .stencil = 0}};
+    static constexpr VkClearValue normalClear {.color = {0.f, 0.f, 0.f, 0.f}};
+    static constexpr VkClearValue ssaoClear {.color = {0.f}};
+
+    static std::array<VkClearValue, 4> clearValues {
+        colorClear,
+        depthClear,
+        normalClear,
+        ssaoClear
+    };
+
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mClearRenderpass,
+        .framebuffer = mClearFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = static_cast<uint32_t>(clearValues.size()),
+        .pClearValues = clearValues.data()
+    };
+
+    beginDebugLabel(commandBuffer, "Clear Renderpass");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::executePrepass(VkCommandBuffer commandBuffer)
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mPrepassRenderpass,
+        .framebuffer = mPrepassFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    std::array<VkDescriptorSet, 1> descriptorSets {
+        mCameraDs
+    };
+
+    beginDebugLabel(commandBuffer, "Prepass");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPrepassPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mPrepassPipelineLayout,
+                            0, descriptorSets.size(), descriptorSets.data(),
+                            0, nullptr);
+
+    renderModels(commandBuffer, mPrepassPipelineLayout);
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout)
+{
+    for (const auto& [id, model] : mModels)
+        model->render(commandBuffer, pipelineLayout);
 }
 
 void Renderer::createColorTextures()
@@ -387,6 +469,12 @@ void Renderer::createCameraDs()
     vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
 }
 
+void Renderer::updateCameraUBO()
+{
+    CameraRenderData renderData(mCamera.renderData());
+    mCameraUBO.update(0, sizeof(CameraRenderData), &renderData);
+}
+
 void Renderer::createDisplayTexturesDsLayout()
 {
     VkDescriptorSetLayoutBinding dsLayoutBinding {
@@ -564,6 +652,32 @@ void Renderer::createClearRenderPass()
     setRenderpassDebugName(mRenderDevice, mClearRenderpass, "Renderer::mClearRenderPass");
 }
 
+void Renderer::createClearFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mClearFramebuffer, nullptr);
+
+    std::array<VkImageView, 4> imageViews {
+        mColorTexture.vulkanImage.imageView,
+        mDepthTexture.vulkanImage.imageView,
+        mNormalTexture.vulkanImage.imageView,
+        mSsaoTexture.vulkanImage.imageView
+    };
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mClearRenderpass,
+        .attachmentCount = static_cast<uint32_t>(imageViews.size()),
+        .pAttachments = imageViews.data(),
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mClearFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mClearFramebuffer, "Renderer::mClearFramebuffer");
+}
+
 void Renderer::createPrepassRenderpass()
 {
     VkAttachmentDescription normalAttachment {
@@ -623,10 +737,10 @@ void Renderer::createPrepassFramebuffer()
 {
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
 
-    std::array<VkImageView, 2> imageViews {{
+    std::array<VkImageView, 2> imageViews {
         mNormalTexture.vulkanImage.imageView,
         mDepthTexture.vulkanImage.imageView
-    }};
+    };
 
     VkFramebufferCreateInfo framebufferCreateInfo {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -645,10 +759,15 @@ void Renderer::createPrepassFramebuffer()
 
 void Renderer::createPrepassPipelineLayout()
 {
+    std::array<VkDescriptorSetLayout, 2> dsLayouts {
+        mCameraDsLayout,
+        mMaterialsDsLayout
+    };
+
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &mCameraDsLayout,
+        .setLayoutCount = static_cast<uint32_t>(dsLayouts.size()),
+        .pSetLayouts = dsLayouts.data(),
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = nullptr
     };
@@ -928,6 +1047,20 @@ void Renderer::allocateMultisampledNormalDepthDs()
     setDSDebugName(mRenderDevice, mMultisampledNormalDepthDs, "Renderer::mMultisampledNormalDepthDs");
 }
 
+void Renderer::allocateResolvedNormalDepthDs()
+{
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &mResolvedNormalDepthDsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mResolvedNormalDepthDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+    setDSDebugName(mRenderDevice, mResolvedNormalDepthDs, "Renderer::mResolvedNormalDepthDs");
+}
+
 void Renderer::updateMultisampledNormalDepthDs()
 {
     VkDescriptorImageInfo normalImageInfo {
@@ -955,6 +1088,48 @@ void Renderer::updateMultisampledNormalDepthDs()
     VkWriteDescriptorSet depthWriteDescriptorSet {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = mMultisampledNormalDepthDs,
+        .dstBinding = 1,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &depthImageInfo
+    };
+
+    std::array<VkWriteDescriptorSet, 2> descriptorWrites {
+        normalWriteDescriptorSet,
+        depthWriteDescriptorSet
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+}
+
+void Renderer::updateResolvedNormalDepthDs()
+{
+    VkDescriptorImageInfo normalImageInfo {
+        .sampler = mResolvedNormalTexture.vulkanSampler.sampler,
+        .imageView = mResolvedNormalTexture.vulkanImage.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet normalWriteDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mResolvedNormalDepthDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &normalImageInfo
+    };
+
+    VkDescriptorImageInfo depthImageInfo {
+        .sampler = mResolvedDepthTexture.vulkanSampler.sampler,
+        .imageView = mResolvedDepthTexture.vulkanImage.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet depthWriteDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mResolvedNormalDepthDs,
         .dstBinding = 1,
         .dstArrayElement = 0,
         .descriptorCount = 1,

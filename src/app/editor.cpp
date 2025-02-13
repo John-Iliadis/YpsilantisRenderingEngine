@@ -422,6 +422,8 @@ void Editor::viewPort()
 
     mRenderer.mCamera.update(mDt);
 
+    mRenderer.render();
+
     ImGui::Dummy(ImGui::GetContentRegionAvail());
     modelDragDropTarget();
 

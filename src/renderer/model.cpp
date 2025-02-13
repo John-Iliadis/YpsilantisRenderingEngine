@@ -90,7 +90,7 @@ void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
     setDSDebugName(*mRenderDevice, mMaterialsDS, name + " Materials DS");
 }
 
-void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout)
+void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout) const
 {
     vkCmdBindDescriptorSets(commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
