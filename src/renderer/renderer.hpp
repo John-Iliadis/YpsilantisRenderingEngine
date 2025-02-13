@@ -62,6 +62,14 @@ private:
     void createColorDepthRenderpass();
     void createColorDepthFramebuffer();
 
+    void createCubemapDsLayout();
+    void createSkyboxPipelineLayout();
+    void createSkyboxPipeline();
+
+    void createGridDsLayout();
+    void createGridPipelineLayout();
+    void createGridPipeline();
+
     void createSsaoRenderpass();
     void createSsaoFramebuffer();
 
@@ -114,14 +122,20 @@ private:
     // pipeline layouts
     VkPipelineLayout mPrepassPipelineLayout{};
     VkPipelineLayout mResolvePipelineLayout{};
+    VkPipelineLayout mSkyboxPipelineLayout{};
+    VkPipelineLayout mGridPipelineLayout{};
 
     // pipelines
     VkPipeline mPrepassPipeline{};
     VkPipeline mResolvePipeline{};
+    VkPipeline mSkyboxPipeline{};
+    VkPipeline mGridPipeline{};
 
     // descriptor set layouts
     VkDescriptorSetLayout mCameraDsLayout{};
     VkDescriptorSetLayout mResolveDsLayout{};
+    VkDescriptorSetLayout mCubemapDsLayout{};
+    VkDescriptorSetLayout mGridDsLayout{};
     VkDescriptorSetLayout mDisplayTexturesDSLayout{};
     VkDescriptorSetLayout mMaterialsDsLayout{};
 

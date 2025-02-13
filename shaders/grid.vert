@@ -3,7 +3,7 @@
 #include "camera_render_data.glsl"
 
 layout (location = 0) out vec2 vTexCoords;
-layout (location = 1) out vec3 vCameraPos;
+layout (location = 1) out vec2 vCameraPos;
 
 const vec4 positions[4] = vec4[4](
     vec4(-1.0, 0.0, -1.0, 1.0),
@@ -21,13 +21,11 @@ void main()
     int index = indices[gl_VertexIndex];
     vec4 position = positions[index];
 
-    mat4 inverseView = inverse(cameraRenderData.view);
+    vCameraPos = cameraRenderData.position.xz;
 
-    position.x = cameraRenderData.position.x;
-    position.y = cameraRenderData.position.y;
+    position.xz += vCameraPos.xy;
 
     vTexCoords = position.xz;
-    vCameraPos = cameraRenderData.position.xyz;
 
     gl_Position = cameraRenderData.viewProj * position;
 }

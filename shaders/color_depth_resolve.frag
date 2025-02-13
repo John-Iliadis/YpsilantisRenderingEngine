@@ -3,7 +3,6 @@
 layout (location = 0) in vec2 vTexCoords;
 
 layout (location = 0) out vec4 outNormal;
-layout (location = 1) out float outDepthValue;
 
 layout (push_constant) uniform PushConstants { uint sampleCount; };
 
@@ -17,5 +16,5 @@ void main()
     uint sampleIndex = (uint(gl_FragCoord.x) + uint(gl_FragCoord.y)) % sampleCount;
 
     outNormal = texelFetch(normalTexture, texelCoords, int(sampleIndex));
-    outDepthValue = texelFetch(depthTexture, texelCoords, int(sampleIndex)).r;
+    gl_FragDepth = texelFetch(depthTexture, texelCoords, int(sampleIndex)).r;
 }
