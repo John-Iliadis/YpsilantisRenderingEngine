@@ -398,16 +398,27 @@ void Editor::nodeTransform(GraphNode *node)
 
 void Editor::viewPort()
 {
-    static constexpr ImGuiWindowFlags windowFlags {
+    static constexpr ImVec2 sInitialViewportSize {
+        InitialViewportWidth,
+        InitialViewportHeight
+    };
+
+    static constexpr ImGuiWindowFlags sWindowFlags {
         ImGuiWindowFlags_NoDecoration |
         ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoTitleBar
     };
 
-    ImGui::SetNextWindowSize(ImVec2(InitialViewportWidth, InitialViewportHeight), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Viewport", &mShowViewport, windowFlags);
+    ImGui::SetNextWindowSize(sInitialViewportSize, ImGuiCond_FirstUseEver);
+    ImGui::Begin("Viewport", &mShowViewport, sWindowFlags);
 
-    mViewportSize = ImGui::GetContentRegionAvail();
+    ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+
+    if (mViewportSize != viewportSize && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+        mViewportSize = viewportSize;
+        mRenderer.resize(viewportSize.x, viewportSize.y);
+    }
 
     mRenderer.mCamera.update(mDt);
 

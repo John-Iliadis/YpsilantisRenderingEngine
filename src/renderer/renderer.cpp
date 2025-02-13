@@ -18,6 +18,8 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
         mHeight = saveData["viewport"]["height"];
     }
 
+    mCamera = Camera(glm::vec3(), 30.f, mWidth, mHeight);
+
     createTextures();
     createCameraDs();
     createDisplayTexturesDsLayout();
@@ -148,6 +150,11 @@ void Renderer::resize(uint32_t width, uint32_t height)
 
     createTextures();
     createPrepassFramebuffer();
+    createResolveFramebuffer();
+    createColorDepthFramebuffer();
+    createSsaoFramebuffer();
+    createShadingFramebuffer();
+    createPostProcessingFramebuffer();
 }
 
 void Renderer::processMainThreadTasks()
