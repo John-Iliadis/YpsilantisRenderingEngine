@@ -19,6 +19,10 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     }
 
     createTextures();
+    createCameraDs();
+    createDisplayTexturesDsLayout();
+    createMaterialDsLayout();
+
     createClearRenderPass();
 
     createPrepassRenderpass();
@@ -34,20 +38,29 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 
     createSsaoRenderpass();
     createSsaoFramebuffer();
-
-    createCameraDs();
-    createDisplayTexturesDsLayout();
-    createMaterialDsLayout();
 }
 
 Renderer::~Renderer()
 {
     vkDestroyPipeline(mRenderDevice.device, mPrepassPipeline, nullptr);
+
     vkDestroyPipelineLayout(mRenderDevice.device, mPrepassPipelineLayout, nullptr);
+
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mResolveFramebuffer, nullptr);
-    vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderPass, nullptr);
-    vkDestroyRenderPass(mRenderDevice.device, mResolveRenderPass, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mColorDepthFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mSsaoFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mShadingFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
+
+    vkDestroyRenderPass(mRenderDevice.device, mClearRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mResolveRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mColorDepthRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mSsaoRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mShadingRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
+
     vkDestroyDescriptorSetLayout(mRenderDevice.device, mCameraDsLayout, nullptr);
     vkDestroyDescriptorSetLayout(mRenderDevice.device, mDisplayTexturesDSLayout, nullptr);
     vkDestroyDescriptorSetLayout(mRenderDevice.device, mMaterialsDsLayout, nullptr);
@@ -275,12 +288,35 @@ void Renderer::createSsaoTexture()
     mSsaoTexture.setDebugName("Renderer::mSsaoTexture");
 }
 
+void Renderer::createPostProcessTexture()
+{
+    TextureSpecification specification {
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .width = mWidth,
+        .height = mHeight,
+        .layerCount = 1,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Nearest,
+        .minFilter = TextureMinFilter::Nearest,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .generateMipMaps = false
+    };
+
+    mPostProcessTexture = VulkanTexture(mRenderDevice, specification);
+    mPostProcessTexture.setDebugName("Renderer::mPostProcessTexture");
+}
+
 void Renderer::createTextures()
 {
     createColorTextures();
     createDepthTextures();
     createNormalTextures();
     createSsaoTexture();
+    createPostProcessTexture();
 }
 
 void Renderer::createClearRenderPass()
@@ -348,25 +384,40 @@ void Renderer::createClearRenderPass()
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
-    std::array<VkAttachmentReference, 3> colorAttachments {
+    std::array<VkAttachmentReference, 2> multisampledColorAttachments {
         colorAttachmentRef,
         normalAttachmentRef,
+    };
+
+    VkSubpassDescription multisampledClearSubpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = static_cast<uint32_t>(multisampledColorAttachments.size()),
+        .pColorAttachments = multisampledColorAttachments.data(),
+        .pDepthStencilAttachment = &depthAttachmentRed
+    };
+
+    std::array<VkAttachmentReference, 1> regularColorAttachments {
         ssaoAttachmentRef
     };
 
-    VkSubpassDescription subpass {
+    VkSubpassDescription regularClearSubpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size()),
-        .pColorAttachments = colorAttachments.data(),
-        .pDepthStencilAttachment = &depthAttachmentRed
+        .colorAttachmentCount = static_cast<uint32_t>(regularColorAttachments.size()),
+        .pColorAttachments = regularColorAttachments.data(),
+        .pDepthStencilAttachment = nullptr
+    };
+
+    std::array<VkSubpassDescription, 2> subpasses {
+        multisampledClearSubpass,
+        regularClearSubpass
     };
 
     VkRenderPassCreateInfo renderPassCreateInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = static_cast<uint32_t>(attachments.size()),
         .pAttachments = attachments.data(),
-        .subpassCount = 1,
-        .pSubpasses = &subpass,
+        .subpassCount = static_cast<uint32_t>(subpasses.size()),
+        .pSubpasses = subpasses.data(),
     };
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mClearRenderpass);
@@ -461,37 +512,37 @@ void Renderer::updateCameraUBO()
 
 void Renderer::createPrepassRenderpass()
 {
-    VkAttachmentDescription depthAttachment {
-        .format = mDepthTexture.vulkanImage.format,
-        .samples = mSamples,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
     VkAttachmentDescription normalAttachment {
         .format = mNormalTexture.vulkanImage.format,
         .samples = mSamples,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED ,
+        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentDescription depthAttachment {
+        .format = mDepthTexture.vulkanImage.format,
+        .samples = mSamples,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
     std::array<VkAttachmentDescription, 2> attachments {{
-        depthAttachment,
         normalAttachment,
+        depthAttachment,
     }};
 
-    VkAttachmentReference depthAttachmentRef {
+    VkAttachmentReference normalAttachmentRef {
         .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
-    VkAttachmentReference normalAttachmentRef {
+    VkAttachmentReference depthAttachmentRef {
         .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     };
 
     VkSubpassDescription subpass {
@@ -509,9 +560,9 @@ void Renderer::createPrepassRenderpass()
         .pSubpasses = &subpass,
     };
 
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mPrepassRenderPass);
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mPrepassRenderpass);
     vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mPrepassRenderPass, "Renderer::mPrepassRenderPass");
+    setRenderpassDebugName(mRenderDevice, mPrepassRenderpass, "Renderer::mPrepassRenderpass");
 }
 
 void Renderer::createPrepassFramebuffer()
@@ -519,13 +570,13 @@ void Renderer::createPrepassFramebuffer()
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
 
     std::array<VkImageView, 2> imageViews {{
-        mDepthTexture.vulkanImage.imageView,
         mNormalTexture.vulkanImage.imageView,
+        mDepthTexture.vulkanImage.imageView
     }};
 
     VkFramebufferCreateInfo framebufferCreateInfo {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mPrepassRenderPass,
+        .renderPass = mPrepassRenderpass,
         .attachmentCount = static_cast<uint32_t>(imageViews.size()),
         .pAttachments = imageViews.data(),
         .width = mWidth,
@@ -653,7 +704,7 @@ void Renderer::createPrepassPipeline()
         .pColorBlendState = &colorBlendStateCreateInfo,
         .pDynamicState = &dynamicStateCreateInfo,
         .layout = mPrepassPipelineLayout,
-        .renderPass = mPrepassRenderPass,
+        .renderPass = mPrepassRenderpass,
         .subpass = 0
     };
 
@@ -716,9 +767,9 @@ void Renderer::createResolveRenderpass()
         .pSubpasses = &subpass,
     };
 
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mResolveRenderPass);
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mResolveRenderpass);
     vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mPrepassRenderPass, "Renderer::mResolveRenderPass");
+    setRenderpassDebugName(mRenderDevice, mResolveRenderpass, "Renderer::mResolveRenderpass");
 }
 
 void Renderer::createResolveFramebuffer()
@@ -732,7 +783,7 @@ void Renderer::createResolveFramebuffer()
 
     VkFramebufferCreateInfo framebufferCreateInfo {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mResolveRenderPass,
+        .renderPass = mResolveRenderpass,
         .attachmentCount = static_cast<uint32_t>(imageViews.size()),
         .pAttachments = imageViews.data(),
         .width = mWidth,
@@ -752,7 +803,7 @@ void Renderer::createColorDepthRenderpass()
         .samples = mSamples,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
@@ -760,8 +811,8 @@ void Renderer::createColorDepthRenderpass()
         .format = mDepthTexture.vulkanImage.format,
         .samples = mSamples,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_NONE,
-        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     };
 
@@ -797,7 +848,7 @@ void Renderer::createColorDepthRenderpass()
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mColorDepthRenderpass);
     vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mColorDepthRenderpass, "Renderer::mSkyboxRenderpass");
+    setRenderpassDebugName(mRenderDevice, mColorDepthRenderpass, "Renderer::mColorDepthRenderpass");
 }
 
 void Renderer::createColorDepthFramebuffer()
@@ -865,7 +916,7 @@ void Renderer::createSsaoFramebuffer()
 
     VkFramebufferCreateInfo framebufferCreateInfo {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mColorDepthRenderpass,
+        .renderPass = mSsaoRenderpass,
         .attachmentCount = 1,
         .pAttachments = &mSsaoTexture.vulkanImage.imageView,
         .width = mWidth,
@@ -876,4 +927,154 @@ void Renderer::createSsaoFramebuffer()
     VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mSsaoFramebuffer);
     vulkanCheck(result, "Failed to create framebuffer.");
     setFramebufferDebugName(mRenderDevice, mSsaoFramebuffer, "Renderer::mSsaoFramebuffer");
+}
+
+void Renderer::createShadingRenderpass()
+{
+    VkAttachmentDescription colorAttachment {
+        .format = mColorTexture.vulkanImage.format,
+        .samples = mSamples,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentDescription depthAttachment {
+        .format = mDepthTexture.vulkanImage.format,
+        .samples = mSamples,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentDescription resolvedColorAttachment {
+        .format = mResolvedColorTexture.vulkanImage.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    std::array<VkAttachmentDescription, 3> attachments {
+        colorAttachment,
+        depthAttachment,
+        resolvedColorAttachment
+    };
+
+    VkAttachmentReference colorAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentReference depthAttachmentRef {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentReference resolvedColorAttachmentRef {
+        .attachment = 2,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef,
+        .pResolveAttachments = &resolvedColorAttachmentRef,
+        .pDepthStencilAttachment = &depthAttachmentRef,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mShadingRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mShadingRenderpass, "Renderer::mShadingRenderpass");
+}
+
+void Renderer::createShadingFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mShadingFramebuffer, nullptr);
+
+    std::array<VkImageView, 3> attachments {
+        mColorTexture.vulkanImage.imageView,
+        mDepthTexture.vulkanImage.imageView,
+        mResolvedColorTexture.vulkanImage.imageView
+    };
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mShadingRenderpass,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mShadingFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mShadingFramebuffer, "Renderer::mShadingFramebuffer");
+}
+
+void Renderer::createPostProcessingRenderpass()
+{
+    VkAttachmentDescription colorAttachment {
+        .format = mPostProcessTexture.vulkanImage.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference colorAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &colorAttachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mPostProcessingRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mPostProcessingRenderpass, "Renderer::mPostProcessingRenderpass");
+}
+
+void Renderer::createPostProcessingFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mPostProcessingRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &mPostProcessTexture.vulkanImage.imageView,
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mPostProcessingFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mPostProcessingFramebuffer, "Renderer::mPostProcessingFramebuffer");
 }

@@ -176,7 +176,7 @@ std::array<VkVertexInputAttributeDescription, 13> InstancedMesh::attributeDescri
     }
 
     // PerInstanceData::id
-    attributeDescriptions.at(12).location = 13;
+    attributeDescriptions.at(12).location = 12;
     attributeDescriptions.at(12).binding = 1;
     attributeDescriptions.at(12).format = VK_FORMAT_R32_UINT;
     attributeDescriptions.at(12).offset = offsetof(InstanceData, id);

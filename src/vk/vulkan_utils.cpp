@@ -110,9 +110,13 @@ void endSingleTimeCommands(const VulkanRenderDevice& renderDevice, VkCommandBuff
         .pCommandBuffers = &commandBuffer,
     };
 
-    VkResult result = vkQueueSubmit(renderDevice.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    VkFence fence = createFence(renderDevice);
+
+    VkResult result = vkQueueSubmit(renderDevice.graphicsQueue, 1, &submitInfo, fence);
     vulkanCheck(result, "Failed queue submit.");
-    vkQueueWaitIdle(renderDevice.graphicsQueue);
+
+    vkWaitForFences(renderDevice.device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(renderDevice.device, fence, nullptr);
 
     vkFreeCommandBuffers(renderDevice.device, renderDevice.commandPool, 1, &commandBuffer);
 }

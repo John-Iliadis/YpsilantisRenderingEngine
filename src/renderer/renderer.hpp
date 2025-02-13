@@ -37,7 +37,13 @@ private:
     void createDepthTextures();
     void createNormalTextures();
     void createSsaoTexture();
+    void createPostProcessTexture();
     void createTextures();
+
+    void createCameraDs();
+    void createDisplayTexturesDsLayout();
+    void createMaterialDsLayout();
+
     void createClearRenderPass();
 
     void createPrepassRenderpass();
@@ -47,6 +53,7 @@ private:
 
     void createResolveRenderpass();
     void createResolveFramebuffer();
+    void createResolvePipeline
 
     void createColorDepthRenderpass();
     void createColorDepthFramebuffer();
@@ -54,9 +61,11 @@ private:
     void createSsaoRenderpass();
     void createSsaoFramebuffer();
 
-    void createCameraDs();
-    void createDisplayTexturesDsLayout();
-    void createMaterialDsLayout();
+    void createShadingRenderpass();
+    void createShadingFramebuffer();
+
+    void createPostProcessingRenderpass();
+    void createPostProcessingFramebuffer();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
@@ -79,22 +88,26 @@ private:
     VulkanTexture mResolvedDepthTexture;
     VulkanTexture mNormalTexture;
     VulkanTexture mResolvedNormalTexture;
-
+    VulkanTexture mPostProcessTexture;
     VulkanTexture mSkybox;
     VulkanTexture mSsaoTexture;
 
     // render passes
     VkRenderPass mClearRenderpass{};
-    VkRenderPass mPrepassRenderPass{};
-    VkRenderPass mResolveRenderPass{};
+    VkRenderPass mPrepassRenderpass{};
+    VkRenderPass mResolveRenderpass{};
     VkRenderPass mColorDepthRenderpass{};
     VkRenderPass mSsaoRenderpass{};
+    VkRenderPass mShadingRenderpass{};
+    VkRenderPass mPostProcessingRenderpass{};
 
     // framebuffers
     VkFramebuffer mPrepassFramebuffer{};
     VkFramebuffer mResolveFramebuffer{};
     VkFramebuffer mColorDepthFramebuffer{};
     VkFramebuffer mSsaoFramebuffer{};
+    VkFramebuffer mShadingFramebuffer{};
+    VkFramebuffer mPostProcessingFramebuffer{};
 
     // pipeline layouts
     VkPipelineLayout mPrepassPipelineLayout{};
