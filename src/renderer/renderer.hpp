@@ -39,7 +39,6 @@ private:
     void createSsaoTexture();
     void createPostProcessTexture();
     void createTextures();
-
     void createCameraDs();
     void createDisplayTexturesDsLayout();
     void createMaterialDsLayout();
@@ -53,9 +52,10 @@ private:
 
     void createResolveRenderpass();
     void createResolveFramebuffer();
-    void createResolveDsLayout();
-    void allocateResolveDs();
-    void updateResolveDs();
+    void createMultisampledNormalDepthDsLayout();
+    void createResolvedNormalDepthDsLayout();
+    void allocateMultisampledNormalDepthDs();
+    void updateMultisampledNormalDepthDs();
     void createResolvePipelineLayout();
     void createResolvePipeline();
 
@@ -72,12 +72,20 @@ private:
 
     void createSsaoRenderpass();
     void createSsaoFramebuffer();
+    void createSsaoPipelineLayout();
+    void createSsaoPipeline();
+    void createSsaoDsLayout();
 
     void createShadingRenderpass();
     void createShadingFramebuffer();
+    void createShadingPipelineLayout();
+    void createShadingPipeline();
+    void createResolvedColorDsLayout();
 
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
+    void createPostProcessingPipelineLayout();
+    void createPostProcessingPipeline();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
@@ -124,24 +132,33 @@ private:
     VkPipelineLayout mResolvePipelineLayout{};
     VkPipelineLayout mSkyboxPipelineLayout{};
     VkPipelineLayout mGridPipelineLayout{};
+    VkPipelineLayout mSsaoPipelineLayout{};
+    VkPipelineLayout mShadingPipelineLayout{};
+    VkPipelineLayout mPostProcessingPipelineLayout{};
 
     // pipelines
     VkPipeline mPrepassPipeline{};
     VkPipeline mResolvePipeline{};
     VkPipeline mSkyboxPipeline{};
     VkPipeline mGridPipeline{};
+    VkPipeline mSsaoPipeline{};
+    VkPipeline mShadingPipeline{};
+    VkPipeline mPostProcessPipeline{};
 
     // descriptor set layouts
     VkDescriptorSetLayout mCameraDsLayout{};
-    VkDescriptorSetLayout mResolveDsLayout{};
+    VkDescriptorSetLayout mMultisampledNormalDepthDsLayout{};
+    VkDescriptorSetLayout mResolvedNormalDepthDsLayout{};
+    VkDescriptorSetLayout mResolvedColorDsLayout{};
     VkDescriptorSetLayout mCubemapDsLayout{};
     VkDescriptorSetLayout mGridDsLayout{};
+    VkDescriptorSetLayout mSsaoDsLayout{};
     VkDescriptorSetLayout mDisplayTexturesDSLayout{};
     VkDescriptorSetLayout mMaterialsDsLayout{};
 
     // descriptors
     VkDescriptorSet mCameraDs{};
-    VkDescriptorSet mResolveDs{};
+    VkDescriptorSet mMultisampledNormalDepthDs{};
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
