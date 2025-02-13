@@ -32,12 +32,23 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 
     createResolveRenderpass();
     createResolveFramebuffer();
+    createResolveDsLayout();
+    allocateResolveDs();
+    updateResolveDs();
+    createResolvePipelineLayout();
+    createResolvePipeline();
 
     createColorDepthRenderpass();
     createColorDepthFramebuffer();
 
     createSsaoRenderpass();
     createSsaoFramebuffer();
+
+    createShadingRenderpass();
+    createShadingFramebuffer();
+
+    createPostProcessingRenderpass();
+    createPostProcessingFramebuffer();
 }
 
 Renderer::~Renderer()
@@ -62,6 +73,7 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
 
     vkDestroyDescriptorSetLayout(mRenderDevice.device, mCameraDsLayout, nullptr);
+    vkDestroyDescriptorSetLayout(mRenderDevice.device, mResolveDsLayout, nullptr);
     vkDestroyDescriptorSetLayout(mRenderDevice.device, mDisplayTexturesDSLayout, nullptr);
     vkDestroyDescriptorSetLayout(mRenderDevice.device, mMaterialsDsLayout, nullptr);
 }
@@ -796,6 +808,137 @@ void Renderer::createResolveFramebuffer()
     setFramebufferDebugName(mRenderDevice, mResolveFramebuffer, "Renderer::mResolveFramebuffer");
 }
 
+void Renderer::createResolvePipelineLayout()
+{
+    VkPushConstantRange pushConstantRange {
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .offset = 0,
+        .size = sizeof(uint32_t)
+    };
+
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &mResolveDsLayout,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pushConstantRange
+    };
+
+    VkResult result = vkCreatePipelineLayout(mRenderDevice.device,
+                                             &pipelineLayoutCreateInfo,
+                                             nullptr,
+                                             &mResolvePipelineLayout);
+    vulkanCheck(result, "Failed to create pipeline layout.");
+    setPipelineLayoutDebugName(mRenderDevice, mResolvePipelineLayout, "Renderer::mResolvePipelineLayout");
+}
+
+void Renderer::createResolvePipeline()
+{
+    VulkanShaderModule vertShaderModule(mRenderDevice, "shaders/fullscreen_render.vert.spv");
+    VulkanShaderModule fragShaderModule(mRenderDevice, "shaders/color_depth_resolve.frag.spv");
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages {
+        shaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertShaderModule),
+        shaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderModule)
+    };
+
+    VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = 0,
+        .pVertexBindingDescriptions = nullptr,
+        .vertexAttributeDescriptionCount = 0,
+        .pVertexAttributeDescriptions = nullptr,
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .primitiveRestartEnable = VK_FALSE
+    };
+
+    VkPipelineTessellationStateCreateInfo tessellationStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO
+    };
+
+    VkPipelineViewportStateCreateInfo viewportStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .scissorCount = 1
+    };
+
+    VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = VK_CULL_MODE_FRONT_BIT,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+        .lineWidth = 1.f
+    };
+
+    VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
+    };
+
+    VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_FALSE,
+        .depthWriteEnable = VK_FALSE,
+        .stencilTestEnable = VK_FALSE
+    };
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachmentState {
+        .blendEnable = VK_FALSE,
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                          VK_COLOR_COMPONENT_G_BIT |
+                          VK_COLOR_COMPONENT_B_BIT |
+                          VK_COLOR_COMPONENT_A_BIT
+    };
+
+    VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .logicOpEnable = VK_FALSE,
+        .attachmentCount = 1,
+        .pAttachments = &colorBlendAttachmentState
+    };
+
+    std::array<VkDynamicState, 2> dynamicStates {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+        .pDynamicStates = dynamicStates.data()
+    };
+
+    VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = static_cast<uint32_t >(shaderStages.size()),
+        .pStages = shaderStages.data(),
+        .pVertexInputState = &vertexInputStateCreateInfo,
+        .pInputAssemblyState = &inputAssemblyStateCreateInfo,
+        .pTessellationState = &tessellationStateCreateInfo,
+        .pViewportState = &viewportStateCreateInfo,
+        .pRasterizationState = &rasterizationStateCreateInfo,
+        .pMultisampleState = &multisampleStateCreateInfo,
+        .pDepthStencilState = &depthStencilStateCreateInfo,
+        .pColorBlendState = &colorBlendStateCreateInfo,
+        .pDynamicState = &dynamicStateCreateInfo,
+        .layout = mResolvePipelineLayout,
+        .renderPass = mResolveRenderpass,
+        .subpass = 0
+    };
+
+    VkResult result = vkCreateGraphicsPipelines(mRenderDevice.device,
+                                                VK_NULL_HANDLE,
+                                                1, &graphicsPipelineCreateInfo,
+                                                nullptr,
+                                                &mResolvePipeline);
+    vulkanCheck(result, "Failed to create pipeline.");
+    setPipelineDebugName(mRenderDevice, mResolvePipeline, "Renderer::mResolvePipeline");
+}
+
 void Renderer::createColorDepthRenderpass()
 {
     VkAttachmentDescription colorAttachment {
@@ -1077,4 +1220,92 @@ void Renderer::createPostProcessingFramebuffer()
     VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mPostProcessingFramebuffer);
     vulkanCheck(result, "Failed to create framebuffer.");
     setFramebufferDebugName(mRenderDevice, mPostProcessingFramebuffer, "Renderer::mPostProcessingFramebuffer");
+}
+
+void Renderer::createResolveDsLayout()
+{
+    VkDescriptorSetLayoutBinding normalTexBinding {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    VkDescriptorSetLayoutBinding depthTexBinding {
+        .binding = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings {
+        normalTexBinding,
+        depthTexBinding
+    };
+
+    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<uint32_t>(bindings.size()),
+        .pBindings = bindings.data()
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device, &dsLayoutCreateInfo, nullptr, &mResolveDsLayout);
+    vulkanCheck(result, "Failed to create descriptor set layout");
+    setDsLayoutDebugName(mRenderDevice, mResolveDsLayout, "Renderer::mResolveDsLayout");
+}
+
+void Renderer::allocateResolveDs()
+{
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &mResolveDsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mResolveDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+    setDSDebugName(mRenderDevice, mResolveDs, "Renderer::mResolveDs");
+}
+
+void Renderer::updateResolveDs()
+{
+    VkDescriptorImageInfo normalImageInfo {
+        .sampler = VK_NULL_HANDLE,
+        .imageView = mNormalTexture.vulkanImage.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet normalWriteDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mResolveDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .pImageInfo = &normalImageInfo
+    };
+
+    VkDescriptorImageInfo depthImageInfo {
+        .sampler = VK_NULL_HANDLE,
+        .imageView = mDepthTexture.vulkanImage.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet depthWriteDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mResolveDs,
+        .dstBinding = 1,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .pImageInfo = &depthImageInfo
+    };
+
+    std::array<VkWriteDescriptorSet, 2> descriptorWrites {
+        normalWriteDescriptorSet,
+        depthWriteDescriptorSet
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 }

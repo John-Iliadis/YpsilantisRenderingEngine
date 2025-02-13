@@ -53,7 +53,11 @@ private:
 
     void createResolveRenderpass();
     void createResolveFramebuffer();
-    void createResolvePipeline
+    void createResolveDsLayout();
+    void allocateResolveDs();
+    void updateResolveDs();
+    void createResolvePipelineLayout();
+    void createResolvePipeline();
 
     void createColorDepthRenderpass();
     void createColorDepthFramebuffer();
@@ -78,8 +82,6 @@ private:
     // camera
     Camera mCamera;
     VulkanBuffer mCameraUBO;
-    VkDescriptorSetLayout mCameraDsLayout{};
-    VkDescriptorSet mCameraDs{};
 
     // textures
     VulkanTexture mColorTexture;
@@ -111,13 +113,21 @@ private:
 
     // pipeline layouts
     VkPipelineLayout mPrepassPipelineLayout{};
+    VkPipelineLayout mResolvePipelineLayout{};
 
     // pipelines
     VkPipeline mPrepassPipeline{};
+    VkPipeline mResolvePipeline{};
 
     // descriptor set layouts
+    VkDescriptorSetLayout mCameraDsLayout{};
+    VkDescriptorSetLayout mResolveDsLayout{};
     VkDescriptorSetLayout mDisplayTexturesDSLayout{};
     VkDescriptorSetLayout mMaterialsDsLayout{};
+
+    // descriptors
+    VkDescriptorSet mCameraDs{};
+    VkDescriptorSet mResolveDs{};
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
