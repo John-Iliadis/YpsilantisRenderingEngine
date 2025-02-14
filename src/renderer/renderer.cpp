@@ -60,12 +60,16 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createSsaoPipelineLayout();
     createSsaoPipeline();
     createSsaoDsLayout();
+    allocateSsaoDs();
+    updateSsaoDs();
 
     createShadingRenderpass();
     createShadingFramebuffer();
     createShadingPipelineLayout();
     createShadingPipeline();
     createResolvedColorDsLayout();
+    allocateResolvedColorDs();
+    updateResolveColorDs();
 
     createPostProcessingRenderpass();
     createPostProcessingFramebuffer();
@@ -81,7 +85,7 @@ Renderer::~Renderer()
     vkDestroyPipeline(mRenderDevice.device, mGridPipeline, nullptr);
     vkDestroyPipeline(mRenderDevice.device, mSsaoPipeline, nullptr);
     vkDestroyPipeline(mRenderDevice.device, mShadingPipeline, nullptr);
-    vkDestroyPipeline(mRenderDevice.device, mPostProcessPipeline, nullptr);
+    vkDestroyPipeline(mRenderDevice.device, mPostProcessingPipeline, nullptr);
 
     vkDestroyPipelineLayout(mRenderDevice.device, mPrepassPipelineLayout, nullptr);
     vkDestroyPipelineLayout(mRenderDevice.device, mResolvePipelineLayout, nullptr);
@@ -124,9 +128,14 @@ void Renderer::render()
 
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
 
+    setViewport(commandBuffer);
+
     executeClearRenderpass(commandBuffer);
     executePrepass(commandBuffer);
     executeResolveRenderpass(commandBuffer);
+    executeSsaoRenderpass(commandBuffer);
+    executeShadingRenderpass(commandBuffer);
+    executePostProcessingRenderpass(commandBuffer);
 
     endSingleTimeCommands(mRenderDevice, commandBuffer);
 }
@@ -172,6 +181,8 @@ void Renderer::resize(uint32_t width, uint32_t height)
 
     updateMultisampledNormalDepthDs();
     updateResolvedNormalDepthDs();
+    updateSsaoDs();
+    updateResolveColorDs();
 }
 
 void Renderer::processMainThreadTasks()
@@ -215,13 +226,11 @@ void Renderer::executeClearRenderpass(VkCommandBuffer commandBuffer)
     static constexpr VkClearValue colorClear {.color = {0.2f, 0.2f, 0.2f, 1.f}};
     static constexpr VkClearValue depthClear {.depthStencil = {.depth = 1.f, .stencil = 0}};
     static constexpr VkClearValue normalClear {.color = {0.f, 0.f, 0.f, 0.f}};
-    static constexpr VkClearValue ssaoClear {.color = {0.f}};
 
-    static std::array<VkClearValue, 4> clearValues {
+    static std::array<VkClearValue, 3> clearValues {
         colorClear,
         depthClear,
-        normalClear,
-        ssaoClear
+        normalClear
     };
 
     VkRenderPassBeginInfo renderPassBeginInfo {
@@ -237,9 +246,7 @@ void Renderer::executeClearRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Clear Renderpass");
-    setViewport(commandBuffer);
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
 }
@@ -263,7 +270,6 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Prepass");
-    setViewport(commandBuffer);
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPrepassPipeline);
 
@@ -293,7 +299,6 @@ void Renderer::executeResolveRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Resolve Renderpass");
-    setViewport(commandBuffer);
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mResolvePipeline);
 
@@ -308,6 +313,108 @@ void Renderer::executeResolveRenderpass(VkCommandBuffer commandBuffer)
                        VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(uint32_t),
                        &mSamples);
+
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
+{
+    VkClearValue ssaoClear {.color = {0.f}};
+
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mSsaoRenderpass,
+        .framebuffer = mSsaoFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = 1,
+        .pClearValues = &ssaoClear
+    };
+
+    std::array<VkDescriptorSet, 2> descriptorSets {
+        mCameraDs,
+        mResolvedNormalDepthDs
+    };
+
+    beginDebugLabel(commandBuffer, "SSAO Renderpass");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSsaoPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mSsaoPipelineLayout,
+                            0, descriptorSets.size(), descriptorSets.data(),
+                            0, nullptr);
+
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mShadingRenderpass,
+        .framebuffer = mShadingFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    std::array<VkDescriptorSet, 2> descriptorSets {
+        mCameraDs,
+        mSsaoDs
+    };
+
+    beginDebugLabel(commandBuffer, "Shading Renderpass");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadingPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mShadingPipelineLayout,
+                            0, descriptorSets.size(), descriptorSets.data(),
+                            0, nullptr);
+
+    renderModels(commandBuffer, mShadingPipelineLayout);
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mPostProcessingRenderpass,
+        .framebuffer = mPostProcessingFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    beginDebugLabel(commandBuffer, "Post Processing Renderpass");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPostProcessingPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mPostProcessingPipelineLayout,
+                            0, 1, &mResolvedColorDs,
+                            0, nullptr);
 
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
@@ -638,20 +745,10 @@ void Renderer::createClearRenderPass()
         .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
-    VkAttachmentDescription ssaoAttachment {
-        .format = mSsaoTexture.vulkanImage.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    std::array<VkAttachmentDescription, 4> attachments {
+    std::array<VkAttachmentDescription, 3> attachments {
         colorAttachment,
         depthAttachment,
-        normalAttachment,
-        ssaoAttachment
+        normalAttachment
     };
 
     VkAttachmentReference colorAttachmentRef {
@@ -669,11 +766,6 @@ void Renderer::createClearRenderPass()
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
-    VkAttachmentReference ssaoAttachmentRef {
-        .attachment = 3,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
     std::array<VkAttachmentReference, 2> multisampledColorAttachments {
         colorAttachmentRef,
         normalAttachmentRef,
@@ -686,28 +778,12 @@ void Renderer::createClearRenderPass()
         .pDepthStencilAttachment = &depthAttachmentRed
     };
 
-    std::array<VkAttachmentReference, 1> regularColorAttachments {
-        ssaoAttachmentRef
-    };
-
-    VkSubpassDescription regularClearSubpass {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = static_cast<uint32_t>(regularColorAttachments.size()),
-        .pColorAttachments = regularColorAttachments.data(),
-        .pDepthStencilAttachment = nullptr
-    };
-
-    std::array<VkSubpassDescription, 2> subpasses {
-        multisampledClearSubpass,
-        regularClearSubpass
-    };
-
     VkRenderPassCreateInfo renderPassCreateInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = static_cast<uint32_t>(attachments.size()),
         .pAttachments = attachments.data(),
-        .subpassCount = static_cast<uint32_t>(subpasses.size()),
-        .pSubpasses = subpasses.data(),
+        .subpassCount = 1,
+        .pSubpasses = &multisampledClearSubpass
     };
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mClearRenderpass);
@@ -719,11 +795,10 @@ void Renderer::createClearFramebuffer()
 {
     vkDestroyFramebuffer(mRenderDevice.device, mClearFramebuffer, nullptr);
 
-    std::array<VkImageView, 4> imageViews {
+    std::array<VkImageView, 3> imageViews {
         mColorTexture.vulkanImage.imageView,
         mDepthTexture.vulkanImage.imageView,
         mNormalTexture.vulkanImage.imageView,
-        mSsaoTexture.vulkanImage.imageView
     };
 
     VkFramebufferCreateInfo framebufferCreateInfo {
@@ -1739,9 +1814,9 @@ void Renderer::createSsaoRenderpass()
     VkAttachmentDescription ssaoAttachment {
         .format = mSsaoTexture.vulkanImage.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
@@ -1937,6 +2012,41 @@ void Renderer::createSsaoDsLayout()
     setDsLayoutDebugName(mRenderDevice, mSsaoDsLayout, "Renderer::mSsaoDsLayout");
 }
 
+void Renderer::allocateSsaoDs()
+{
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &mSsaoDsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mSsaoDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+    setDSDebugName(mRenderDevice, mSsaoDs, "Renderer::mSsaoDs");
+}
+
+void Renderer::updateSsaoDs()
+{
+    VkDescriptorImageInfo ssaoImageInfo {
+        .sampler = mSsaoTexture.vulkanSampler.sampler,
+        .imageView = mSsaoTexture.vulkanImage.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet ssaoWriteDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mSsaoDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &ssaoImageInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &ssaoWriteDescriptorSet, 0, nullptr);
+}
+
 void Renderer::createShadingRenderpass()
 {
     VkAttachmentDescription colorAttachment {
@@ -1953,7 +2063,7 @@ void Renderer::createShadingRenderpass()
         .samples = mSamples,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     };
 
@@ -2193,6 +2303,41 @@ void Renderer::createResolvedColorDsLayout()
     setDsLayoutDebugName(mRenderDevice, mResolvedColorDsLayout, "Renderer::mResolvedColorDsLayout");
 }
 
+void Renderer::allocateResolvedColorDs()
+{
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &mResolvedColorDsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mResolvedColorDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+    setDSDebugName(mRenderDevice, mResolvedColorDs, "Renderer::mResolvedColorDs");
+}
+
+void Renderer::updateResolveColorDs()
+{
+    VkDescriptorImageInfo resolvedColorImageInfo {
+        .sampler = mResolvedColorTexture.vulkanSampler.sampler,
+        .imageView = mResolvedColorTexture.vulkanImage.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet resolvedColorWriteDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mResolvedColorDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &resolvedColorImageInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &resolvedColorWriteDescriptorSet, 0, nullptr);
+}
+
 void Renderer::createPostProcessingRenderpass()
 {
     VkAttachmentDescription colorAttachment {
@@ -2366,7 +2511,7 @@ void Renderer::createPostProcessingPipeline()
                                                 VK_NULL_HANDLE,
                                                 1, &graphicsPipelineCreateInfo,
                                                 nullptr,
-                                                &mPostProcessPipeline);
+                                                &mPostProcessingPipeline);
     vulkanCheck(result, "Failed to create pipeline.");
-    setPipelineDebugName(mRenderDevice, mPostProcessPipeline, "Renderer::mPostProcessPipeline");
+    setPipelineDebugName(mRenderDevice, mPostProcessingPipeline, "Renderer::mPostProcessingPipeline");
 }

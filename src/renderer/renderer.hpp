@@ -35,6 +35,9 @@ private:
     void executeClearRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
     void executeResolveRenderpass(VkCommandBuffer commandBuffer);
+    void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
+    void executeShadingRenderpass(VkCommandBuffer commandBuffer);
+    void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
     void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout);
 
@@ -84,12 +87,16 @@ private:
     void createSsaoPipelineLayout();
     void createSsaoPipeline();
     void createSsaoDsLayout();
+    void allocateSsaoDs();
+    void updateSsaoDs();
 
     void createShadingRenderpass();
     void createShadingFramebuffer();
     void createShadingPipelineLayout();
     void createShadingPipeline();
     void createResolvedColorDsLayout();
+    void allocateResolvedColorDs();
+    void updateResolveColorDs();
 
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
@@ -153,7 +160,7 @@ private:
     VkPipeline mGridPipeline{};
     VkPipeline mSsaoPipeline{};
     VkPipeline mShadingPipeline{};
-    VkPipeline mPostProcessPipeline{};
+    VkPipeline mPostProcessingPipeline{};
 
     // descriptor set layouts
     VkDescriptorSetLayout mCameraDsLayout{};
@@ -166,10 +173,12 @@ private:
     VkDescriptorSetLayout mDisplayTexturesDSLayout{};
     VkDescriptorSetLayout mMaterialsDsLayout{};
 
-    // descriptors
+    // descriptor sets
     VkDescriptorSet mCameraDs{};
     VkDescriptorSet mMultisampledNormalDepthDs{};
     VkDescriptorSet mResolvedNormalDepthDs{};
+    VkDescriptorSet mSsaoDs{};
+    VkDescriptorSet mResolvedColorDs{};
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
