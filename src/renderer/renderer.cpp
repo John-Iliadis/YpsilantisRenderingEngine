@@ -37,10 +37,8 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createResolveFramebuffer();
     createMultisampledNormalDepthDsLayout();
     createResolvedNormalDepthDsLayout();
-    allocateMultisampledNormalDepthDs();
-    allocateResolvedNormalDepthDs();
-    updateMultisampledNormalDepthDs();
-    updateResolvedNormalDepthDs();
+    createMultisampledNormalDepthDs();
+    createResolvedNormalDepthDs();
     createResolvePipelineLayout();
     createResolvePipeline();
 
@@ -60,16 +58,14 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createSsaoPipelineLayout();
     createSsaoPipeline();
     createSsaoDsLayout();
-    allocateSsaoDs();
-    updateSsaoDs();
+    createSsaoDs();
 
     createShadingRenderpass();
     createShadingFramebuffer();
     createShadingPipelineLayout();
     createShadingPipeline();
     createResolvedColorDsLayout();
-    allocateResolvedColorDs();
-    updateResolveColorDs();
+    createResolvedColorDs();
 
     createPostProcessingRenderpass();
     createPostProcessingFramebuffer();
@@ -133,6 +129,7 @@ void Renderer::render()
     executeClearRenderpass(commandBuffer);
     executePrepass(commandBuffer);
     executeResolveRenderpass(commandBuffer);
+//    executeGridRenderpass(commandBuffer);
     executeSsaoRenderpass(commandBuffer);
     executeShadingRenderpass(commandBuffer);
     executePostProcessingRenderpass(commandBuffer);
@@ -159,7 +156,7 @@ void Renderer::importModel(const std::filesystem::path &path)
 void Renderer::deleteModel(uuid32_t id)
 {
     SNS::publishMessage(Topic::Type::Renderer, Message::modelDeleted(id));
-    mDeferDeleteModel = id;
+    mModels.erase(id);
 }
 
 void Renderer::resize(uint32_t width, uint32_t height)
@@ -168,6 +165,15 @@ void Renderer::resize(uint32_t width, uint32_t height)
     mHeight = height;
 
     mCamera.resize(width, height);
+
+    std::array<VkDescriptorSet, 4> freeDs {
+        mMultisampledNormalDepthDs,
+        mResolvedNormalDepthDs,
+        mSsaoDs,
+        mResolvedColorDs
+    };
+
+    vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, freeDs.size(), freeDs.data());
 
     createTextures();
 
@@ -179,10 +185,10 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createShadingFramebuffer();
     createPostProcessingFramebuffer();
 
-    updateMultisampledNormalDepthDs();
-    updateResolvedNormalDepthDs();
-    updateSsaoDs();
-    updateResolveColorDs();
+    createMultisampledNormalDepthDs();
+    createResolvedNormalDepthDs();
+    createSsaoDs();
+    createResolvedColorDs();
 }
 
 void Renderer::processMainThreadTasks()
@@ -212,18 +218,9 @@ void Renderer::processMainThreadTasks()
     }
 }
 
-void Renderer::releaseResources()
-{
-    if (mDeferDeleteModel)
-    {
-        mModels.erase(mDeferDeleteModel);
-        mDeferDeleteModel = 0;
-    }
-}
-
 void Renderer::executeClearRenderpass(VkCommandBuffer commandBuffer)
 {
-    static constexpr VkClearValue colorClear {.color = {0.2f, 0.2f, 0.2f, 1.f}};
+    static constexpr VkClearValue colorClear {.color = {1.f, 1.f, 1.f, 1.f}};
     static constexpr VkClearValue depthClear {.depthStencil = {.depth = 1.f, .stencil = 0}};
     static constexpr VkClearValue normalClear {.color = {0.f, 0.f, 0.f, 0.f}};
 
@@ -278,7 +275,7 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
                             0, descriptorSets.size(), descriptorSets.data(),
                             0, nullptr);
 
-    renderModels(commandBuffer, mPrepassPipelineLayout);
+    renderModels(commandBuffer, mPrepassPipelineLayout, 1);
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -313,6 +310,36 @@ void Renderer::executeResolveRenderpass(VkCommandBuffer commandBuffer)
                        VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(uint32_t),
                        &mSamples);
+
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mColorDepthRenderpass,
+        .framebuffer = mColorDepthFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    beginDebugLabel(commandBuffer, "Grid");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGridPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mGridPipelineLayout,
+                            0, 1, &mCameraDs,
+                            0, nullptr);
 
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
@@ -386,7 +413,7 @@ void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
                             0, descriptorSets.size(), descriptorSets.data(),
                             0, nullptr);
 
-    renderModels(commandBuffer, mShadingPipelineLayout);
+    renderModels(commandBuffer, mShadingPipelineLayout, 2);
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -442,10 +469,10 @@ void Renderer::setViewport(VkCommandBuffer commandBuffer)
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 }
 
-void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout)
+void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex)
 {
     for (const auto& [id, model] : mModels)
-        model->render(commandBuffer, pipelineLayout);
+        model->render(commandBuffer, pipelineLayout, matDsIndex);
 }
 
 void Renderer::createColorTextures()
@@ -902,12 +929,18 @@ void Renderer::createPrepassPipelineLayout()
         mMaterialsDsLayout
     };
 
+    VkPushConstantRange pushConstantRange {
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .offset = 0,
+        .size = sizeof(uint32_t)
+    };
+
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = static_cast<uint32_t>(dsLayouts.size()),
         .pSetLayouts = dsLayouts.data(),
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges = nullptr
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pushConstantRange
     };
 
     VkResult result = vkCreatePipelineLayout(mRenderDevice.device,
@@ -1175,7 +1208,7 @@ void Renderer::createResolvedNormalDepthDsLayout()
     setDsLayoutDebugName(mRenderDevice, mResolvedNormalDepthDsLayout, "Renderer::mResolvedNormalDepthDsLayout");
 }
 
-void Renderer::allocateMultisampledNormalDepthDs()
+void Renderer::createMultisampledNormalDepthDs()
 {
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -1187,24 +1220,7 @@ void Renderer::allocateMultisampledNormalDepthDs()
     VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mMultisampledNormalDepthDs);
     vulkanCheck(result, "Failed to allocate descriptor set.");
     setDSDebugName(mRenderDevice, mMultisampledNormalDepthDs, "Renderer::mMultisampledNormalDepthDs");
-}
 
-void Renderer::allocateResolvedNormalDepthDs()
-{
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &mResolvedNormalDepthDsLayout
-    };
-
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mResolvedNormalDepthDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-    setDSDebugName(mRenderDevice, mResolvedNormalDepthDs, "Renderer::mResolvedNormalDepthDs");
-}
-
-void Renderer::updateMultisampledNormalDepthDs()
-{
     VkDescriptorImageInfo normalImageInfo {
         .sampler = mNormalTexture.vulkanSampler.sampler,
         .imageView = mNormalTexture.vulkanImage.imageView,
@@ -1243,10 +1259,22 @@ void Renderer::updateMultisampledNormalDepthDs()
     };
 
     vkUpdateDescriptorSets(mRenderDevice.device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+
 }
 
-void Renderer::updateResolvedNormalDepthDs()
+void Renderer::createResolvedNormalDepthDs()
 {
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &mResolvedNormalDepthDsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mResolvedNormalDepthDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+    setDSDebugName(mRenderDevice, mResolvedNormalDepthDs, "Renderer::mResolvedNormalDepthDs");
+
     VkDescriptorImageInfo normalImageInfo {
         .sampler = mResolvedNormalTexture.vulkanSampler.sampler,
         .imageView = mResolvedNormalTexture.vulkanImage.imageView,
@@ -2012,7 +2040,7 @@ void Renderer::createSsaoDsLayout()
     setDsLayoutDebugName(mRenderDevice, mSsaoDsLayout, "Renderer::mSsaoDsLayout");
 }
 
-void Renderer::allocateSsaoDs()
+void Renderer::createSsaoDs()
 {
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -2024,10 +2052,7 @@ void Renderer::allocateSsaoDs()
     VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mSsaoDs);
     vulkanCheck(result, "Failed to allocate descriptor set.");
     setDSDebugName(mRenderDevice, mSsaoDs, "Renderer::mSsaoDs");
-}
 
-void Renderer::updateSsaoDs()
-{
     VkDescriptorImageInfo ssaoImageInfo {
         .sampler = mSsaoTexture.vulkanSampler.sampler,
         .imageView = mSsaoTexture.vulkanImage.imageView,
@@ -2303,7 +2328,7 @@ void Renderer::createResolvedColorDsLayout()
     setDsLayoutDebugName(mRenderDevice, mResolvedColorDsLayout, "Renderer::mResolvedColorDsLayout");
 }
 
-void Renderer::allocateResolvedColorDs()
+void Renderer::createResolvedColorDs()
 {
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -2315,10 +2340,7 @@ void Renderer::allocateResolvedColorDs()
     VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mResolvedColorDs);
     vulkanCheck(result, "Failed to allocate descriptor set.");
     setDSDebugName(mRenderDevice, mResolvedColorDs, "Renderer::mResolvedColorDs");
-}
 
-void Renderer::updateResolveColorDs()
-{
     VkDescriptorImageInfo resolvedColorImageInfo {
         .sampler = mResolvedColorTexture.vulkanSampler.sampler,
         .imageView = mResolvedColorTexture.vulkanImage.imageView,

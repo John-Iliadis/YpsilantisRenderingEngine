@@ -67,7 +67,7 @@ private:
     void sceneNodeDragDropTarget(GraphNode* node);
     void sceneNodeDragDropTargetWholeWindow(GraphNode* node, bool nodeHovered);
     void modelDragDropSource(uuid32_t modelID);
-    void modelDragDropTarget();
+    void modelDragDropTargetWholeWindow();
 
     void importModel();
     void checkPayloadType(const char* type);

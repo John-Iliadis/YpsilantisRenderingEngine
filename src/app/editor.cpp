@@ -410,6 +410,8 @@ void Editor::viewPort()
     };
 
     ImGui::SetNextWindowSize(sInitialViewportSize, ImGuiCond_FirstUseEver);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::Begin("Viewport", &mShowViewport, sWindowFlags);
 
     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
@@ -421,13 +423,16 @@ void Editor::viewPort()
     }
 
     mRenderer.mCamera.update(mDt);
-
     mRenderer.render();
 
-    ImGui::Dummy(ImGui::GetContentRegionAvail());
-    modelDragDropTarget();
+    ImTextureID renderedImageHandle = reinterpret_cast<ImTextureID>(mRenderer.mResolvedColorDs);
+
+    ImGui::Image(renderedImageHandle, viewportSize);
+
+    modelDragDropTargetWholeWindow();
 
     ImGui::End();
+    ImGui::PopStyleVar(2);
 }
 
 void Editor::deleteSelectedObject()
@@ -849,17 +854,22 @@ void Editor::modelDragDropSource(uuid32_t modelID)
     }
 }
 
-void Editor::modelDragDropTarget()
+void Editor::modelDragDropTargetWholeWindow()
 {
-    if (ImGui::BeginDragDropTarget())
+    ImRect rect = ImGui::GetCurrentWindow()->InnerRect;
+
+    if (ImGui::BeginDragDropTargetCustom(rect, ImGui::GetID("modelDragDropTargetWholeWindow")))
     {
         checkPayloadType("Model");
 
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Model"))
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("Model", ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
         {
-            uuid32_t modelID = *(uuid32_t*)payload->Data;
-            Model& model = *mRenderer.mModels.at(modelID);
-            createModelGraph(model);
+            if (payload->IsDelivery())
+            {
+                uuid32_t modelID = *(uuid32_t*)payload->Data;
+                Model& model = *mRenderer.mModels.at(modelID);
+                createModelGraph(model);
+            }
         }
 
         ImGui::EndDragDropTarget();

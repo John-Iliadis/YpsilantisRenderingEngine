@@ -90,19 +90,19 @@ void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
     setDSDebugName(*mRenderDevice, mMaterialsDS, name + " Materials DS");
 }
 
-void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout) const
+void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex) const
 {
     vkCmdBindDescriptorSets(commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout,
-                            0, 1, &mMaterialsDS,
+                            matDsIndex, 1, &mMaterialsDS,
                             0, nullptr);
 
     for (const auto& mesh : meshes)
     {
         vkCmdPushConstants(commandBuffer,
                            pipelineLayout,
-                           VK_SHADER_STAGE_VERTEX_BIT,
+                           VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(int32_t),
                            &mesh.materialIndex);
         mesh.mesh.render(commandBuffer);

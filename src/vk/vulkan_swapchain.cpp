@@ -155,7 +155,7 @@ void VulkanSwapchain::createCommandBuffer()
 
 void VulkanSwapchain::createSyncObjects()
 {
-    inFlightFence = createFence(mRenderDevice, true, "VulkanSwapchain::inFlightFence");
+    inFlightFence = createFence(mRenderDevice, false, "VulkanSwapchain::inFlightFence");
     imageReadySemaphore = createSemaphore(mRenderDevice, "VulkanSwapchain::imageReadySemaphore");
     renderCompleteSemaphore = createSemaphore(mRenderDevice, "VulkanSwapchain::renderCompleteSemaphore");
 }

@@ -20,7 +20,8 @@ VkDescriptorPool createDescriptorPool(VkDevice device,
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT |
+            VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT,
         .maxSets = maxSets,
         .poolSizeCount = descriptorPoolSizes.size(),
         .pPoolSizes = descriptorPoolSizes.data()

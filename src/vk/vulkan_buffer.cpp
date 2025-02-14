@@ -75,7 +75,7 @@ VkMemoryPropertyFlags toVkFlags(MemoryType memoryType)
 
 uint32_t getIndexCount(const VulkanBuffer &buffer)
 {
-    assert(buffer.getBufferType() == BufferType::Index);
+    check(buffer.getBufferType() == BufferType::Index, "Calling getIndexCount() requires the buffer to be an index buffer");
     return buffer.getSize() / 4;
 }
 

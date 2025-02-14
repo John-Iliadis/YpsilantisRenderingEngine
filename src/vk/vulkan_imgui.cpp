@@ -61,5 +61,7 @@ void VulkanImGui::end()
 
 void VulkanImGui::render(VkCommandBuffer commandBuffer)
 {
+    beginDebugLabel(commandBuffer, "ImGui");
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+    endDebugLabel(commandBuffer);
 }

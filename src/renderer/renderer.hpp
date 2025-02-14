@@ -29,17 +29,17 @@ public:
     void resize(uint32_t width, uint32_t height);
 
     void processMainThreadTasks();
-    void releaseResources();
 
 private:
     void executeClearRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
     void executeResolveRenderpass(VkCommandBuffer commandBuffer);
+    void executeGridRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
     void executeShadingRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
-    void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout);
+    void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
 
     void createColorTextures();
     void createDepthTextures();
@@ -64,10 +64,8 @@ private:
     void createResolveFramebuffer();
     void createMultisampledNormalDepthDsLayout();
     void createResolvedNormalDepthDsLayout();
-    void allocateMultisampledNormalDepthDs();
-    void allocateResolvedNormalDepthDs();
-    void updateMultisampledNormalDepthDs();
-    void updateResolvedNormalDepthDs();
+    void createMultisampledNormalDepthDs();
+    void createResolvedNormalDepthDs();
     void createResolvePipelineLayout();
     void createResolvePipeline();
 
@@ -87,16 +85,14 @@ private:
     void createSsaoPipelineLayout();
     void createSsaoPipeline();
     void createSsaoDsLayout();
-    void allocateSsaoDs();
-    void updateSsaoDs();
+    void createSsaoDs();
 
     void createShadingRenderpass();
     void createShadingFramebuffer();
     void createShadingPipelineLayout();
     void createShadingPipeline();
     void createResolvedColorDsLayout();
-    void allocateResolvedColorDs();
-    void updateResolveColorDs();
+    void createResolvedColorDs();
 
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
@@ -182,7 +178,6 @@ private:
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
-    uuid32_t mDeferDeleteModel{};
 
     // async loading
     std::vector<std::future<std::shared_ptr<Model>>> mLoadedModelFutures;

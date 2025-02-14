@@ -19,8 +19,8 @@ InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice,
                              const std::vector<Vertex> &vertices,
                              const std::vector<uint32_t> &indices)
     : mRenderDevice(&renderDevice)
-    , mVertexBuffer(renderDevice, vertices.size() * sVertexSize, BufferType::Vertex, MemoryType::GPU)
-    , mIndexBuffer(renderDevice, indices.size() * sizeof(uint32_t), BufferType::Index, MemoryType::GPU)
+    , mVertexBuffer(renderDevice, vertices.size() * sVertexSize, BufferType::Vertex, MemoryType::GPU, vertices.data())
+    , mIndexBuffer(renderDevice, indices.size() * sizeof(uint32_t), BufferType::Index, MemoryType::GPU, indices.data())
     , mInstanceBuffer(renderDevice, sInitialInstanceBufferCapacity * sInstanceSize, BufferType::Vertex, MemoryType::GPU)
     , mInstanceCount()
     , mInstanceBufferCapacity(sInitialInstanceBufferCapacity)
@@ -99,7 +99,7 @@ void InstancedMesh::render(VkCommandBuffer commandBuffer) const
     VkDeviceSize offsets[2] {0, 0};
     vkCmdBindVertexBuffers(commandBuffer, 0, 2, buffers, offsets);
     vkCmdBindIndexBuffer(commandBuffer, mIndexBuffer.getBuffer(), 0, VK_INDEX_TYPE_UINT32);
-    vkCmdDrawIndexed(commandBuffer, getIndexCount(mInstanceBuffer), mInstanceCount, 0, 0, 0);
+    vkCmdDrawIndexed(commandBuffer, getIndexCount(mIndexBuffer), mInstanceCount, 0, 0, 0);
 }
 
 std::array<VkVertexInputBindingDescription, 2> InstancedMesh::bindingDescriptions()

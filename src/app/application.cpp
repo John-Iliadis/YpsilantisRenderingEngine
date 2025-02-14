@@ -69,9 +69,6 @@ void Application::update(float dt)
 
 void Application::fillCommandBuffer(uint32_t imageIndex)
 {
-    vkResetCommandBuffer(mSwapchain.commandBuffer, 0);
-    mRenderer.releaseResources();
-
     VkCommandBufferBeginInfo commandBufferBeginInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -103,7 +100,6 @@ void Application::fillCommandBuffer(uint32_t imageIndex)
 
 void Application::render()
 {
-    vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFence, VK_TRUE, UINT64_MAX);
     vkResetFences(mRenderDevice.device, 1, &mSwapchain.inFlightFence);
 
     uint32_t swapchainImageIndex;
@@ -151,4 +147,7 @@ void Application::render()
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         recreateSwapchain();
+
+    vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFence, VK_TRUE, UINT64_MAX);
+    vkResetCommandBuffer(mSwapchain.commandBuffer, 0);
 }
