@@ -146,7 +146,7 @@ void VulkanImage::transitionLayout(VkImageLayout newLayout)
         .newLayout = newLayout,
         .image = image,
         .subresourceRange {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .aspectMask = imageAspect,
             .baseMipLevel = 0,
             .levelCount = mipLevels, // transition all mip levels
             .baseArrayLayer = 0,

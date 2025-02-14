@@ -13,13 +13,14 @@ const vec4 positions[4] = vec4[4](
 );
 
 const int indices[6] = int[6](0, 1, 2, 2, 3, 0);
+const float gridSize = 100.0;
 
 layout (set = 0, binding = 0) uniform CameraUBO { CameraRenderData cameraRenderData; };
 
 void main()
 {
     int index = indices[gl_VertexIndex];
-    vec4 position = positions[index];
+    vec4 position = vec4(positions[index].xyz * gridSize, 1.f);
 
     vCameraPos = cameraRenderData.position.xz;
 

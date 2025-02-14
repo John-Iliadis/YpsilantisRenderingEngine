@@ -75,7 +75,7 @@ public:
 
     void notify(const Message &message) override;
 
-    void createMaterialsUBO();
+    void createMaterialsSSBO();
     void createTextureDescriptorSets(VkDescriptorSetLayout dsLayout);
     void createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout);
 
@@ -86,7 +86,7 @@ public:
 private:
     const VulkanRenderDevice* mRenderDevice;
     VkDescriptorSet mMaterialsDS;
-    VulkanBuffer mMaterialsUBO;
+    VulkanBuffer mMaterialsSSBO;
 };
 
 #endif //VULKANRENDERINGENGINE_MODEL_HPP

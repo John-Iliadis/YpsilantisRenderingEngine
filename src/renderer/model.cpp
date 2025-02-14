@@ -22,13 +22,13 @@ Model::~Model()
     }
 }
 
-void Model::createMaterialsUBO()
+void Model::createMaterialsSSBO()
 {
-    mMaterialsUBO = VulkanBuffer(*mRenderDevice,
+    mMaterialsSSBO = VulkanBuffer(*mRenderDevice,
                                  sizeof(Material) * materials.size(),
-                                 BufferType::Uniform,
-                                 MemoryType::GPU);
-    mMaterialsUBO.setDebugName(name + " Material UBO");
+                                  BufferType::Storage,
+                                  MemoryType::GPU);
+    mMaterialsSSBO.setDebugName(name + " Material SSBO");
 }
 
 void Model::createTextureDescriptorSets(VkDescriptorSetLayout dsLayout)
@@ -88,6 +88,47 @@ void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
     VkResult result = vkAllocateDescriptorSets(mRenderDevice->device, &descriptorSetAllocateInfo, &mMaterialsDS);
     vulkanCheck(result, "Failed to create mMaterialsDS.");
     setDSDebugName(*mRenderDevice, mMaterialsDS, name + " Materials DS");
+
+    VkDescriptorBufferInfo materialBufferInfo {
+        .buffer = mMaterialsSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    std::vector<VkDescriptorImageInfo> imageInfos(textures.size());
+    for (uint32_t i = 0; i < imageInfos.size(); ++i)
+    {
+        imageInfos.at(i).sampler = textures.at(i).vulkanTexture.vulkanSampler.sampler;
+        imageInfos.at(i).imageView = textures.at(i).vulkanTexture.vulkanImage.imageView;
+        imageInfos.at(i).imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+
+    VkWriteDescriptorSet materialsDsWrite {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mMaterialsDS,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &materialBufferInfo
+    };
+
+    VkWriteDescriptorSet imagesDsWrite {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mMaterialsDS,
+        .dstBinding = 1,
+        .dstArrayElement = 0,
+        .descriptorCount = static_cast<uint32_t >(imageInfos.size()),
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = imageInfos.data()
+    };
+
+    std::array<VkWriteDescriptorSet, 2> descriptorWrites {
+        materialsDsWrite,
+        imagesDsWrite
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice->device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 }
 
 void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex) const
@@ -119,7 +160,7 @@ Mesh &Model::getMesh(uuid32_t meshID)
 
 void Model::updateMaterial(index_t matIndex)
 {
-    mMaterialsUBO.update(matIndex * sizeof(Material), sizeof(Material), &materials.at(matIndex));
+    mMaterialsSSBO.update(matIndex * sizeof(Material), sizeof(Material), &materials.at(matIndex));
 }
 
 void Model::notify(const Message &message)

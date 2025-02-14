@@ -34,9 +34,9 @@ private:
     void executeClearRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
     void executeResolveRenderpass(VkCommandBuffer commandBuffer);
-    void executeGridRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
     void executeShadingRenderpass(VkCommandBuffer commandBuffer);
+    void executeGridRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
     void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
@@ -76,10 +76,6 @@ private:
     void createSkyboxPipelineLayout();
     void createSkyboxPipeline();
 
-    void createGridDsLayout();
-    void createGridPipelineLayout();
-    void createGridPipeline();
-
     void createSsaoRenderpass();
     void createSsaoFramebuffer();
     void createSsaoPipelineLayout();
@@ -93,6 +89,10 @@ private:
     void createShadingPipeline();
     void createResolvedColorDsLayout();
     void createResolvedColorDs();
+
+    void createGridDsLayout();
+    void createGridPipelineLayout();
+    void createGridPipeline();
 
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();

@@ -11,7 +11,7 @@ Editor::Editor(Renderer& renderer, SaveData& saveData)
     , mShowViewport(true)
     , mShowAssetPanel(true)
     , mShowSceneGraph(true)
-    , mShowCameraPanel(false)
+    , mShowCameraPanel(true)
     , mShowInspectorPanel(true)
     , mShowRendererPanel(true)
     , mShowDebugPanel(true)
@@ -116,9 +116,9 @@ void Editor::cameraPanel()
 
     static int selectedIndex = 0;
     static const std::array<const char*, 3> items {{
-        "First Person",
         "View",
-        "Edit"
+        "Edit",
+        "First Person"
     }};
 
     {
@@ -145,29 +145,28 @@ void Editor::cameraPanel()
 
     ImGui::Separator();
 
-    if (selectedIndex == 0)
-    {
-        ImGui::DragFloat("Fly Speed", mRenderer.mCamera.flySpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
-        mRenderer.mCamera.setState(Camera::FIRST_PERSON);
-    }
-
-    if (selectedIndex == 2)
-    {
-        mRenderer.mCamera.setState(Camera::EDITOR_MODE);
-    }
-
-    if (selectedIndex == 1 || selectedIndex == 2)
+    if (selectedIndex == 0 || selectedIndex == 1)
     {
         ImGui::DragFloat("Z Scroll Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.1f");
         ImGui::DragFloat("Rotate Sensitivity", mRenderer.mCamera.rotateSensitivity(), 0.01f, 0.f, FLT_MAX, "%.1f");
     }
 
-    if (selectedIndex == 1)
+    if (selectedIndex == 0)
     {
         ImGui::DragFloat("Pan Speed", mRenderer.mCamera.panSpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
         mRenderer.mCamera.setState(Camera::VIEW_MODE);
     }
 
+    if (selectedIndex == 1)
+    {
+        mRenderer.mCamera.setState(Camera::EDITOR_MODE);
+    }
+
+    if (selectedIndex == 2)
+    {
+        ImGui::DragFloat("Fly Speed", mRenderer.mCamera.flySpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
+        mRenderer.mCamera.setState(Camera::FIRST_PERSON);
+    }
     ImGui::End();
 }
 

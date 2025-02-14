@@ -49,10 +49,6 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createSkyboxPipelineLayout();
     createSkyboxPipeline();
 
-    createGridDsLayout();
-    createGridPipelineLayout();
-    createGridPipeline();
-
     createSsaoRenderpass();
     createSsaoFramebuffer();
     createSsaoPipelineLayout();
@@ -66,6 +62,10 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createShadingPipeline();
     createResolvedColorDsLayout();
     createResolvedColorDs();
+
+    createGridDsLayout();
+    createGridPipelineLayout();
+    createGridPipeline();
 
     createPostProcessingRenderpass();
     createPostProcessingFramebuffer();
@@ -129,9 +129,9 @@ void Renderer::render()
     executeClearRenderpass(commandBuffer);
     executePrepass(commandBuffer);
     executeResolveRenderpass(commandBuffer);
-//    executeGridRenderpass(commandBuffer);
     executeSsaoRenderpass(commandBuffer);
     executeShadingRenderpass(commandBuffer);
+    executeGridRenderpass(commandBuffer);
     executePostProcessingRenderpass(commandBuffer);
 
     endSingleTimeCommands(mRenderDevice, commandBuffer);
@@ -207,7 +207,7 @@ void Renderer::processMainThreadTasks()
             mModels.emplace(modelID, model);
 
             model->id = modelID;
-            model->createMaterialsUBO();
+            model->createMaterialsSSBO();
             model->createTextureDescriptorSets(mDisplayTexturesDSLayout);
             model->createMaterialsDescriptorSet(mMaterialsDsLayout);
 
@@ -313,6 +313,7 @@ void Renderer::executeResolveRenderpass(VkCommandBuffer commandBuffer)
 
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
+    vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
 }
@@ -341,7 +342,7 @@ void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
                             0, 1, &mCameraDs,
                             0, nullptr);
 
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -699,7 +700,7 @@ void Renderer::createMaterialDsLayout()
 {
     VkDescriptorSetLayoutBinding materialsBinding {
         .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
         .descriptorCount = PerModelMaxMaterialCount,
         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
     };
@@ -1081,9 +1082,19 @@ void Renderer::createResolveRenderpass()
         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
-    std::array<VkAttachmentDescription, 2> attachments {{
+    VkAttachmentDescription depthAttachment {
+        .format = mDepthTexture.vulkanImage.format,
+        .samples = mSamples,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    std::array<VkAttachmentDescription, 3> attachments {{
         resolvedNormalAttachment,
-        resolvedDepthAttachment
+        resolvedDepthAttachment,
+        depthAttachment
     }};
 
     VkAttachmentReference resolvedNormalAttachmentRef {
@@ -1096,23 +1107,51 @@ void Renderer::createResolveRenderpass()
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
+    VkAttachmentReference depthAttachmentRef {
+        .attachment = 2,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
     std::array<VkAttachmentReference, 2> colorAttachmentsRef {
         resolvedNormalAttachmentRef,
         resolvedDepthAttachmentRef
     };
 
-    VkSubpassDescription subpass {
+    VkSubpassDescription subpassResolve {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
         .colorAttachmentCount = static_cast<uint32_t>(colorAttachmentsRef.size()),
         .pColorAttachments = colorAttachmentsRef.data(),
+    };
+
+    VkSubpassDescription subpassDepthTransition {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .pDepthStencilAttachment = &depthAttachmentRef
+    };
+
+    VkSubpassDependency dependency {
+        .srcSubpass = 0,
+        .dstSubpass = 1,
+        .srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+    };
+
+    std::array<VkSubpassDescription, 2> subpasses {
+        subpassResolve,
+        subpassDepthTransition
     };
 
     VkRenderPassCreateInfo renderPassCreateInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = static_cast<uint32_t>(attachments.size()),
         .pAttachments = attachments.data(),
-        .subpassCount = 1,
-        .pSubpasses = &subpass,
+        .subpassCount = static_cast<uint32_t>(subpasses.size()),
+        .pSubpasses = subpasses.data(),
+        .dependencyCount = 1,
+        .pDependencies = &dependency
     };
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mResolveRenderpass);
@@ -1124,9 +1163,10 @@ void Renderer::createResolveFramebuffer()
 {
     vkDestroyFramebuffer(mRenderDevice.device, mResolveFramebuffer, nullptr);
 
-    std::array<VkImageView, 2> imageViews {{
+    std::array<VkImageView, 3> imageViews {{
         mResolvedNormalTexture.vulkanImage.imageView,
-        mResolvedDepthTexture.vulkanImage.imageView
+        mResolvedDepthTexture.vulkanImage.imageView,
+        mDepthTexture.vulkanImage.imageView
     }};
 
     VkFramebufferCreateInfo framebufferCreateInfo {
@@ -1692,151 +1732,6 @@ void Renderer::createSkyboxPipeline()
     setPipelineDebugName(mRenderDevice, mSkyboxPipeline, "Renderer::mSkyboxPipeline");
 }
 
-void Renderer::createGridDsLayout()
-{
-    VkDescriptorSetLayoutBinding cameraBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-    };
-
-    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &cameraBinding
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device, &dsLayoutCreateInfo, nullptr, &mGridDsLayout);
-    vulkanCheck(result, "Failed to create descriptor set layout");
-    setDsLayoutDebugName(mRenderDevice, mGridDsLayout, "Renderer::mGridDsLayout");
-}
-
-void Renderer::createGridPipelineLayout()
-{
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &mGridDsLayout,
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges = nullptr
-    };
-
-    VkResult result = vkCreatePipelineLayout(mRenderDevice.device,
-                                             &pipelineLayoutCreateInfo,
-                                             nullptr,
-                                             &mGridPipelineLayout);
-    vulkanCheck(result, "Failed to create pipeline layout.");
-    setPipelineLayoutDebugName(mRenderDevice, mGridPipelineLayout, "Renderer::mGridPipelineLayout");
-}
-
-void Renderer::createGridPipeline()
-{
-    VulkanShaderModule vertShaderModule(mRenderDevice, "shaders/grid.vert.spv");
-    VulkanShaderModule fragShaderModule(mRenderDevice, "shaders/grid.frag.spv");
-
-    std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages {
-        shaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertShaderModule),
-        shaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderModule)
-    };
-
-    VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = 0,
-        .pVertexBindingDescriptions = nullptr,
-        .vertexAttributeDescriptionCount = 0,
-        .pVertexAttributeDescriptions = nullptr
-    };
-
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .primitiveRestartEnable = VK_FALSE
-    };
-
-    VkPipelineTessellationStateCreateInfo tessellationStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO
-    };
-
-    VkPipelineViewportStateCreateInfo viewportStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .viewportCount = 1,
-        .scissorCount = 1
-    };
-
-    VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .polygonMode = VK_POLYGON_MODE_FILL,
-        .cullMode = VK_CULL_MODE_NONE,
-        .lineWidth = 1.f
-    };
-
-    VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = mSamples
-    };
-
-    VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-        .depthTestEnable = VK_TRUE,
-        .depthWriteEnable = VK_FALSE,
-        .depthCompareOp = VK_COMPARE_OP_LESS,
-        .stencilTestEnable = VK_FALSE
-    };
-
-    VkPipelineColorBlendAttachmentState colorBlendAttachmentState {
-        .blendEnable = VK_FALSE,
-        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-                          VK_COLOR_COMPONENT_G_BIT |
-                          VK_COLOR_COMPONENT_B_BIT |
-                          VK_COLOR_COMPONENT_A_BIT
-    };
-
-    VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        .logicOpEnable = VK_FALSE,
-        .attachmentCount = 1,
-        .pAttachments = &colorBlendAttachmentState
-    };
-
-    std::array<VkDynamicState, 2> dynamicStates {
-        VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR
-    };
-
-    VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
-        .pDynamicStates = dynamicStates.data()
-    };
-
-    VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .stageCount = static_cast<uint32_t>(shaderStages.size()),
-        .pStages = shaderStages.data(),
-        .pVertexInputState = &vertexInputStateCreateInfo,
-        .pInputAssemblyState = &inputAssemblyStateCreateInfo,
-        .pTessellationState = &tessellationStateCreateInfo,
-        .pViewportState = &viewportStateCreateInfo,
-        .pRasterizationState = &rasterizationStateCreateInfo,
-        .pMultisampleState = &multisampleStateCreateInfo,
-        .pDepthStencilState = &depthStencilStateCreateInfo,
-        .pColorBlendState = &colorBlendStateCreateInfo,
-        .pDynamicState = &dynamicStateCreateInfo,
-        .layout = mGridPipelineLayout,
-        .renderPass = mColorDepthRenderpass,
-        .subpass = 0
-    };
-
-    VkResult result = vkCreateGraphicsPipelines(mRenderDevice.device,
-                                                VK_NULL_HANDLE,
-                                                1, &graphicsPipelineCreateInfo,
-                                                nullptr,
-                                                &mGridPipeline);
-    vulkanCheck(result, "Failed to create pipeline.");
-    setPipelineDebugName(mRenderDevice, mGridPipeline, "Renderer::mGridPipeline");
-}
-
 void Renderer::createSsaoRenderpass()
 {
     VkAttachmentDescription ssaoAttachment {
@@ -2088,7 +1983,7 @@ void Renderer::createShadingRenderpass()
         .samples = mSamples,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     };
 
@@ -2358,6 +2253,157 @@ void Renderer::createResolvedColorDs()
     };
 
     vkUpdateDescriptorSets(mRenderDevice.device, 1, &resolvedColorWriteDescriptorSet, 0, nullptr);
+}
+
+void Renderer::createGridDsLayout()
+{
+    VkDescriptorSetLayoutBinding cameraBinding {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindings = &cameraBinding
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device, &dsLayoutCreateInfo, nullptr, &mGridDsLayout);
+    vulkanCheck(result, "Failed to create descriptor set layout");
+    setDsLayoutDebugName(mRenderDevice, mGridDsLayout, "Renderer::mGridDsLayout");
+}
+
+void Renderer::createGridPipelineLayout()
+{
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &mGridDsLayout,
+        .pushConstantRangeCount = 0,
+        .pPushConstantRanges = nullptr
+    };
+
+    VkResult result = vkCreatePipelineLayout(mRenderDevice.device,
+                                             &pipelineLayoutCreateInfo,
+                                             nullptr,
+                                             &mGridPipelineLayout);
+    vulkanCheck(result, "Failed to create pipeline layout.");
+    setPipelineLayoutDebugName(mRenderDevice, mGridPipelineLayout, "Renderer::mGridPipelineLayout");
+}
+
+void Renderer::createGridPipeline()
+{
+    VulkanShaderModule vertShaderModule(mRenderDevice, "shaders/grid.vert.spv");
+    VulkanShaderModule fragShaderModule(mRenderDevice, "shaders/grid.frag.spv");
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages {
+        shaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertShaderModule),
+        shaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderModule)
+    };
+
+    VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = 0,
+        .pVertexBindingDescriptions = nullptr,
+        .vertexAttributeDescriptionCount = 0,
+        .pVertexAttributeDescriptions = nullptr
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .primitiveRestartEnable = VK_FALSE
+    };
+
+    VkPipelineTessellationStateCreateInfo tessellationStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO
+    };
+
+    VkPipelineViewportStateCreateInfo viewportStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .scissorCount = 1
+    };
+
+    VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = VK_CULL_MODE_NONE,
+        .lineWidth = 1.f
+    };
+
+    VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = mSamples
+    };
+
+    VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_TRUE,
+        .depthWriteEnable = VK_FALSE,
+        .depthCompareOp = VK_COMPARE_OP_LESS,
+        .stencilTestEnable = VK_FALSE
+    };
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachmentState {
+        .blendEnable = VK_TRUE,
+        .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+        .colorBlendOp = VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+        .alphaBlendOp = VK_BLEND_OP_ADD,
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                          VK_COLOR_COMPONENT_G_BIT |
+                          VK_COLOR_COMPONENT_B_BIT |
+                          VK_COLOR_COMPONENT_A_BIT
+    };
+
+    VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .logicOpEnable = VK_FALSE,
+        .attachmentCount = 1,
+        .pAttachments = &colorBlendAttachmentState
+    };
+
+    std::array<VkDynamicState, 2> dynamicStates {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+        .pDynamicStates = dynamicStates.data()
+    };
+
+    VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = static_cast<uint32_t>(shaderStages.size()),
+        .pStages = shaderStages.data(),
+        .pVertexInputState = &vertexInputStateCreateInfo,
+        .pInputAssemblyState = &inputAssemblyStateCreateInfo,
+        .pTessellationState = &tessellationStateCreateInfo,
+        .pViewportState = &viewportStateCreateInfo,
+        .pRasterizationState = &rasterizationStateCreateInfo,
+        .pMultisampleState = &multisampleStateCreateInfo,
+        .pDepthStencilState = &depthStencilStateCreateInfo,
+        .pColorBlendState = &colorBlendStateCreateInfo,
+        .pDynamicState = &dynamicStateCreateInfo,
+        .layout = mGridPipelineLayout,
+        .renderPass = mColorDepthRenderpass,
+        .subpass = 0
+    };
+
+    VkResult result = vkCreateGraphicsPipelines(mRenderDevice.device,
+                                                VK_NULL_HANDLE,
+                                                1, &graphicsPipelineCreateInfo,
+                                                nullptr,
+                                                &mGridPipeline);
+    vulkanCheck(result, "Failed to create pipeline.");
+    setPipelineDebugName(mRenderDevice, mGridPipeline, "Renderer::mGridPipeline");
 }
 
 void Renderer::createPostProcessingRenderpass()

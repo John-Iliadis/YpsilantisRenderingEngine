@@ -24,11 +24,11 @@ Camera::Camera(glm::vec3 position, float fovY, float width, float height, float 
     , mNearZ(nearZ)
     , mFarZ(farZ)
     , mPreviousMousePos()
-    , mState(Camera::State::FIRST_PERSON)
-    , mFlySpeed(5.f)
-    , mPanSpeed(0.8f)
-    , mZScrollOffset(1.f)
-    , mRotateSensitivity(1.f)
+    , mState(Camera::State::VIEW_MODE)
+    , mFlySpeed(2.f)
+    , mPanSpeed(0.2f)
+    , mZScrollOffset(0.3f)
+    , mRotateSensitivity(0.2f)
     , mLeftButtonDown()
     , mRightButtonDown()
 {
@@ -65,6 +65,8 @@ void Camera::update(float dt)
             updateEditorMode(dt);
             break;
     }
+
+    scroll(ImGui::GetIO().MouseWheelH, ImGui::GetIO().MouseWheel);
 
     calculateViewProjection();
 
@@ -144,6 +146,9 @@ void Camera::resize(uint32_t width, uint32_t height)
 
 void Camera::scroll(float x, float y)
 {
+    if (!y)
+        return;
+
     switch (mState)
     {
         case FIRST_PERSON:
@@ -154,7 +159,7 @@ void Camera::scroll(float x, float y)
         case VIEW_MODE:
         case EDITOR_MODE:
         {
-            mPosition += mBasis[2] * mZScrollOffset * glm::sign(y);
+            mPosition += mBasis[2] * mZScrollOffset * -glm::sign(y);
             break;
         }
     }
@@ -172,9 +177,9 @@ void Camera::updateFirstPerson(float dt)
         if (ImGui::IsKeyDown(ImGuiKey_S))
             ++z;
         if (ImGui::IsKeyDown(ImGuiKey_A))
-            --x;
-        if (ImGui::IsKeyDown(ImGuiKey_D))
             ++x;
+        if (ImGui::IsKeyDown(ImGuiKey_D))
+            --x;
     }
 
     glm::vec2 mouseDt{};
@@ -212,7 +217,8 @@ void Camera::updateViewMode(float dt)
         {
             float xOffset = mPanSpeed * dt * mouseDt.x;
             float yOffset = mPanSpeed * dt * mouseDt.y;
-            mPosition += mBasis[0] * xOffset + mBasis[1] * -yOffset; // todo check
+
+            mPosition += mBasis[0] * xOffset + mBasis[1] * yOffset; // todo check
         }
     }
 }
