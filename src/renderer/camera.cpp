@@ -24,7 +24,7 @@ Camera::Camera(glm::vec3 position, float fovY, float width, float height, float 
     , mNearZ(nearZ)
     , mFarZ(farZ)
     , mPreviousMousePos()
-    , mState(Camera::State::VIEW_MODE)
+    , mState(Camera::State::FIRST_PERSON)
     , mFlySpeed(2.f)
     , mPanSpeed(0.2f)
     , mZScrollOffset(0.3f)

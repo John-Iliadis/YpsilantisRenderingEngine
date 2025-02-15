@@ -5,11 +5,15 @@ layout (location = 1) in vec2 vCameraPos;
 
 layout (location = 0) out vec4 outFragColor;
 
+layout (push_constant) uniform PushConstants
+{
+    vec4 gridColorThin;
+    vec4 gridColorThick;
+    float gridCellSize;
+    float gridMinPixelsBetweenCells;
+};
+
 const float gridSize = 100.0;
-const float gridCellSize = 0.025;
-const vec4 gridColorThin = vec4(0.5, 0.5, 0.5, 1.0);
-const vec4 gridColorThick = vec4(0.0, 0.0, 0.0, 1.0);
-const float gridMinPixelsBetweenCells = 2.0;
 
 float log10(float x) { return log(x) / log(10.0); }
 float satf(float x) { return clamp(x, 0.0, 1.0); }
@@ -19,8 +23,8 @@ float max2(vec2 v) { return max(v.x, v.y); }
 vec4 gridColor(vec2 uv, vec2 camPos)
 {
     vec2 dudv = vec2(
-        length(vec2(dFdx(uv.x), dFdy(uv.x))),
-        length(vec2(dFdx(uv.y), dFdy(uv.y)))
+    length(vec2(dFdx(uv.x), dFdy(uv.x))),
+    length(vec2(dFdx(uv.y), dFdy(uv.y)))
     );
 
     float lodLevel = max(0.0, log10((length(dudv) * gridMinPixelsBetweenCells) / gridCellSize) + 1.0);
@@ -31,11 +35,11 @@ vec4 gridColor(vec2 uv, vec2 camPos)
     float lod1 = lod0 * 10.0;
     float lod2 = lod1 * 10.0;
 
-    // each anti-aliased line covers up to 4 pixels
+    // each anti-aliased line covers up to 2 pixels
     dudv *= 2.0;
 
     // Update grid coordinates for subsequent alpha calculations (centers each anti-aliased line)
-    uv += dudv / 2.0F;
+    uv += dudv / 2.0;
 
     // calculate absolute distances to cell line centers for each lod and pick max X/Y to get coverage alpha value
     float lod0a = max2(vec2(1.0) - abs(satv(mod(uv, lod0) / dudv) * 2.0 - vec2(1.0)));

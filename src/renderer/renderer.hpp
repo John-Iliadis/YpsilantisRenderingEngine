@@ -164,6 +164,16 @@ private:
     std::vector<std::future<std::shared_ptr<Model>>> mLoadedModelFutures;
     MainThreadTaskQueue mTaskQueue;
 
+    struct GridData
+    {
+        alignas(16) glm::vec4 thinLineColor = glm::vec4(0.5, 0.5, 0.5, 1.f);
+        alignas(16) glm::vec4 thickLineColor = glm::vec4(0.f, 0.f, 0.f, 1.f);
+        alignas(4) float cellSize = 0.025f;
+        alignas(4) float minPixelsBetweenCells = 1.2f;
+    } mGridData;
+
+    bool mRenderGrid = true;
+
 private:
     friend class Editor;
 };

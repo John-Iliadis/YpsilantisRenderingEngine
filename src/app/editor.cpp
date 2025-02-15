@@ -466,8 +466,133 @@ void Editor::deleteSelectedModel()
 
 void Editor::rendererPanel()
 {
+    static constexpr ImGuiColorEditFlags colorEditFlags = ImGuiColorEditFlags_DisplayRGB |
+        ImGuiColorEditFlags_AlphaBar;
+
     ImGui::Begin("Renderer", &mShowRendererPanel);
+
+    if (ImGui::CollapsingHeader("Grid", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("Render Grid", &mRenderer.mRenderGrid);
+        ImGui::Separator();
+
+        ImGui::ColorEdit4("Thin line color", glm::value_ptr(mRenderer.mGridData.thinLineColor), colorEditFlags);
+        ImGui::ColorEdit4("Thick line color", glm::value_ptr(mRenderer.mGridData.thickLineColor), colorEditFlags);
+        ImGui::SliderFloat("Cell size", &mRenderer.mGridData.cellSize, 0.001f, 0.25f);
+        ImGui::SliderFloat("Min pixels between cells", &mRenderer.mGridData.minPixelsBetweenCells, 1.f, 5.f);
+    }
+
+    if (ImGui::CollapsingHeader("Skybox", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        static bool renderSkybox;
+        ImGui::Checkbox("Render Skybox", &renderSkybox);
+        ImGui::Separator();
+
+        if (ImGui::Button("Import Faces"))
+        {
+            ImGui::OpenPopup("Import Skybox Textures");
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Import Equirectangular"))
+        {
+
+        }
+    }
+
+    skyboxImportPopup();
+
     ImGui::End();
+}
+
+void Editor::skyboxImportPopup()
+{
+    static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoResize;
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+
+    ImGui::SetNextWindowBgAlpha(1.0f);
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal("Import Skybox Textures", nullptr, windowFlags))
+    {
+        ImGui::SeparatorText("Import Skybox Textures");
+        ImGui::Separator();
+
+        char c[3];
+        c[0] = '.';
+        c[1] = '.';
+        c[2] = '.';
+
+        ImGui::Button("Add X+");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::PushItemWidth(-FLT_MIN);
+        ImGui::InputText("##X+input", c, 3);
+        ImGui::PopItemWidth();
+        ImGui::EndDisabled();
+
+        ImGui::Button("Add X-");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##X-input", c, 3);
+        ImGui::EndDisabled();
+
+        ImGui::Button("Add Y+");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##Y+input", c, 3);
+        ImGui::EndDisabled();
+
+        ImGui::Button("Add Y-");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##Y-input", c, 3);
+        ImGui::EndDisabled();
+
+        ImGui::Button("Add Z+");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##Z+input", c, 3);
+        ImGui::EndDisabled();
+
+        ImGui::Button("Add Z-");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##Z-input", c, 3);
+        ImGui::EndDisabled();
+        ImGui::Separator();
+
+        float padding = 10.0f;  // Padding from the edge
+        float buttonWidth = 80.0f;
+        float spacing = 10.0f;  // Space between buttons
+        float totalWidth = (buttonWidth * 2) + spacing;
+
+        // Align to bottom-right
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - totalWidth - padding);
+        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - padding);
+
+        if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("OK", ImVec2(buttonWidth, 0)))
+        {
+        }
+
+        ImGui::EndPopup();
+    }
+//
+//    if (ImGui::BeginPopupEx(ImGui::GetID("SkyboxImportPopup"), windowFlags))
+//    {
+//
+//    }
 }
 
 void Editor::debugPanel()

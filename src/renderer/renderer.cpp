@@ -17,7 +17,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
         mHeight = saveData["viewport"]["height"];
     }
 
-    mCamera = Camera(glm::vec3(-1.f, 1.f, 1.f), 30.f, mWidth, mHeight);
+    mCamera = Camera(glm::vec3(-0.2f, 0.2f, 0.2f), 30.f, mWidth, mHeight, 0.01f);
 
     createColorTexture();
     createDepthTexture();
@@ -345,6 +345,9 @@ void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
 
 void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
 {
+    if (!mRenderGrid)
+        return;
+
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = mColorDepthRenderpass,
@@ -366,6 +369,12 @@ void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
                             mGridPipelineLayout,
                             0, 1, &mCameraDs,
                             0, nullptr);
+
+    vkCmdPushConstants(commandBuffer,
+                       mGridPipelineLayout,
+                       VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(GridData),
+                       &mGridData);
 
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 
@@ -1703,12 +1712,18 @@ void Renderer::createShadingPipeline()
 
 void Renderer::createGridPipelineLayout()
 {
+    VkPushConstantRange pushConstantRange {
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .offset = 0,
+        .size = sizeof(GridData),
+    };
+
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
         .pSetLayouts = &mCameraRenderDataDsLayout,
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges = nullptr
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pushConstantRange
     };
 
     VkResult result = vkCreatePipelineLayout(mRenderDevice.device,

@@ -33,8 +33,10 @@ private:
     void imguiEvents();
     void mainMenuBar();
     void cameraPanel();
-    void rendererPanel();
     void debugPanel();
+
+    void rendererPanel();
+    void skyboxImportPopup();
 
     void sceneGraphPanel();
     void sceneGraphPopup();
