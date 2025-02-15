@@ -9,7 +9,6 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     , mSaveData(saveData)
     , mWidth(InitialViewportWidth)
     , mHeight(InitialViewportHeight)
-    , mSamples(std::min(VK_SAMPLE_COUNT_8_BIT, getMaxSampleCount(renderDevice)))
     , mCameraUBO(renderDevice, sizeof(CameraRenderData), BufferType::Uniform, MemoryType::GPU)
 {
     if (saveData.contains("viewport"))
@@ -18,12 +17,22 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
         mHeight = saveData["viewport"]["height"];
     }
 
-    mCamera = Camera(glm::vec3(), 30.f, mWidth, mHeight);
+    mCamera = Camera(glm::vec3(-1.f, 1.f, 1.f), 30.f, mWidth, mHeight);
 
-    createTextures();
+    createColorTexture();
+    createDepthTexture();
+    createNormalTexture();
+    createSsaoTexture();
+    createPostProcessTexture();
+
+    createSingleImageDsLayout();
+    createCameraRenderDataDsLayout();
+    createMaterialsDsLayout();
+    createDepthNormalInputDsLayout();
+
     createCameraDs();
-    createDisplayTexturesDsLayout();
-    createMaterialDsLayout();
+    createSingleImageDescriptorSets();
+    createDepthNormalInputDs();
 
     createClearRenderPass();
     createClearFramebuffer();
@@ -33,19 +42,9 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createPrepassPipelineLayout();
     createPrepassPipeline();
 
-    createResolveRenderpass();
-    createResolveFramebuffer();
-    createMultisampledNormalDepthDsLayout();
-    createResolvedNormalDepthDsLayout();
-    createMultisampledNormalDepthDs();
-    createResolvedNormalDepthDs();
-    createResolvePipelineLayout();
-    createResolvePipeline();
-
     createColorDepthRenderpass();
     createColorDepthFramebuffer();
 
-    createCubemapDsLayout();
     createSkyboxPipelineLayout();
     createSkyboxPipeline();
 
@@ -53,19 +52,15 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createSsaoFramebuffer();
     createSsaoPipelineLayout();
     createSsaoPipeline();
-    createSsaoDsLayout();
-    createSsaoDs();
 
-    createShadingRenderpass();
-    createShadingFramebuffer();
     createShadingPipelineLayout();
     createShadingPipeline();
-    createResolvedColorDsLayout();
-    createResolvedColorDs();
 
-    createGridDsLayout();
     createGridPipelineLayout();
     createGridPipeline();
+
+    createTempColorTransitionRenderpass();
+    createTempColorTransitionFramebuffer();
 
     createPostProcessingRenderpass();
     createPostProcessingFramebuffer();
@@ -76,7 +71,6 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 Renderer::~Renderer()
 {
     vkDestroyPipeline(mRenderDevice.device, mPrepassPipeline, nullptr);
-    vkDestroyPipeline(mRenderDevice.device, mResolvePipeline, nullptr);
     vkDestroyPipeline(mRenderDevice.device, mSkyboxPipeline, nullptr);
     vkDestroyPipeline(mRenderDevice.device, mGridPipeline, nullptr);
     vkDestroyPipeline(mRenderDevice.device, mSsaoPipeline, nullptr);
@@ -84,7 +78,6 @@ Renderer::~Renderer()
     vkDestroyPipeline(mRenderDevice.device, mPostProcessingPipeline, nullptr);
 
     vkDestroyPipelineLayout(mRenderDevice.device, mPrepassPipelineLayout, nullptr);
-    vkDestroyPipelineLayout(mRenderDevice.device, mResolvePipelineLayout, nullptr);
     vkDestroyPipelineLayout(mRenderDevice.device, mSkyboxPipelineLayout, nullptr);
     vkDestroyPipelineLayout(mRenderDevice.device, mGridPipelineLayout, nullptr);
     vkDestroyPipelineLayout(mRenderDevice.device, mSsaoPipelineLayout, nullptr);
@@ -93,29 +86,22 @@ Renderer::~Renderer()
 
     vkDestroyFramebuffer(mRenderDevice.device, mClearFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
-    vkDestroyFramebuffer(mRenderDevice.device, mResolveFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mColorDepthFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mSsaoFramebuffer, nullptr);
-    vkDestroyFramebuffer(mRenderDevice.device, mShadingFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mTempColorTransitionFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
 
     vkDestroyRenderPass(mRenderDevice.device, mClearRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderpass, nullptr);
-    vkDestroyRenderPass(mRenderDevice.device, mResolveRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mColorDepthRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSsaoRenderpass, nullptr);
-    vkDestroyRenderPass(mRenderDevice.device, mShadingRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mTempColorTransitionRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
 
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mCameraDsLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mMultisampledNormalDepthDsLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mResolvedNormalDepthDsLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mResolvedColorDsLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mCubemapDsLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mGridDsLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mSsaoDsLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mDisplayTexturesDSLayout, nullptr);
+    vkDestroyDescriptorSetLayout(mRenderDevice.device, mSingleImageDsLayout, nullptr);
+    vkDestroyDescriptorSetLayout(mRenderDevice.device, mCameraRenderDataDsLayout, nullptr);
     vkDestroyDescriptorSetLayout(mRenderDevice.device, mMaterialsDsLayout, nullptr);
+    vkDestroyDescriptorSetLayout(mRenderDevice.device, mDepthNormalInputDsLayout, nullptr);
 }
 
 void Renderer::render()
@@ -128,10 +114,11 @@ void Renderer::render()
 
     executeClearRenderpass(commandBuffer);
     executePrepass(commandBuffer);
-    executeResolveRenderpass(commandBuffer);
+    executeSkyboxRenderpass(commandBuffer);
     executeSsaoRenderpass(commandBuffer);
     executeShadingRenderpass(commandBuffer);
     executeGridRenderpass(commandBuffer);
+    executeTempColorTransitionRenderpass(commandBuffer);
     executePostProcessingRenderpass(commandBuffer);
 
     endSingleTimeCommands(mRenderDevice, commandBuffer);
@@ -166,29 +153,31 @@ void Renderer::resize(uint32_t width, uint32_t height)
 
     mCamera.resize(width, height);
 
-    std::array<VkDescriptorSet, 4> freeDs {
-        mMultisampledNormalDepthDs,
-        mResolvedNormalDepthDs,
+    std::vector<VkDescriptorSet> freeDs {
+        mDepthNormalInputDs,
         mSsaoDs,
-        mResolvedColorDs
+        mDepthDs,
+        mColorDs,
+        mPostProcessingDs,
     };
 
     vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, freeDs.size(), freeDs.data());
 
-    createTextures();
+    createColorTexture();
+    createDepthTexture();
+    createNormalTexture();
+    createSsaoTexture();
+    createPostProcessTexture();
 
     createClearFramebuffer();
     createPrepassFramebuffer();
-    createResolveFramebuffer();
     createColorDepthFramebuffer();
     createSsaoFramebuffer();
-    createShadingFramebuffer();
+    createTempColorTransitionFramebuffer();
     createPostProcessingFramebuffer();
 
-    createMultisampledNormalDepthDs();
-    createResolvedNormalDepthDs();
-    createSsaoDs();
-    createResolvedColorDs();
+    createSingleImageDescriptorSets();
+    createDepthNormalInputDs();
 }
 
 void Renderer::processMainThreadTasks()
@@ -208,7 +197,7 @@ void Renderer::processMainThreadTasks()
 
             model->id = modelID;
             model->createMaterialsSSBO();
-            model->createTextureDescriptorSets(mDisplayTexturesDSLayout);
+            model->createTextureDescriptorSets(mSingleImageDsLayout);
             model->createMaterialsDescriptorSet(mMaterialsDsLayout);
 
             itr = mLoadedModelFutures.erase(itr);
@@ -262,17 +251,13 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
         .pClearValues = nullptr
     };
 
-    std::array<VkDescriptorSet, 1> descriptorSets {
-        mCameraDs
-    };
-
     beginDebugLabel(commandBuffer, "Prepass");
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPrepassPipeline);
 
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             mPrepassPipelineLayout,
-                            0, descriptorSets.size(), descriptorSets.data(),
+                            0, 1, &mCameraDs,
                             0, nullptr);
 
     renderModels(commandBuffer, mPrepassPipelineLayout, 1);
@@ -281,12 +266,54 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
     endDebugLabel(commandBuffer);
 }
 
-void Renderer::executeResolveRenderpass(VkCommandBuffer commandBuffer)
+void Renderer::executeSkyboxRenderpass(VkCommandBuffer commandBuffer)
+{
+
+}
+
+void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
+{
+    VkClearValue ssaoClear {.color = {0.f}};
+
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mSsaoRenderpass,
+        .framebuffer = mSsaoFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = 1,
+        .pClearValues = &ssaoClear
+    };
+
+    std::array<VkDescriptorSet, 2> descriptorSets {
+        mCameraDs,
+        mDepthNormalInputDs
+    };
+
+    beginDebugLabel(commandBuffer, "SSAO Renderpass");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSsaoPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mSsaoPipelineLayout,
+                            0, descriptorSets.size(), descriptorSets.data(),
+                            0, nullptr);
+
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
 {
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mResolveRenderpass,
-        .framebuffer = mResolveFramebuffer,
+        .renderPass = mColorDepthRenderpass,
+        .framebuffer = mColorDepthFramebuffer,
         .renderArea = {
             .offset = {.x = 0, .y = 0},
             .extent = {.width = mWidth, .height = mHeight}
@@ -295,25 +322,23 @@ void Renderer::executeResolveRenderpass(VkCommandBuffer commandBuffer)
         .pClearValues = nullptr
     };
 
-    beginDebugLabel(commandBuffer, "Resolve Renderpass");
+    std::array<VkDescriptorSet, 2> descriptorSets {
+        mCameraDs,
+        mSsaoDs
+    };
+
+    beginDebugLabel(commandBuffer, "Shading Renderpass");
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mResolvePipeline);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadingPipeline);
 
     vkCmdBindDescriptorSets(commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mResolvePipelineLayout,
-                            0, 1, &mMultisampledNormalDepthDs,
+                            mShadingPipelineLayout,
+                            0, descriptorSets.size(), descriptorSets.data(),
                             0, nullptr);
 
-    vkCmdPushConstants(commandBuffer,
-                       mResolvePipelineLayout,
-                       VK_SHADER_STAGE_FRAGMENT_BIT,
-                       0, sizeof(uint32_t),
-                       &mSamples);
+    renderModels(commandBuffer, mShadingPipelineLayout, 2);
 
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-
-    vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
 }
@@ -348,49 +373,12 @@ void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
     endDebugLabel(commandBuffer);
 }
 
-void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
-{
-    VkClearValue ssaoClear {.color = {0.f}};
-
-    VkRenderPassBeginInfo renderPassBeginInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mSsaoRenderpass,
-        .framebuffer = mSsaoFramebuffer,
-        .renderArea = {
-            .offset = {.x = 0, .y = 0},
-            .extent = {.width = mWidth, .height = mHeight}
-        },
-        .clearValueCount = 1,
-        .pClearValues = &ssaoClear
-    };
-
-    std::array<VkDescriptorSet, 2> descriptorSets {
-        mCameraDs,
-        mResolvedNormalDepthDs
-    };
-
-    beginDebugLabel(commandBuffer, "SSAO Renderpass");
-    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSsaoPipeline);
-
-    vkCmdBindDescriptorSets(commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mSsaoPipelineLayout,
-                            0, descriptorSets.size(), descriptorSets.data(),
-                            0, nullptr);
-
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-
-    vkCmdEndRenderPass(commandBuffer);
-    endDebugLabel(commandBuffer);
-}
-
-void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
+void Renderer::executeTempColorTransitionRenderpass(VkCommandBuffer commandBuffer)
 {
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mShadingRenderpass,
-        .framebuffer = mShadingFramebuffer,
+        .renderPass = mTempColorTransitionRenderpass,
+        .framebuffer = mTempColorTransitionFramebuffer,
         .renderArea = {
             .offset = {.x = 0, .y = 0},
             .extent = {.width = mWidth, .height = mHeight}
@@ -399,29 +387,16 @@ void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
         .pClearValues = nullptr
     };
 
-    std::array<VkDescriptorSet, 2> descriptorSets {
-        mCameraDs,
-        mSsaoDs
-    };
-
-    beginDebugLabel(commandBuffer, "Shading Renderpass");
+    beginDebugLabel(commandBuffer, "Temp Color Transition");
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadingPipeline);
-
-    vkCmdBindDescriptorSets(commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mShadingPipelineLayout,
-                            0, descriptorSets.size(), descriptorSets.data(),
-                            0, nullptr);
-
-    renderModels(commandBuffer, mShadingPipelineLayout, 2);
-
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
 }
 
 void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
 {
+    VkClearValue clearValue {.color = {1.f, 1.f, 1.f, 1.f}};
+
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = mPostProcessingRenderpass,
@@ -430,8 +405,8 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
             .offset = {.x = 0, .y = 0},
             .extent = {.width = mWidth, .height = mHeight}
         },
-        .clearValueCount = 0,
-        .pClearValues = nullptr
+        .clearValueCount = 1,
+        .pClearValues = &clearValue
     };
 
     beginDebugLabel(commandBuffer, "Post Processing Renderpass");
@@ -441,7 +416,7 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
     vkCmdBindDescriptorSets(commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             mPostProcessingPipelineLayout,
-                            0, 1, &mResolvedColorDs,
+                            0, 1, &mColorDs,
                             0, nullptr);
 
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
@@ -476,7 +451,13 @@ void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipe
         model->render(commandBuffer, pipelineLayout, matDsIndex);
 }
 
-void Renderer::createColorTextures()
+void Renderer::updateCameraUBO()
+{
+    CameraRenderData renderData(mCamera.renderData());
+    mCameraUBO.update(0, sizeof(CameraRenderData), &renderData);
+}
+
+void Renderer::createColorTexture()
 {
     TextureSpecification specification {
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
@@ -485,10 +466,9 @@ void Renderer::createColorTextures()
         .layerCount = 1,
         .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                       VK_IMAGE_USAGE_SAMPLED_BIT,
         .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
-        .samples = mSamples,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .magFilter = TextureMagFilter::Nearest,
         .minFilter = TextureMinFilter::Nearest,
         .wrapS = TextureWrap::ClampToEdge,
@@ -498,14 +478,9 @@ void Renderer::createColorTextures()
 
     mColorTexture = VulkanTexture(mRenderDevice, specification);
     mColorTexture.setDebugName("Renderer::mColorTexture");
-
-    specification.samples = VK_SAMPLE_COUNT_1_BIT;
-    specification.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    mResolvedColorTexture = VulkanTexture(mRenderDevice, specification);
-    mResolvedColorTexture.setDebugName("Renderer::mResolvedColorTexture");
 }
 
-void Renderer::createDepthTextures()
+void Renderer::createDepthTexture()
 {
     TextureSpecification specification {
         .format = VK_FORMAT_D32_SFLOAT,
@@ -513,9 +488,11 @@ void Renderer::createDepthTextures()
         .height = mHeight,
         .layerCount = 1,
         .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
-        .imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
         .imageAspect = VK_IMAGE_ASPECT_DEPTH_BIT,
-        .samples = mSamples,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .magFilter = TextureMagFilter::Nearest,
         .minFilter = TextureMinFilter::Nearest,
         .wrapS = TextureWrap::ClampToEdge,
@@ -525,26 +502,21 @@ void Renderer::createDepthTextures()
 
     mDepthTexture = VulkanTexture(mRenderDevice, specification);
     mDepthTexture.setDebugName("Renderer::mDepthTexture");
-
-    specification.format = VK_FORMAT_R32_SFLOAT;
-    specification.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    specification.imageAspect = VK_IMAGE_ASPECT_COLOR_BIT;
-    specification.samples = VK_SAMPLE_COUNT_1_BIT;
-    mResolvedDepthTexture = VulkanTexture(mRenderDevice, specification);
-    mResolvedDepthTexture.setDebugName("Renderer::mResolvedDepthTexture");
 }
 
-void Renderer::createNormalTextures()
+void Renderer::createNormalTexture()
 {
-    TextureSpecification specification {
+    TextureSpecification specification{
         .format = VK_FORMAT_R16G16B16A16_SFLOAT,
         .width = mWidth,
         .height = mHeight,
         .layerCount = 1,
         .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
         .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
-        .samples = mSamples,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .magFilter = TextureMagFilter::Nearest,
         .minFilter = TextureMinFilter::Nearest,
         .wrapS = TextureWrap::ClampToEdge,
@@ -554,10 +526,6 @@ void Renderer::createNormalTextures()
 
     mNormalTexture = VulkanTexture(mRenderDevice, specification);
     mNormalTexture.setDebugName("Renderer::mNormalTexture");
-
-    specification.samples = VK_SAMPLE_COUNT_1_BIT;
-    mResolvedNormalTexture = VulkanTexture(mRenderDevice, specification);
-    mResolvedNormalTexture.setDebugName("Renderer::mResolvedNormalTexture");
 }
 
 void Renderer::createSsaoTexture()
@@ -568,7 +536,8 @@ void Renderer::createSsaoTexture()
         .height = mHeight,
         .layerCount = 1,
         .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT,
         .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .magFilter = TextureMagFilter::Nearest,
@@ -590,7 +559,8 @@ void Renderer::createPostProcessTexture()
         .height = mHeight,
         .layerCount = 1,
         .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT,
         .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .magFilter = TextureMagFilter::Nearest,
@@ -600,52 +570,169 @@ void Renderer::createPostProcessTexture()
         .generateMipMaps = false
     };
 
-    mPostProcessTexture = VulkanTexture(mRenderDevice, specification);
-    mPostProcessTexture.setDebugName("Renderer::mPostProcessTexture");
+    mPostProcessingTexture = VulkanTexture(mRenderDevice, specification);
+    mPostProcessingTexture.setDebugName("Renderer::mPostProcessTexture");
 }
 
-void Renderer::createTextures()
+void Renderer::createSingleImageDsLayout()
 {
-    createColorTextures();
-    createDepthTextures();
-    createNormalTextures();
-    createSsaoTexture();
-    createPostProcessTexture();
+    VkDescriptorSetLayoutBinding dsLayoutBinding {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindings = &dsLayoutBinding
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device,
+                                                  &dsLayoutCreateInfo,
+                                                  nullptr,
+                                                  &mSingleImageDsLayout);
+    vulkanCheck(result, "Failed to create ds layout");
+    setDsLayoutDebugName(mRenderDevice, mSingleImageDsLayout, "Renderer::mSingleImageDsLayout");
 }
 
-void Renderer::createCameraDs()
+void Renderer::createCameraRenderDataDsLayout()
 {
-    // ds layout
-    VkDescriptorSetLayoutBinding descriptorSetLayoutBinding {
+    VkDescriptorSetLayoutBinding cameraBinding {
         .binding = 0,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = 1,
         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT
     };
 
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
+    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .bindingCount = 1,
-        .pBindings = &descriptorSetLayoutBinding
+        .pBindings = &cameraBinding
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device,
+                                                  &dsLayoutCreateInfo,
+                                                  nullptr,
+                                                  &mCameraRenderDataDsLayout);
+    vulkanCheck(result, "Failed to create ds layout");
+    setDsLayoutDebugName(mRenderDevice, mCameraRenderDataDsLayout, "Renderer::mCameraRenderDataDsLayout");
+}
+
+void Renderer::createMaterialsDsLayout()
+{
+    VkDescriptorSetLayoutBinding materialsBinding {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = PerModelMaxMaterialCount,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    VkDescriptorSetLayoutBinding texturesBinding {
+        .binding = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = PerModelMaxTextureCount,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings {
+        materialsBinding,
+        texturesBinding
+    };
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<uint32_t>(bindings.size()),
+        .pBindings = bindings.data()
     };
 
     VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device,
                                                   &descriptorSetLayoutCreateInfo,
                                                   nullptr,
-                                                  &mCameraDsLayout);
+                                                  &mMaterialsDsLayout);
     vulkanCheck(result, "Failed to create ds layout");
-    setDsLayoutDebugName(mRenderDevice, mCameraDsLayout, "Renderer::mCameraDsLayout");
+    setDsLayoutDebugName(mRenderDevice, mMaterialsDsLayout, "Renderer::mMaterialsDsLayout");
+}
 
-    // ds
+void Renderer::createDepthNormalInputDsLayout()
+{
+    VkDescriptorSetLayoutBinding depthBinding {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    VkDescriptorSetLayoutBinding normalBinding {
+        .binding = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    };
+
+    std::array<VkDescriptorSetLayoutBinding, 2> bindings {
+        depthBinding,
+        normalBinding
+    };
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<uint32_t>(bindings.size()),
+        .pBindings = bindings.data()
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device,
+                                                  &descriptorSetLayoutCreateInfo,
+                                                  nullptr,
+                                                  &mDepthNormalInputDsLayout);
+    vulkanCheck(result, "Failed to create ds layout");
+    setDsLayoutDebugName(mRenderDevice, mDepthNormalInputDsLayout, "Renderer::mDepthNormalInputDsLayout");
+}
+
+void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &texture, const char *name)
+{
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = mRenderDevice.descriptorPool,
         .descriptorSetCount = 1,
-        .pSetLayouts = &mCameraDsLayout
+        .pSetLayouts = &mSingleImageDsLayout
     };
 
-    result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mCameraDs);
-    vulkanCheck(result, "Failed to allocate ds.");
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &ds);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+    setDSDebugName(mRenderDevice, ds, name);
+
+    VkDescriptorImageInfo imageInfo {
+        .sampler = texture.vulkanSampler.sampler,
+        .imageView = texture.vulkanImage.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = ds,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &imageInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::createCameraDs()
+{
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &mCameraRenderDataDsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mCameraDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
     setDSDebugName(mRenderDevice, mCameraDs, "Renderer::mCameraDs");
 
     VkDescriptorBufferInfo bufferInfo {
@@ -667,88 +754,61 @@ void Renderer::createCameraDs()
     vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
 }
 
-void Renderer::updateCameraUBO()
+void Renderer::createSingleImageDescriptorSets()
 {
-    CameraRenderData renderData(mCamera.renderData());
-    mCameraUBO.update(0, sizeof(CameraRenderData), &renderData);
+    createSingleImageDs(mSsaoDs, mSsaoTexture, "Renderer::mSsaoDs");
+    createSingleImageDs(mDepthDs, mDepthTexture, "Renderer::mDepthDs");
+    createSingleImageDs(mColorDs, mColorTexture, "Renderer::mColorDs");
+    createSingleImageDs(mPostProcessingDs, mPostProcessingTexture, "Renderer::mPostProcessingDs");
 }
 
-void Renderer::createDisplayTexturesDsLayout()
+void Renderer::createDepthNormalInputDs()
 {
-    VkDescriptorSetLayoutBinding dsLayoutBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &mDepthNormalInputDsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mDepthNormalInputDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+    setDSDebugName(mRenderDevice, mDepthNormalInputDs, "Renderer::mDepthNormalInputDs");
+
+    VkDescriptorImageInfo depthImageInfo {
+        .sampler = mDepthTexture.vulkanSampler.sampler,
+        .imageView = mDepthTexture.vulkanImage.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkDescriptorImageInfo normalImageInfo {
+        .sampler = mNormalTexture.vulkanSampler.sampler,
+        .imageView = mNormalTexture.vulkanImage.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mDepthNormalInputDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
         .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+        .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+        .pImageInfo = &depthImageInfo
     };
 
-    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &dsLayoutBinding
-    };
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
 
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device,
-                                                  &dsLayoutCreateInfo,
-                                                  nullptr,
-                                                  &mDisplayTexturesDSLayout);
-    vulkanCheck(result, "Failed to create Renderer::mDisplayTexturesDSLayout.");
-    setDsLayoutDebugName(mRenderDevice, mDisplayTexturesDSLayout, "Renderer::mDisplayTexturesDSLayout");
-}
-
-void Renderer::createMaterialDsLayout()
-{
-    VkDescriptorSetLayoutBinding materialsBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .descriptorCount = PerModelMaxMaterialCount,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    VkDescriptorSetLayoutBinding texturesBinding {
-        .binding = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = PerModelMaxTextureCount,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    VkDescriptorSetLayoutBinding bindings[2] {
-        materialsBinding,
-        texturesBinding
-    };
-
-    VkDescriptorBindingFlagsEXT descriptorBindingFlags[2] {
-        0,
-        VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
-    };
-
-    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT descriptorSetLayoutBindingFlagsCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-        .bindingCount = 2,
-        .pBindingFlags = descriptorBindingFlags
-    };
-
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .pNext = &descriptorSetLayoutBindingFlagsCreateInfo,
-        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-        .bindingCount = 2,
-        .pBindings = bindings
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device,
-                                                  &descriptorSetLayoutCreateInfo,
-                                                  nullptr,
-                                                  &mMaterialsDsLayout);
-    vulkanCheck(result, "Failed to create Renderer::mMaterialsDsLayout.");
-    setDsLayoutDebugName(mRenderDevice, mMaterialsDsLayout, "Renderer::mMaterialsDsLayout");
+    writeDescriptorSet.dstBinding = 1;
+    writeDescriptorSet.pImageInfo = &normalImageInfo;
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
 }
 
 void Renderer::createClearRenderPass()
 {
     VkAttachmentDescription colorAttachment {
         .format = mColorTexture.vulkanImage.format,
-        .samples = mSamples,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -757,7 +817,7 @@ void Renderer::createClearRenderPass()
 
     VkAttachmentDescription depthAttachment {
         .format = mDepthTexture.vulkanImage.format,
-        .samples = mSamples,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -766,7 +826,7 @@ void Renderer::createClearRenderPass()
 
     VkAttachmentDescription normalAttachment {
         .format = mNormalTexture.vulkanImage.format,
-        .samples = mSamples,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -848,7 +908,7 @@ void Renderer::createPrepassRenderpass()
 {
     VkAttachmentDescription normalAttachment {
         .format = mNormalTexture.vulkanImage.format,
-        .samples = mSamples,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -857,11 +917,11 @@ void Renderer::createPrepassRenderpass()
 
     VkAttachmentDescription depthAttachment {
         .format = mDepthTexture.vulkanImage.format,
-        .samples = mSamples,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     };
 
     std::array<VkAttachmentDescription, 2> attachments {{
@@ -905,7 +965,7 @@ void Renderer::createPrepassFramebuffer()
 
     std::array<VkImageView, 2> imageViews {
         mNormalTexture.vulkanImage.imageView,
-        mDepthTexture.vulkanImage.imageView
+        mDepthTexture.vulkanImage.imageView,
     };
 
     VkFramebufferCreateInfo framebufferCreateInfo {
@@ -925,23 +985,10 @@ void Renderer::createPrepassFramebuffer()
 
 void Renderer::createPrepassPipelineLayout()
 {
-    std::array<VkDescriptorSetLayout, 2> dsLayouts {
-        mCameraDsLayout,
-        mMaterialsDsLayout
-    };
-
-    VkPushConstantRange pushConstantRange {
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-        .offset = 0,
-        .size = sizeof(uint32_t)
-    };
-
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = static_cast<uint32_t>(dsLayouts.size()),
-        .pSetLayouts = dsLayouts.data(),
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &pushConstantRange
+        .setLayoutCount = 1,
+        .pSetLayouts = &mCameraRenderDataDsLayout
     };
 
     VkResult result = vkCreatePipelineLayout(mRenderDevice.device,
@@ -998,7 +1045,7 @@ void Renderer::createPrepassPipeline()
 
     VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = mSamples
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
     };
 
     VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo {
@@ -1062,439 +1109,11 @@ void Renderer::createPrepassPipeline()
     setPipelineDebugName(mRenderDevice, mPrepassPipeline, "Renderer::mPrepassPipeline");
 }
 
-void Renderer::createResolveRenderpass()
-{
-    VkAttachmentDescription resolvedNormalAttachment {
-        .format = mResolvedNormalTexture.vulkanImage.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkAttachmentDescription resolvedDepthAttachment {
-        .format = mResolvedDepthTexture.vulkanImage.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkAttachmentDescription depthAttachment {
-        .format = mDepthTexture.vulkanImage.format,
-        .samples = mSamples,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-
-    std::array<VkAttachmentDescription, 3> attachments {{
-        resolvedNormalAttachment,
-        resolvedDepthAttachment,
-        depthAttachment
-    }};
-
-    VkAttachmentReference resolvedNormalAttachmentRef {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentReference resolvedDepthAttachmentRef {
-        .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentReference depthAttachmentRef {
-        .attachment = 2,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-
-    std::array<VkAttachmentReference, 2> colorAttachmentsRef {
-        resolvedNormalAttachmentRef,
-        resolvedDepthAttachmentRef
-    };
-
-    VkSubpassDescription subpassResolve {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = static_cast<uint32_t>(colorAttachmentsRef.size()),
-        .pColorAttachments = colorAttachmentsRef.data(),
-    };
-
-    VkSubpassDescription subpassDepthTransition {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .pDepthStencilAttachment = &depthAttachmentRef
-    };
-
-    VkSubpassDependency dependency {
-        .srcSubpass = 0,
-        .dstSubpass = 1,
-        .srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        .srcAccessMask = 0,
-        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
-    };
-
-    std::array<VkSubpassDescription, 2> subpasses {
-        subpassResolve,
-        subpassDepthTransition
-    };
-
-    VkRenderPassCreateInfo renderPassCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = static_cast<uint32_t>(attachments.size()),
-        .pAttachments = attachments.data(),
-        .subpassCount = static_cast<uint32_t>(subpasses.size()),
-        .pSubpasses = subpasses.data(),
-        .dependencyCount = 1,
-        .pDependencies = &dependency
-    };
-
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mResolveRenderpass);
-    vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mResolveRenderpass, "Renderer::mResolveRenderpass");
-}
-
-void Renderer::createResolveFramebuffer()
-{
-    vkDestroyFramebuffer(mRenderDevice.device, mResolveFramebuffer, nullptr);
-
-    std::array<VkImageView, 3> imageViews {{
-        mResolvedNormalTexture.vulkanImage.imageView,
-        mResolvedDepthTexture.vulkanImage.imageView,
-        mDepthTexture.vulkanImage.imageView
-    }};
-
-    VkFramebufferCreateInfo framebufferCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mResolveRenderpass,
-        .attachmentCount = static_cast<uint32_t>(imageViews.size()),
-        .pAttachments = imageViews.data(),
-        .width = mWidth,
-        .height = mHeight,
-        .layers = 1
-    };
-
-    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mResolveFramebuffer);
-    vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mResolveFramebuffer, "Renderer::mResolveFramebuffer");
-}
-
-void Renderer::createMultisampledNormalDepthDsLayout()
-{
-    VkDescriptorSetLayoutBinding normalTexBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    VkDescriptorSetLayoutBinding depthTexBinding {
-        .binding = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    std::array<VkDescriptorSetLayoutBinding, 2> bindings {
-        normalTexBinding,
-        depthTexBinding
-    };
-
-    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = static_cast<uint32_t>(bindings.size()),
-        .pBindings = bindings.data()
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device, &dsLayoutCreateInfo, nullptr, &mMultisampledNormalDepthDsLayout);
-    vulkanCheck(result, "Failed to create descriptor set layout");
-    setDsLayoutDebugName(mRenderDevice, mMultisampledNormalDepthDsLayout, "Renderer::mMultisampledNormalDepthDsLayout");
-}
-
-void Renderer::createResolvedNormalDepthDsLayout()
-{
-    VkDescriptorSetLayoutBinding normalBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    VkDescriptorSetLayoutBinding depthBinding {
-        .binding = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    std::array<VkDescriptorSetLayoutBinding, 2> bindings {
-        normalBinding,
-        depthBinding
-    };
-
-    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = static_cast<uint32_t>(bindings.size()),
-        .pBindings = bindings.data()
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device, &dsLayoutCreateInfo, nullptr, &mResolvedNormalDepthDsLayout);
-    vulkanCheck(result, "Failed to create descriptor set layout");
-    setDsLayoutDebugName(mRenderDevice, mResolvedNormalDepthDsLayout, "Renderer::mResolvedNormalDepthDsLayout");
-}
-
-void Renderer::createMultisampledNormalDepthDs()
-{
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &mMultisampledNormalDepthDsLayout
-    };
-
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mMultisampledNormalDepthDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-    setDSDebugName(mRenderDevice, mMultisampledNormalDepthDs, "Renderer::mMultisampledNormalDepthDs");
-
-    VkDescriptorImageInfo normalImageInfo {
-        .sampler = mNormalTexture.vulkanSampler.sampler,
-        .imageView = mNormalTexture.vulkanImage.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkWriteDescriptorSet normalWriteDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mMultisampledNormalDepthDs,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &normalImageInfo
-    };
-
-    VkDescriptorImageInfo depthImageInfo {
-        .sampler = mDepthTexture.vulkanSampler.sampler,
-        .imageView = mDepthTexture.vulkanImage.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkWriteDescriptorSet depthWriteDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mMultisampledNormalDepthDs,
-        .dstBinding = 1,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &depthImageInfo
-    };
-
-    std::array<VkWriteDescriptorSet, 2> descriptorWrites {
-        normalWriteDescriptorSet,
-        depthWriteDescriptorSet
-    };
-
-    vkUpdateDescriptorSets(mRenderDevice.device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
-
-}
-
-void Renderer::createResolvedNormalDepthDs()
-{
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &mResolvedNormalDepthDsLayout
-    };
-
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mResolvedNormalDepthDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-    setDSDebugName(mRenderDevice, mResolvedNormalDepthDs, "Renderer::mResolvedNormalDepthDs");
-
-    VkDescriptorImageInfo normalImageInfo {
-        .sampler = mResolvedNormalTexture.vulkanSampler.sampler,
-        .imageView = mResolvedNormalTexture.vulkanImage.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkWriteDescriptorSet normalWriteDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mResolvedNormalDepthDs,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &normalImageInfo
-    };
-
-    VkDescriptorImageInfo depthImageInfo {
-        .sampler = mResolvedDepthTexture.vulkanSampler.sampler,
-        .imageView = mResolvedDepthTexture.vulkanImage.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkWriteDescriptorSet depthWriteDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mResolvedNormalDepthDs,
-        .dstBinding = 1,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &depthImageInfo
-    };
-
-    std::array<VkWriteDescriptorSet, 2> descriptorWrites {
-        normalWriteDescriptorSet,
-        depthWriteDescriptorSet
-    };
-
-    vkUpdateDescriptorSets(mRenderDevice.device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
-}
-
-void Renderer::createResolvePipelineLayout()
-{
-    VkPushConstantRange pushConstantRange {
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-        .offset = 0,
-        .size = sizeof(uint32_t)
-    };
-
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &mMultisampledNormalDepthDsLayout,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &pushConstantRange
-    };
-
-    VkResult result = vkCreatePipelineLayout(mRenderDevice.device,
-                                             &pipelineLayoutCreateInfo,
-                                             nullptr,
-                                             &mResolvePipelineLayout);
-    vulkanCheck(result, "Failed to create pipeline layout.");
-    setPipelineLayoutDebugName(mRenderDevice, mResolvePipelineLayout, "Renderer::mResolvePipelineLayout");
-}
-
-void Renderer::createResolvePipeline()
-{
-    VulkanShaderModule vertShaderModule(mRenderDevice, "shaders/fullscreen_render.vert.spv");
-    VulkanShaderModule fragShaderModule(mRenderDevice, "shaders/color_depth_resolve.frag.spv");
-
-    std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages {
-        shaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertShaderModule),
-        shaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderModule)
-    };
-
-    VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = 0,
-        .pVertexBindingDescriptions = nullptr,
-        .vertexAttributeDescriptionCount = 0,
-        .pVertexAttributeDescriptions = nullptr,
-    };
-
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-        .primitiveRestartEnable = VK_FALSE
-    };
-
-    VkPipelineTessellationStateCreateInfo tessellationStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO
-    };
-
-    VkPipelineViewportStateCreateInfo viewportStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .viewportCount = 1,
-        .scissorCount = 1
-    };
-
-    VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .polygonMode = VK_POLYGON_MODE_FILL,
-        .cullMode = VK_CULL_MODE_NONE,
-        .lineWidth = 1.f
-    };
-
-    VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
-    };
-
-    VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-        .depthTestEnable = VK_FALSE,
-        .depthWriteEnable = VK_FALSE,
-        .stencilTestEnable = VK_FALSE
-    };
-
-    VkPipelineColorBlendAttachmentState colorBlendAttachmentState {
-        .blendEnable = VK_FALSE,
-        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-                          VK_COLOR_COMPONENT_G_BIT |
-                          VK_COLOR_COMPONENT_B_BIT |
-                          VK_COLOR_COMPONENT_A_BIT
-    };
-
-    std::array<VkPipelineColorBlendAttachmentState, 2> colorBlendAttachments {
-        colorBlendAttachmentState,
-        colorBlendAttachmentState
-    };
-
-    VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        .logicOpEnable = VK_FALSE,
-        .attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size()),
-        .pAttachments = colorBlendAttachments.data()
-    };
-
-    std::array<VkDynamicState, 2> dynamicStates {
-        VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR
-    };
-
-    VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
-        .pDynamicStates = dynamicStates.data()
-    };
-
-    VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .stageCount = static_cast<uint32_t >(shaderStages.size()),
-        .pStages = shaderStages.data(),
-        .pVertexInputState = &vertexInputStateCreateInfo,
-        .pInputAssemblyState = &inputAssemblyStateCreateInfo,
-        .pTessellationState = &tessellationStateCreateInfo,
-        .pViewportState = &viewportStateCreateInfo,
-        .pRasterizationState = &rasterizationStateCreateInfo,
-        .pMultisampleState = &multisampleStateCreateInfo,
-        .pDepthStencilState = &depthStencilStateCreateInfo,
-        .pColorBlendState = &colorBlendStateCreateInfo,
-        .pDynamicState = &dynamicStateCreateInfo,
-        .layout = mResolvePipelineLayout,
-        .renderPass = mResolveRenderpass,
-        .subpass = 0
-    };
-
-    VkResult result = vkCreateGraphicsPipelines(mRenderDevice.device,
-                                                VK_NULL_HANDLE,
-                                                1, &graphicsPipelineCreateInfo,
-                                                nullptr,
-                                                &mResolvePipeline);
-    vulkanCheck(result, "Failed to create pipeline.");
-    setPipelineDebugName(mRenderDevice, mResolvePipeline, "Renderer::mResolvePipeline");
-}
-
 void Renderer::createColorDepthRenderpass()
 {
     VkAttachmentDescription colorAttachment {
         .format = mColorTexture.vulkanImage.format,
-        .samples = mSamples,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -1503,9 +1122,9 @@ void Renderer::createColorDepthRenderpass()
 
     VkAttachmentDescription depthAttachment {
         .format = mDepthTexture.vulkanImage.format,
-        .samples = mSamples,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     };
@@ -1569,31 +1188,11 @@ void Renderer::createColorDepthFramebuffer()
     setFramebufferDebugName(mRenderDevice, mColorDepthFramebuffer, "Renderer::mColorDepthFramebuffer");
 }
 
-void Renderer::createCubemapDsLayout()
-{
-    VkDescriptorSetLayoutBinding cubemapBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &cubemapBinding
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device, &dsLayoutCreateInfo, nullptr, &mCubemapDsLayout);
-    vulkanCheck(result, "Failed to create descriptor set layout");
-    setDsLayoutDebugName(mRenderDevice, mCubemapDsLayout, "Renderer::mCubemapDsLayout");
-}
-
 void Renderer::createSkyboxPipelineLayout()
 {
     std::array<VkDescriptorSetLayout, 2> layouts {
-        mCameraDsLayout,
-        mCubemapDsLayout
+        mCameraRenderDataDsLayout,
+        mSingleImageDsLayout
     };
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
@@ -1668,7 +1267,7 @@ void Renderer::createSkyboxPipeline()
 
     VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = mSamples
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
     };
 
     VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo {
@@ -1743,21 +1342,62 @@ void Renderer::createSsaoRenderpass()
         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
+    VkAttachmentDescription normalAttachment {
+        .format = mNormalTexture.vulkanImage.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentDescription depthAttachment {
+        .format = mDepthTexture.vulkanImage.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    std::array<VkAttachmentDescription, 3> attachments {
+        ssaoAttachment,
+        normalAttachment,
+        depthAttachment,
+    };
+
     VkAttachmentReference ssaoAttachmentRef {
         .attachment = 0,
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
+    VkAttachmentReference normalAttachmentRef {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference depthAttachmentRef {
+        .attachment = 2,
+        .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    std::array<VkAttachmentReference, 2> inputAttachments {
+        normalAttachmentRef,
+        depthAttachmentRef,
+    };
+
     VkSubpassDescription subpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .inputAttachmentCount = static_cast<uint32_t>(inputAttachments.size()),
+        .pInputAttachments = inputAttachments.data(),
         .colorAttachmentCount = 1,
-        .pColorAttachments = &ssaoAttachmentRef,
+        .pColorAttachments = &ssaoAttachmentRef
     };
 
     VkRenderPassCreateInfo renderPassCreateInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &ssaoAttachment,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
         .subpassCount = 1,
         .pSubpasses = &subpass,
     };
@@ -1771,11 +1411,17 @@ void Renderer::createSsaoFramebuffer()
 {
     vkDestroyFramebuffer(mRenderDevice.device, mSsaoFramebuffer, nullptr);
 
+    std::array<VkImageView, 3> attachments {
+        mSsaoTexture.vulkanImage.imageView,
+        mNormalTexture.vulkanImage.imageView,
+        mDepthTexture.vulkanImage.imageView,
+    };
+
     VkFramebufferCreateInfo framebufferCreateInfo {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = mSsaoRenderpass,
-        .attachmentCount = 1,
-        .pAttachments = &mSsaoTexture.vulkanImage.imageView,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
         .width = mWidth,
         .height = mHeight,
         .layers = 1
@@ -1789,8 +1435,8 @@ void Renderer::createSsaoFramebuffer()
 void Renderer::createSsaoPipelineLayout()
 {
     std::array<VkDescriptorSetLayout, 2> dsLayouts {
-        mCameraDsLayout,
-        mResolvedNormalDepthDsLayout
+        mCameraRenderDataDsLayout,
+        mDepthNormalInputDsLayout
     };
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
@@ -1915,159 +1561,11 @@ void Renderer::createSsaoPipeline()
     setPipelineDebugName(mRenderDevice, mSsaoPipeline, "Renderer::mSsaoPipeline");
 }
 
-void Renderer::createSsaoDsLayout()
-{
-    VkDescriptorSetLayoutBinding ssaoBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &ssaoBinding,
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device, &dsLayoutCreateInfo, nullptr, &mSsaoDsLayout);
-    vulkanCheck(result, "Failed to create descriptor set layout");
-    setDsLayoutDebugName(mRenderDevice, mSsaoDsLayout, "Renderer::mSsaoDsLayout");
-}
-
-void Renderer::createSsaoDs()
-{
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &mSsaoDsLayout
-    };
-
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mSsaoDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-    setDSDebugName(mRenderDevice, mSsaoDs, "Renderer::mSsaoDs");
-
-    VkDescriptorImageInfo ssaoImageInfo {
-        .sampler = mSsaoTexture.vulkanSampler.sampler,
-        .imageView = mSsaoTexture.vulkanImage.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkWriteDescriptorSet ssaoWriteDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mSsaoDs,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &ssaoImageInfo
-    };
-
-    vkUpdateDescriptorSets(mRenderDevice.device, 1, &ssaoWriteDescriptorSet, 0, nullptr);
-}
-
-void Renderer::createShadingRenderpass()
-{
-    VkAttachmentDescription colorAttachment {
-        .format = mColorTexture.vulkanImage.format,
-        .samples = mSamples,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentDescription depthAttachment {
-        .format = mDepthTexture.vulkanImage.format,
-        .samples = mSamples,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentDescription resolvedColorAttachment {
-        .format = mResolvedColorTexture.vulkanImage.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    std::array<VkAttachmentDescription, 3> attachments {
-        colorAttachment,
-        depthAttachment,
-        resolvedColorAttachment
-    };
-
-    VkAttachmentReference colorAttachmentRef {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentReference depthAttachmentRef {
-        .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentReference resolvedColorAttachmentRef {
-        .attachment = 2,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkSubpassDescription subpass {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachmentRef,
-        .pResolveAttachments = &resolvedColorAttachmentRef,
-        .pDepthStencilAttachment = &depthAttachmentRef,
-    };
-
-    VkRenderPassCreateInfo renderPassCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = static_cast<uint32_t>(attachments.size()),
-        .pAttachments = attachments.data(),
-        .subpassCount = 1,
-        .pSubpasses = &subpass,
-    };
-
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mShadingRenderpass);
-    vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mShadingRenderpass, "Renderer::mShadingRenderpass");
-}
-
-void Renderer::createShadingFramebuffer()
-{
-    vkDestroyFramebuffer(mRenderDevice.device, mShadingFramebuffer, nullptr);
-
-    std::array<VkImageView, 3> attachments {
-        mColorTexture.vulkanImage.imageView,
-        mDepthTexture.vulkanImage.imageView,
-        mResolvedColorTexture.vulkanImage.imageView
-    };
-
-    VkFramebufferCreateInfo framebufferCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mShadingRenderpass,
-        .attachmentCount = static_cast<uint32_t>(attachments.size()),
-        .pAttachments = attachments.data(),
-        .width = mWidth,
-        .height = mHeight,
-        .layers = 1
-    };
-
-    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mShadingFramebuffer);
-    vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mShadingFramebuffer, "Renderer::mShadingFramebuffer");
-}
-
 void Renderer::createShadingPipelineLayout()
 {
     std::array<VkDescriptorSetLayout, 3> dsLayouts {
-        mCameraDsLayout,
-        mSsaoDsLayout,
+        mCameraRenderDataDsLayout,
+        mSingleImageDsLayout,
         mMaterialsDsLayout
     };
 
@@ -2139,7 +1637,7 @@ void Renderer::createShadingPipeline()
 
     VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = mSamples
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
     };
 
     VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo {
@@ -2190,7 +1688,7 @@ void Renderer::createShadingPipeline()
         .pColorBlendState = &colorBlendStateCreateInfo,
         .pDynamicState = &dynamicStateCreateInfo,
         .layout = mShadingPipelineLayout,
-        .renderPass = mShadingRenderpass,
+        .renderPass = mColorDepthRenderpass,
         .subpass = 0
     };
 
@@ -2203,84 +1701,12 @@ void Renderer::createShadingPipeline()
     setPipelineDebugName(mRenderDevice, mShadingPipeline, "Renderer::mShadingPipeline");
 }
 
-void Renderer::createResolvedColorDsLayout()
-{
-    VkDescriptorSetLayoutBinding resolvedColorBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &resolvedColorBinding,
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device, &dsLayoutCreateInfo, nullptr, &mResolvedColorDsLayout);
-    vulkanCheck(result, "Failed to create descriptor set layout");
-    setDsLayoutDebugName(mRenderDevice, mResolvedColorDsLayout, "Renderer::mResolvedColorDsLayout");
-}
-
-void Renderer::createResolvedColorDs()
-{
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &mResolvedColorDsLayout
-    };
-
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mResolvedColorDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-    setDSDebugName(mRenderDevice, mResolvedColorDs, "Renderer::mResolvedColorDs");
-
-    VkDescriptorImageInfo resolvedColorImageInfo {
-        .sampler = mResolvedColorTexture.vulkanSampler.sampler,
-        .imageView = mResolvedColorTexture.vulkanImage.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkWriteDescriptorSet resolvedColorWriteDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mResolvedColorDs,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &resolvedColorImageInfo
-    };
-
-    vkUpdateDescriptorSets(mRenderDevice.device, 1, &resolvedColorWriteDescriptorSet, 0, nullptr);
-}
-
-void Renderer::createGridDsLayout()
-{
-    VkDescriptorSetLayoutBinding cameraBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &cameraBinding
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device, &dsLayoutCreateInfo, nullptr, &mGridDsLayout);
-    vulkanCheck(result, "Failed to create descriptor set layout");
-    setDsLayoutDebugName(mRenderDevice, mGridDsLayout, "Renderer::mGridDsLayout");
-}
-
 void Renderer::createGridPipelineLayout()
 {
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
-        .pSetLayouts = &mGridDsLayout,
+        .pSetLayouts = &mCameraRenderDataDsLayout,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = nullptr
     };
@@ -2336,7 +1762,7 @@ void Renderer::createGridPipeline()
 
     VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = mSamples
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
     };
 
     VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo {
@@ -2406,12 +1832,66 @@ void Renderer::createGridPipeline()
     setPipelineDebugName(mRenderDevice, mGridPipeline, "Renderer::mGridPipeline");
 }
 
+void Renderer::createTempColorTransitionRenderpass()
+{
+    VkAttachmentDescription colorAttachment {
+        .format = mColorTexture.vulkanImage.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference colorAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &colorAttachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mTempColorTransitionRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mTempColorTransitionRenderpass, "Renderer::mTempColorTransitionRenderpass");
+}
+
+void Renderer::createTempColorTransitionFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mTempColorTransitionFramebuffer, nullptr);
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mTempColorTransitionRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &mColorTexture.vulkanImage.imageView,
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mTempColorTransitionFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mTempColorTransitionFramebuffer, "Renderer::mColorTransitionFramebuffer");
+}
+
 void Renderer::createPostProcessingRenderpass()
 {
     VkAttachmentDescription colorAttachment {
-        .format = mPostProcessTexture.vulkanImage.format,
+        .format = mPostProcessingTexture.vulkanImage.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
@@ -2449,7 +1929,7 @@ void Renderer::createPostProcessingFramebuffer()
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = mPostProcessingRenderpass,
         .attachmentCount = 1,
-        .pAttachments = &mPostProcessTexture.vulkanImage.imageView,
+        .pAttachments = &mPostProcessingTexture.vulkanImage.imageView,
         .width = mWidth,
         .height = mHeight,
         .layers = 1
@@ -2465,7 +1945,7 @@ void Renderer::createPostProcessingPipelineLayout()
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 1,
-        .pSetLayouts = &mResolvedColorDsLayout,
+        .pSetLayouts = &mSingleImageDsLayout,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = nullptr
     };

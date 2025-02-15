@@ -2,8 +2,8 @@
 
 #include "material.glsl"
 
-#define MAX_MATERIALS 32
-#define MAX_TEXTURES 128
+#define MAX_MATERIALS 16
+#define MAX_TEXTURES 32
 
 layout (location = 0) in vec2 vTexCoords;
 layout (location = 1) in vec3 vNormal;

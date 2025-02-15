@@ -33,24 +33,31 @@ public:
 private:
     void executeClearRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
-    void executeResolveRenderpass(VkCommandBuffer commandBuffer);
+    void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
     void executeShadingRenderpass(VkCommandBuffer commandBuffer);
     void executeGridRenderpass(VkCommandBuffer commandBuffer);
+    void executeTempColorTransitionRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
     void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
+    void updateCameraUBO();
 
-    void createColorTextures();
-    void createDepthTextures();
-    void createNormalTextures();
+    void createColorTexture();
+    void createDepthTexture();
+    void createNormalTexture();
     void createSsaoTexture();
     void createPostProcessTexture();
-    void createTextures();
+
+    void createSingleImageDsLayout();
+    void createCameraRenderDataDsLayout();
+    void createMaterialsDsLayout();
+    void createDepthNormalInputDsLayout();
+
+    void createSingleImageDs(VkDescriptorSet& ds, const VulkanTexture& texture, const char* name);
     void createCameraDs();
-    void updateCameraUBO();
-    void createDisplayTexturesDsLayout();
-    void createMaterialDsLayout();
+    void createSingleImageDescriptorSets();
+    void createDepthNormalInputDs();
 
     void createClearRenderPass();
     void createClearFramebuffer();
@@ -60,19 +67,9 @@ private:
     void createPrepassPipelineLayout();
     void createPrepassPipeline();
 
-    void createResolveRenderpass();
-    void createResolveFramebuffer();
-    void createMultisampledNormalDepthDsLayout();
-    void createResolvedNormalDepthDsLayout();
-    void createMultisampledNormalDepthDs();
-    void createResolvedNormalDepthDs();
-    void createResolvePipelineLayout();
-    void createResolvePipeline();
-
     void createColorDepthRenderpass();
     void createColorDepthFramebuffer();
 
-    void createCubemapDsLayout();
     void createSkyboxPipelineLayout();
     void createSkyboxPipeline();
 
@@ -80,19 +77,15 @@ private:
     void createSsaoFramebuffer();
     void createSsaoPipelineLayout();
     void createSsaoPipeline();
-    void createSsaoDsLayout();
-    void createSsaoDs();
 
-    void createShadingRenderpass();
-    void createShadingFramebuffer();
     void createShadingPipelineLayout();
     void createShadingPipeline();
-    void createResolvedColorDsLayout();
-    void createResolvedColorDs();
 
-    void createGridDsLayout();
     void createGridPipelineLayout();
     void createGridPipeline();
+
+    void createTempColorTransitionRenderpass();
+    void createTempColorTransitionFramebuffer();
 
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
@@ -105,7 +98,6 @@ private:
 
     uint32_t mWidth;
     uint32_t mHeight;
-    VkSampleCountFlagBits mSamples;
 
     // camera
     Camera mCamera;
@@ -113,36 +105,30 @@ private:
 
     // textures
     VulkanTexture mColorTexture;
-    VulkanTexture mResolvedColorTexture;
     VulkanTexture mDepthTexture;
-    VulkanTexture mResolvedDepthTexture;
     VulkanTexture mNormalTexture;
-    VulkanTexture mResolvedNormalTexture;
-    VulkanTexture mPostProcessTexture;
-    VulkanTexture mSkybox;
+    VulkanTexture mPostProcessingTexture;
     VulkanTexture mSsaoTexture;
+    VulkanTexture mSkyboxTexture;
 
     // render passes
     VkRenderPass mClearRenderpass{};
     VkRenderPass mPrepassRenderpass{};
-    VkRenderPass mResolveRenderpass{};
     VkRenderPass mColorDepthRenderpass{};
     VkRenderPass mSsaoRenderpass{};
-    VkRenderPass mShadingRenderpass{};
+    VkRenderPass mTempColorTransitionRenderpass{};
     VkRenderPass mPostProcessingRenderpass{};
 
     // framebuffers
     VkFramebuffer mClearFramebuffer{};
     VkFramebuffer mPrepassFramebuffer{};
-    VkFramebuffer mResolveFramebuffer{};
     VkFramebuffer mColorDepthFramebuffer{};
     VkFramebuffer mSsaoFramebuffer{};
-    VkFramebuffer mShadingFramebuffer{};
+    VkFramebuffer mTempColorTransitionFramebuffer{};
     VkFramebuffer mPostProcessingFramebuffer{};
 
     // pipeline layouts
     VkPipelineLayout mPrepassPipelineLayout{};
-    VkPipelineLayout mResolvePipelineLayout{};
     VkPipelineLayout mSkyboxPipelineLayout{};
     VkPipelineLayout mGridPipelineLayout{};
     VkPipelineLayout mSsaoPipelineLayout{};
@@ -151,7 +137,6 @@ private:
 
     // pipelines
     VkPipeline mPrepassPipeline{};
-    VkPipeline mResolvePipeline{};
     VkPipeline mSkyboxPipeline{};
     VkPipeline mGridPipeline{};
     VkPipeline mSsaoPipeline{};
@@ -159,22 +144,18 @@ private:
     VkPipeline mPostProcessingPipeline{};
 
     // descriptor set layouts
-    VkDescriptorSetLayout mCameraDsLayout{};
-    VkDescriptorSetLayout mMultisampledNormalDepthDsLayout{};
-    VkDescriptorSetLayout mResolvedNormalDepthDsLayout{};
-    VkDescriptorSetLayout mResolvedColorDsLayout{};
-    VkDescriptorSetLayout mCubemapDsLayout{};
-    VkDescriptorSetLayout mGridDsLayout{};
-    VkDescriptorSetLayout mSsaoDsLayout{};
-    VkDescriptorSetLayout mDisplayTexturesDSLayout{};
+    VkDescriptorSetLayout mSingleImageDsLayout{};
+    VkDescriptorSetLayout mCameraRenderDataDsLayout{};
     VkDescriptorSetLayout mMaterialsDsLayout{};
+    VkDescriptorSetLayout mDepthNormalInputDsLayout{};
 
     // descriptor sets
     VkDescriptorSet mCameraDs{};
-    VkDescriptorSet mMultisampledNormalDepthDs{};
-    VkDescriptorSet mResolvedNormalDepthDs{};
+    VkDescriptorSet mDepthNormalInputDs{};
     VkDescriptorSet mSsaoDs{};
-    VkDescriptorSet mResolvedColorDs{};
+    VkDescriptorSet mDepthDs{};
+    VkDescriptorSet mColorDs{};
+    VkDescriptorSet mPostProcessingDs{};
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;

@@ -424,7 +424,7 @@ void Editor::viewPort()
     mRenderer.mCamera.update(mDt);
     mRenderer.render();
 
-    ImTextureID renderedImageHandle = reinterpret_cast<ImTextureID>(mRenderer.mResolvedColorDs);
+    ImTextureID renderedImageHandle = reinterpret_cast<ImTextureID>(mRenderer.mPostProcessingDs);
 
     ImGui::Image(renderedImageHandle, viewportSize);
 

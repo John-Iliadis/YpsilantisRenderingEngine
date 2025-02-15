@@ -8,5 +8,5 @@ layout (set = 0, binding = 0) uniform sampler2D tex;
 
 void main()
 {
-    outFragColor = texture(tex, vTexCoords);
+    outFragColor = vec4(texture(tex, vTexCoords).rgb, 1.f);
 }

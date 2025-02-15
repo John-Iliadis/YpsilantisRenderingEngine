@@ -12,8 +12,8 @@
 #include "../vk/vulkan_descriptor.hpp"
 #include "instanced_mesh.hpp"
 
-constexpr uint32_t PerModelMaxMaterialCount = 32;
-constexpr uint32_t PerModelMaxTextureCount = 128;
+constexpr uint32_t PerModelMaxMaterialCount = 16;
+constexpr uint32_t PerModelMaxTextureCount = 63;
 
 struct Material
 {

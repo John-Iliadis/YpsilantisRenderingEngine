@@ -22,7 +22,6 @@ struct CameraRenderData
     alignas(4) float farPlane;
 };
 
-// todo: add key shortcuts for changing state
 class Camera
 {
 public:
