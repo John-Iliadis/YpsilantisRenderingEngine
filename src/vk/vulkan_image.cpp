@@ -87,7 +87,7 @@ VulkanImage::VulkanImage(const VulkanRenderDevice &renderDevice,
     vkBindImageMemory(renderDevice.device, image, memory, 0);
 
     // create image view
-    imageView = createImageView(*mRenderDevice, image, viewType, format, imageAspect, mipLevels, layerCount);
+    imageView = createImageView(*mRenderDevice, image, viewType, format, imageAspect, mipLevels, 0, layerCount);
 }
 
 VulkanImage::~VulkanImage()
@@ -150,7 +150,7 @@ void VulkanImage::transitionLayout(VkImageLayout newLayout)
             .baseMipLevel = 0,
             .levelCount = mipLevels, // transition all mip levels
             .baseArrayLayer = 0,
-            .layerCount = layerCount
+            .layerCount = layerCount // transition all layers
         }
     };
 
@@ -215,7 +215,7 @@ void VulkanImage::transitionLayout(VkImageLayout newLayout)
     endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 
-void VulkanImage::copyBuffer(const VulkanBuffer &buffer)
+void VulkanImage::copyBuffer(const VulkanBuffer &buffer, uint32_t layerIndex)
 {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
 
@@ -224,9 +224,9 @@ void VulkanImage::copyBuffer(const VulkanBuffer &buffer)
         .bufferRowLength = width,
         .bufferImageHeight = height,
         .imageSubresource {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .aspectMask = imageAspect,
             .mipLevel = 0,
-            .baseArrayLayer = 0,
+            .baseArrayLayer = layerIndex,
             .layerCount = 1,
         },
         .imageOffset {0, 0, 0},
@@ -244,12 +244,6 @@ void VulkanImage::copyBuffer(const VulkanBuffer &buffer)
                            1, &copyRegion);
 
     endSingleTimeCommands(*mRenderDevice, commandBuffer);
-}
-
-void VulkanImage::setDebugName(const std::string &debugName)
-{
-    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_IMAGE, debugName, image);
-    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_IMAGE_VIEW, debugName, imageView);
 }
 
 void VulkanImage::resolveImage(const VulkanImage &multisampledImage)
@@ -288,12 +282,19 @@ void VulkanImage::resolveImage(const VulkanImage &multisampledImage)
     endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 
+void VulkanImage::setDebugName(const std::string &debugName)
+{
+    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_IMAGE, debugName, image);
+    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_IMAGE_VIEW, debugName, imageView);
+}
+
 VkImageView createImageView(const VulkanRenderDevice& renderDevice,
                             VkImage image,
                             VkImageViewType imageViewType,
                             VkFormat format,
                             VkImageAspectFlags aspectFlags,
                             uint32_t mipLevels,
+                            uint32_t layerIndex,
                             uint32_t layerCount)
 {
     VkImageView imageView;
@@ -304,11 +305,11 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
         .viewType = imageViewType,
         .format = format,
         .components = {},
-        .subresourceRange {
+        .subresourceRange = {
             .aspectMask = aspectFlags,
             .baseMipLevel = 0,
             .levelCount = mipLevels,
-            .baseArrayLayer = 0,
+            .baseArrayLayer = layerIndex,
             .layerCount = layerCount
         }
     };

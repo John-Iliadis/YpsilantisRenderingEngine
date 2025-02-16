@@ -46,9 +46,9 @@ public:
     VulkanImage& operator=(VulkanImage&& other) noexcept;
 
     void transitionLayout(VkImageLayout newLayout);
-    void copyBuffer(const VulkanBuffer& buffer);
-    void setDebugName(const std::string& debugName);
+    void copyBuffer(const VulkanBuffer& buffer, uint32_t layerIndex = 0);
     void resolveImage(const VulkanImage& multisampledImage);
+    void setDebugName(const std::string& debugName);
     void swap(VulkanImage& other) noexcept;
 
 private:
@@ -61,6 +61,7 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
                             VkFormat format,
                             VkImageAspectFlags aspectFlags,
                             uint32_t mipLevels = 1,
+                            uint32_t layerIndex = 0,
                             uint32_t layerCount = 1);
 
 #endif //VULKANRENDERINGENGINE_VULKAN_IMAGE_HPP
