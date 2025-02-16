@@ -15,7 +15,7 @@ void check(bool result, const char* msg, std::source_location location = std::so
 void setHWND(HWND windowHandle);
 HWND getHWND();
 
-std::filesystem::path fileDialog(const std::string& filter);
+std::filesystem::path fileDialog(const char* title = nullptr, const char* filter = "\0");
 
 std::string fileExtension(const std::filesystem::path& path);
 

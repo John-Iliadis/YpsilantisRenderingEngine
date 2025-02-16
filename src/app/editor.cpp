@@ -1007,7 +1007,7 @@ void Editor::modelDragDropTargetWholeWindow()
 
 void Editor::importModel()
 {
-    std::filesystem::path path = fileDialog("All Files");
+    std::filesystem::path path = fileDialog("Select glTF Model", "glTF Files *.gltf *.glb\0*.gltf\0\0");
 
     if (!path.empty())
     {

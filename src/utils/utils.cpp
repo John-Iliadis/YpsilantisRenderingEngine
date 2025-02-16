@@ -25,17 +25,20 @@ static HWND hwnd = nullptr;
 void setHWND(HWND windowHandle) { hwnd = windowHandle; }
 HWND getHWND() { return hwnd; }
 
-std::filesystem::path fileDialog(const std::string& filter)
+std::filesystem::path fileDialog(const char* title, const char* filter)
 {
-    char filename[260] {};
-    OPENFILENAME ofn;
-    ZeroMemory(&ofn, sizeof(ofn));
-    ofn.lpstrFile = filename;
-    ofn.lStructSize = sizeof(OPENFILENAME);
-    ofn.hwndOwner = hwnd;
-    ofn.nMaxFile = sizeof(filename);
-    ofn.lpstrFilter = "All Files";
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+    char filename[1024] {};
+
+    OPENFILENAME ofn {
+        .lStructSize = sizeof(OPENFILENAME),
+        .hwndOwner = hwnd,
+        .hInstance = (HINSTANCE)GetModuleHandle(nullptr),
+        .lpstrFilter = filter,
+        .lpstrFile = filename,
+        .nMaxFile = sizeof(filename),
+        .lpstrTitle = title,
+        .Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR
+    };
 
     if (GetOpenFileName(&ofn) == TRUE)
         return filename;
