@@ -75,7 +75,8 @@ void Camera::update(float dt)
             break;
     }
 
-    scroll(ImGui::GetIO().MouseWheelH, ImGui::GetIO().MouseWheel);
+    if (ImGui::IsWindowHovered())
+        scroll(ImGui::GetIO().MouseWheelH, ImGui::GetIO().MouseWheel);
 
     calculateViewProjection();
 
