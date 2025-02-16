@@ -387,16 +387,10 @@ void Editor::viewPort()
         InitialViewportHeight
     };
 
-    static constexpr ImGuiWindowFlags sWindowFlags {
-        ImGuiWindowFlags_NoDecoration |
-        ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoTitleBar
-    };
-
     ImGui::SetNextWindowSize(sInitialViewportSize, ImGuiCond_FirstUseEver);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-    ImGui::Begin("Viewport", &mShowViewport, sWindowFlags);
+    ImGui::Begin("Viewport", &mShowViewport, ImGuiWindowFlags_NoScrollbar);
 
     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 
