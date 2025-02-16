@@ -724,7 +724,7 @@ void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &tex
 
     VkDescriptorImageInfo imageInfo {
         .sampler = texture.vulkanSampler.sampler,
-        .imageView = texture.vulkanImage.imageView,
+        .imageView = texture.imageView,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
@@ -796,13 +796,13 @@ void Renderer::createDepthNormalInputDs()
 
     VkDescriptorImageInfo depthImageInfo {
         .sampler = mDepthTexture.vulkanSampler.sampler,
-        .imageView = mDepthTexture.vulkanImage.imageView,
+        .imageView = mDepthTexture.imageView,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
     VkDescriptorImageInfo normalImageInfo {
         .sampler = mNormalTexture.vulkanSampler.sampler,
-        .imageView = mNormalTexture.vulkanImage.imageView,
+        .imageView = mNormalTexture.imageView,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
@@ -826,7 +826,7 @@ void Renderer::createDepthNormalInputDs()
 void Renderer::createClearRenderPass()
 {
     VkAttachmentDescription colorAttachment {
-        .format = mColorTexture.vulkanImage.format,
+        .format = mColorTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -835,7 +835,7 @@ void Renderer::createClearRenderPass()
     };
 
     VkAttachmentDescription depthAttachment {
-        .format = mDepthTexture.vulkanImage.format,
+        .format = mDepthTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -844,7 +844,7 @@ void Renderer::createClearRenderPass()
     };
 
     VkAttachmentDescription normalAttachment {
-        .format = mNormalTexture.vulkanImage.format,
+        .format = mNormalTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -903,9 +903,9 @@ void Renderer::createClearFramebuffer()
     vkDestroyFramebuffer(mRenderDevice.device, mClearFramebuffer, nullptr);
 
     std::array<VkImageView, 3> imageViews {
-        mColorTexture.vulkanImage.imageView,
-        mDepthTexture.vulkanImage.imageView,
-        mNormalTexture.vulkanImage.imageView,
+        mColorTexture.imageView,
+        mDepthTexture.imageView,
+        mNormalTexture.imageView,
     };
 
     VkFramebufferCreateInfo framebufferCreateInfo {
@@ -926,7 +926,7 @@ void Renderer::createClearFramebuffer()
 void Renderer::createPrepassRenderpass()
 {
     VkAttachmentDescription normalAttachment {
-        .format = mNormalTexture.vulkanImage.format,
+        .format = mNormalTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -935,7 +935,7 @@ void Renderer::createPrepassRenderpass()
     };
 
     VkAttachmentDescription depthAttachment {
-        .format = mDepthTexture.vulkanImage.format,
+        .format = mDepthTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -983,8 +983,8 @@ void Renderer::createPrepassFramebuffer()
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
 
     std::array<VkImageView, 2> imageViews {
-        mNormalTexture.vulkanImage.imageView,
-        mDepthTexture.vulkanImage.imageView,
+        mNormalTexture.imageView,
+        mDepthTexture.imageView,
     };
 
     VkFramebufferCreateInfo framebufferCreateInfo {
@@ -1131,7 +1131,7 @@ void Renderer::createPrepassPipeline()
 void Renderer::createColorDepthRenderpass()
 {
     VkAttachmentDescription colorAttachment {
-        .format = mColorTexture.vulkanImage.format,
+        .format = mColorTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1140,7 +1140,7 @@ void Renderer::createColorDepthRenderpass()
     };
 
     VkAttachmentDescription depthAttachment {
-        .format = mDepthTexture.vulkanImage.format,
+        .format = mDepthTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1188,8 +1188,8 @@ void Renderer::createColorDepthFramebuffer()
     vkDestroyFramebuffer(mRenderDevice.device, mColorDepthFramebuffer, nullptr);
 
     std::array<VkImageView, 2> imageViews {
-        mColorTexture.vulkanImage.imageView,
-        mDepthTexture.vulkanImage.imageView,
+        mColorTexture.imageView,
+        mDepthTexture.imageView,
     };
 
     VkFramebufferCreateInfo framebufferCreateInfo {
@@ -1353,7 +1353,7 @@ void Renderer::createSkyboxPipeline()
 void Renderer::createSsaoRenderpass()
 {
     VkAttachmentDescription ssaoAttachment {
-        .format = mSsaoTexture.vulkanImage.format,
+        .format = mSsaoTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1362,7 +1362,7 @@ void Renderer::createSsaoRenderpass()
     };
 
     VkAttachmentDescription normalAttachment {
-        .format = mNormalTexture.vulkanImage.format,
+        .format = mNormalTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1371,7 +1371,7 @@ void Renderer::createSsaoRenderpass()
     };
 
     VkAttachmentDescription depthAttachment {
-        .format = mDepthTexture.vulkanImage.format,
+        .format = mDepthTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1431,9 +1431,9 @@ void Renderer::createSsaoFramebuffer()
     vkDestroyFramebuffer(mRenderDevice.device, mSsaoFramebuffer, nullptr);
 
     std::array<VkImageView, 3> attachments {
-        mSsaoTexture.vulkanImage.imageView,
-        mNormalTexture.vulkanImage.imageView,
-        mDepthTexture.vulkanImage.imageView,
+        mSsaoTexture.imageView,
+        mNormalTexture.imageView,
+        mDepthTexture.imageView,
     };
 
     VkFramebufferCreateInfo framebufferCreateInfo {
@@ -1860,7 +1860,7 @@ void Renderer::createGridPipeline()
 void Renderer::createTempColorTransitionRenderpass()
 {
     VkAttachmentDescription colorAttachment {
-        .format = mColorTexture.vulkanImage.format,
+        .format = mColorTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1900,7 +1900,7 @@ void Renderer::createTempColorTransitionFramebuffer()
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = mTempColorTransitionRenderpass,
         .attachmentCount = 1,
-        .pAttachments = &mColorTexture.vulkanImage.imageView,
+        .pAttachments = &mColorTexture.imageView,
         .width = mWidth,
         .height = mHeight,
         .layers = 1
@@ -1914,7 +1914,7 @@ void Renderer::createTempColorTransitionFramebuffer()
 void Renderer::createPostProcessingRenderpass()
 {
     VkAttachmentDescription colorAttachment {
-        .format = mPostProcessingTexture.vulkanImage.format,
+        .format = mPostProcessingTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1954,7 +1954,7 @@ void Renderer::createPostProcessingFramebuffer()
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = mPostProcessingRenderpass,
         .attachmentCount = 1,
-        .pAttachments = &mPostProcessingTexture.vulkanImage.imageView,
+        .pAttachments = &mPostProcessingTexture.imageView,
         .width = mWidth,
         .height = mHeight,
         .layers = 1

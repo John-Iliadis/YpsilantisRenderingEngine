@@ -419,9 +419,9 @@ namespace ModelImporter
         Texture texture {.name = imageData->loadedImage.path().filename().string()};
 
         VulkanTexture vkTexture(*renderDevice, textureSpecification, imageData->loadedImage.data());
-        vkTexture.vulkanImage.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+        vkTexture.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
         vkTexture.generateMipMaps();
-        vkTexture.vulkanImage.transitionLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        vkTexture.transitionLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         vkTexture.setDebugName(texture.name);
 
         texture.vulkanTexture = std::move(vkTexture);

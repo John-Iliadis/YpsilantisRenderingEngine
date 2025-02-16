@@ -66,11 +66,9 @@ const char* toStr(TextureWrap wrapMode);
 const char* toStr(TextureMagFilter magFilter);
 const char* toStr(TextureMinFilter minFilter);
 
-// todo: improve
-class VulkanTexture
+class VulkanTexture : public VulkanImage
 {
 public:
-    VulkanImage vulkanImage;
     VulkanSampler vulkanSampler;
 
 public:
@@ -82,14 +80,11 @@ public:
     VulkanTexture(VulkanTexture&& other) noexcept;
     VulkanTexture& operator=(VulkanTexture&& other) noexcept;
 
-    void uploadImageData(const void* data);
+    void uploadImageData(const void* data, uint32_t layerIndex = 0);
     void generateMipMaps();
-    void setDebugName(const std::string& debugName);
+    void setDebugName(const std::string& debugName) override;
 
     void swap(VulkanTexture& other) noexcept;
-
-private:
-    const VulkanRenderDevice* mRenderDevice;
 };
 
 uint32_t calculateMipLevels(uint32_t width, uint32_t height);

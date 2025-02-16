@@ -37,7 +37,7 @@ public:
                 VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT,
                 uint32_t layerCount = 1,
                 VkImageCreateFlags flags = 0);
-    ~VulkanImage();
+    virtual ~VulkanImage();
 
     VulkanImage(const VulkanImage&) = delete;
     VulkanImage& operator=(const VulkanImage&) = delete;
@@ -48,10 +48,10 @@ public:
     void transitionLayout(VkImageLayout newLayout);
     void copyBuffer(const VulkanBuffer& buffer, uint32_t layerIndex = 0);
     void resolveImage(const VulkanImage& multisampledImage);
-    void setDebugName(const std::string& debugName);
     void swap(VulkanImage& other) noexcept;
+    virtual void setDebugName(const std::string& debugName);
 
-private:
+protected:
     const VulkanRenderDevice* mRenderDevice;
 };
 

@@ -279,15 +279,15 @@ void Editor::matTexInspector(const char* label, const Texture& texture)
         ImGui::Text(texture.name.c_str());
         ImGui::Separator();
 
-        ImGui::Text("Size: %lux%lu", texture.vulkanTexture.vulkanImage.width, texture.vulkanTexture.vulkanImage.height);
+        ImGui::Text("Size: %lux%lu", texture.vulkanTexture.width, texture.vulkanTexture.height);
         ImGui::Text("Wrap U: %s", toStr(texture.vulkanTexture.vulkanSampler.wrapS));
         ImGui::Text("Wrap V: %s", toStr(texture.vulkanTexture.vulkanSampler.wrapT));
         ImGui::Text("Mag filter: %s", toStr(texture.vulkanTexture.vulkanSampler.magFilter));
         ImGui::Text("Min filter: %s", toStr(texture.vulkanTexture.vulkanSampler.minFilter));
         ImGui::Separator();
 
-        float textureWidth = static_cast<float>(texture.vulkanTexture.vulkanImage.width);
-        float textureHeight = static_cast<float>(texture.vulkanTexture.vulkanImage.height);
+        float textureWidth = static_cast<float>(texture.vulkanTexture.width);
+        float textureHeight = static_cast<float>(texture.vulkanTexture.height);
         float aspectRatio = (textureWidth > 0) ? (textureHeight / textureWidth) : 1.0f;
         float tooltipImageWidth = glm::max(250.f, ImGui::CalcTextSize(texture.name.c_str()).x);
         float tooltipImageHeight = tooltipImageWidth * aspectRatio;

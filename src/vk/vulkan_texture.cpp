@@ -54,14 +54,12 @@ const char* toStr(TextureMinFilter minFilter)
 // -- VulkanTexture -- //
 
 VulkanTexture::VulkanTexture()
-    : vulkanImage()
-    , vulkanSampler()
-    , mRenderDevice()
+    : vulkanSampler()
 {
 }
 
 VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const TextureSpecification &specification)
-    : vulkanImage(renderDevice,
+    : VulkanImage(renderDevice,
                   specification.imageViewType,
                   specification.format,
                   specification.width, specification.height,
@@ -77,14 +75,13 @@ VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const Textu
                                   specification.wrapS,
                                   specification.wrapT,
                                   specification.wrapR))
-    , mRenderDevice(&renderDevice)
 {
 }
 
 VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const TextureSpecification &specification, const void *data)
     : VulkanTexture(renderDevice, specification)
 {
-    vulkanImage.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     uploadImageData(data);
 }
 
@@ -96,31 +93,31 @@ VulkanTexture::~VulkanTexture()
     }
 }
 
-void VulkanTexture::uploadImageData(const void *data)
+void VulkanTexture::uploadImageData(const void *data, uint32_t layerIndex)
 {
-    assert(vulkanImage.layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    assert(layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-    VkDeviceSize size = vulkanImage.width * vulkanImage.height * formatSize(vulkanImage.format);
+    VkDeviceSize size = width * height * formatSize(format);
 
     VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
 
-    vulkanImage.copyBuffer(stagingBuffer);
+    copyBuffer(stagingBuffer, layerIndex);
 }
 
 void VulkanTexture::generateMipMaps()
 {
-    assert(vulkanImage.layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    assert(layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
 
-    int32_t mipWidth = vulkanImage.width;
-    int32_t mipHeight = vulkanImage.height;
+    int32_t mipWidth = width;
+    int32_t mipHeight = height;
 
     VkImageMemoryBarrier imageMemoryBarrier {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .image = vulkanImage.image,
+        .image = image,
         .subresourceRange {
-            .aspectMask = vulkanImage.imageAspect,
+            .aspectMask = imageAspect,
             .baseMipLevel = 0,
             .levelCount = 1,
             .baseArrayLayer = 0,
@@ -128,7 +125,7 @@ void VulkanTexture::generateMipMaps()
         }
     };
 
-    for (uint32_t i = 0; i < vulkanImage.mipLevels - 1; ++i)
+    for (uint32_t i = 0; i < mipLevels - 1; ++i)
     {
         // transition mip i + 1 to transfer dst layout
         imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -170,8 +167,8 @@ void VulkanTexture::generateMipMaps()
         mipHeight /= 2;
 
         vkCmdBlitImage(commandBuffer,
-                       vulkanImage.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                       vulkanImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                       image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                       image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                        1, &blitRegion,
                        VK_FILTER_LINEAR);
 
@@ -193,7 +190,7 @@ void VulkanTexture::generateMipMaps()
 
 void VulkanTexture::setDebugName(const std::string &debugName)
 {
-    vulkanImage.setDebugName(debugName);
+    VulkanImage::setDebugName(debugName);
     setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_SAMPLER, debugName, vulkanSampler.sampler);
 }
 
@@ -212,9 +209,8 @@ VulkanTexture &VulkanTexture::operator=(VulkanTexture&& other) noexcept
 
 void VulkanTexture::swap(VulkanTexture &other) noexcept
 {
-    std::swap(mRenderDevice, other.mRenderDevice);
+    VulkanImage::swap(other);
     std::swap(vulkanSampler, other.vulkanSampler);
-    vulkanImage.swap(other.vulkanImage);
 }
 
 uint32_t calculateMipLevels(uint32_t width, uint32_t height)

@@ -49,7 +49,7 @@ void Model::createTextureDescriptorSets(VkDescriptorSetLayout dsLayout)
 
         VkDescriptorImageInfo imageInfo {
             .sampler = texture.vulkanTexture.vulkanSampler.sampler,
-            .imageView = texture.vulkanTexture.vulkanImage.imageView,
+            .imageView = texture.vulkanTexture.imageView,
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         };
 
@@ -99,7 +99,7 @@ void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
     for (uint32_t i = 0; i < imageInfos.size(); ++i)
     {
         imageInfos.at(i).sampler = textures.at(i).vulkanTexture.vulkanSampler.sampler;
-        imageInfos.at(i).imageView = textures.at(i).vulkanTexture.vulkanImage.imageView;
+        imageInfos.at(i).imageView = textures.at(i).vulkanTexture.imageView;
         imageInfos.at(i).imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 
