@@ -33,7 +33,9 @@ private:
     void imguiEvents();
     void mainMenuBar();
     void cameraPanel();
+
     void debugPanel();
+    void plotPerformanceGraphs();
 
     void rendererPanel();
     void skyboxImportPopup();
@@ -99,6 +101,7 @@ private:
     uuid32_t mSelectedObjectID;
     float mDt;
     uint32_t mFPS;
+    float mFrametimeMs;
     std::array<char, 256> mBuffer;
     CopyFlags mCopyFlag;
     uuid32_t mCopiedNodeID;

@@ -16,6 +16,7 @@ Editor::Editor(Renderer& renderer, SaveData& saveData)
     , mShowRendererPanel(true)
     , mShowDebugPanel(true)
     , mFPS()
+    , mFrametimeMs()
     , mCopyFlag(CopyFlags::None)
     , mCopiedNodeID()
 {
@@ -521,7 +522,9 @@ void Editor::skyboxImportPopup()
 
     if (ImGui::BeginPopupModal("Import Skybox Textures", nullptr, windowFlags))
     {
+        ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign, ImVec2(0.5f, 0.5f));
         ImGui::SeparatorText("Import Skybox Textures");
+        ImGui::PopStyleVar();
         ImGui::Separator();
 
         char c[3];
@@ -588,11 +591,6 @@ void Editor::skyboxImportPopup()
 
         ImGui::EndPopup();
     }
-//
-//    if (ImGui::BeginPopupEx(ImGui::GetID("SkyboxImportPopup"), windowFlags))
-//    {
-//
-//    }
 }
 
 void Editor::debugPanel()
@@ -600,10 +598,6 @@ void Editor::debugPanel()
     ImGui::Begin("Debug", &mShowDebugPanel);
 
     ImGui::Text("GPU: %s", mRenderer.mRenderDevice.getDeviceProperties().deviceName);
-    ImGui::Separator();
-
-    ImGui::Text("FPS: %lu", mFPS);
-    ImGui::Text("Frame time: %.2f ms", mDt * 1000.f);
     ImGui::Separator();
 
     ImGui::Text("Window size: %lux%lu px",
@@ -614,7 +608,40 @@ void Editor::debugPanel()
                 static_cast<uint32_t>(mViewportSize.y));
     ImGui::Separator();
 
+    plotPerformanceGraphs();
+
     ImGui::End();
+}
+
+void Editor::plotPerformanceGraphs()
+{
+    static constexpr uint32_t maxSamples = 500;
+    static std::vector<float> fpsValues;
+    static std::vector<float> dtValues;
+
+    float dt = mDt * 1000.0f;
+    float fps = 1.0f / mDt;
+
+    if (dt > 33.f)
+        debugLog(std::format("Large dt: {}ms", dt));
+
+    if (dtValues.size() >= maxSamples)
+        dtValues.erase(dtValues.begin());
+
+    if (fpsValues.size() >= maxSamples)
+        fpsValues.erase(fpsValues.begin());
+
+    dtValues.push_back(dt);
+    fpsValues.push_back(fps);
+
+    ImGui::Text("FPS: %lu", mFPS);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::PlotLines("##FPS", fpsValues.data(), fpsValues.size(), 0, nullptr, 0, 1000, ImVec2(0, 50));
+    ImGui::Separator();
+
+    ImGui::Text("Frame time: %.2f ms", mFrametimeMs);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::PlotLines("##Frametime", dtValues.data(), dtValues.size(),  0, nullptr, 0, 100, ImVec2(0, 50));
 }
 
 void Editor::sceneGraphPanel()
@@ -1121,9 +1148,11 @@ void Editor::countFPS()
 {
     static float frameCount = 0;
     static float accumulatedTime = 0.f;
+    static float accumulatedTimeDt = 0.f;
 
     ++frameCount;
     accumulatedTime += mDt;
+    accumulatedTimeDt += mDt;
 
     if (accumulatedTime >= 1.f)
     {
@@ -1131,5 +1160,11 @@ void Editor::countFPS()
 
         frameCount = 0;
         accumulatedTime = 0.f;
+    }
+
+    if (accumulatedTimeDt >= 0.3f)
+    {
+        mFrametimeMs = mDt * 1000.f;
+        accumulatedTimeDt = 0.f;
     }
 }
