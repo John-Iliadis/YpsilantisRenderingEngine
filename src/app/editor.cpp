@@ -394,6 +394,9 @@ void Editor::viewPort()
 
     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 
+    viewportSize.x = glm::clamp(viewportSize.x, 1.f, FLT_MAX);
+    viewportSize.y = glm::clamp(viewportSize.y, 1.f, FLT_MAX);
+
     if (mViewportSize != viewportSize && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
         mViewportSize = viewportSize;
