@@ -103,71 +103,55 @@ void Editor::mainMenuBar()
     }
 }
 
-// todo: clamp values
 void Editor::cameraPanel()
 {
+    static constexpr ImGuiSliderFlags sliderFlags = ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput;
+
     ImGui::Begin("Camera", &mShowCameraPanel);
 
     ImGui::SeparatorText("Settings");
     ImGui::SliderFloat("Field of View", mRenderer.mCamera.fov(), 1.f, 177.f, "%0.f");
-    ImGui::DragFloat("Near Plane", mRenderer.mCamera.nearPlane(), 0.01f, 0.1f, *mRenderer.mCamera.farPlane(), "%.1f");
-    ImGui::DragFloat("Far Plane", mRenderer.mCamera.farPlane(), 0.01f, *mRenderer.mCamera.nearPlane(), FLT_MAX, "%.1f");
+
+    ImGui::DragFloat("Near Plane",
+                     mRenderer.mCamera.nearPlane(),
+                     0.01f, 0.001f, *mRenderer.mCamera.farPlane(),
+                     "%.3f", sliderFlags);
+
+    ImGui::DragFloat("Far Plane",
+                     mRenderer.mCamera.farPlane(),
+                     0.1f, *mRenderer.mCamera.nearPlane(), 10000.f,
+                     "%.2f", sliderFlags);
 
     ImGui::SeparatorText("Camera Mode");
 
-    static int selectedIndex = 0;
-    static const std::array<const char*, 3> items {{
-        "View",
-        "Edit",
-        "First Person"
-    }};
+    Camera::State cameraState = mRenderer.mCamera.state();
 
-    {
-        ImGui::BeginGroup();
+    if (ImGui::RadioButton("View", cameraState == Camera::State::VIEW_MODE))
+        mRenderer.mCamera.setState(Camera::State::VIEW_MODE);
 
-        for (int i = 0; i < items.size(); ++i)
-        {
-            const ImGuiStyle& style = ImGui::GetStyle();
-            ImVec2 selectableSize = ImGui::CalcTextSize(items.at(i)) + style.FramePadding * 2.f;
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Edit", cameraState == Camera::State::EDITOR_MODE))
+        mRenderer.mCamera.setState(Camera::State::EDITOR_MODE);
 
-            ImGui::PushStyleColor(ImGuiCol_Button, style.Colors[selectedIndex == i? ImGuiCol_ButtonHovered : ImGuiCol_Button]);
-
-            if (ImGui::Button(items.at(i), selectableSize))
-                selectedIndex = i;
-
-            ImGui::PopStyleColor();
-
-            if (i < items.size() - 1)
-                ImGui::SameLine();
-        }
-
-        ImGui::EndGroup();
-    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("First Person", cameraState == Camera::State::FIRST_PERSON))
+        mRenderer.mCamera.setState(Camera::State::FIRST_PERSON);
 
     ImGui::Separator();
 
-    if (selectedIndex == 0 || selectedIndex == 1)
-    {
+    cameraState = mRenderer.mCamera.state();
+
+    ImGui::DragFloat("Rotate Sensitivity", mRenderer.mCamera.rotateSensitivity(), 0.01f, 0.f, FLT_MAX, "%.1f");
+
+    if (cameraState == Camera::State::VIEW_MODE || cameraState == Camera::State::EDITOR_MODE)
         ImGui::DragFloat("Z Scroll Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.1f");
-        ImGui::DragFloat("Rotate Sensitivity", mRenderer.mCamera.rotateSensitivity(), 0.01f, 0.f, FLT_MAX, "%.1f");
-    }
 
-    if (selectedIndex == 0)
-    {
+    if (cameraState == Camera::State::VIEW_MODE)
         ImGui::DragFloat("Pan Speed", mRenderer.mCamera.panSpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
-        mRenderer.mCamera.setState(Camera::VIEW_MODE);
-    }
 
-    if (selectedIndex == 1)
-    {
-        mRenderer.mCamera.setState(Camera::EDITOR_MODE);
-    }
-
-    if (selectedIndex == 2)
-    {
+    if (cameraState == Camera::State::FIRST_PERSON)
         ImGui::DragFloat("Fly Speed", mRenderer.mCamera.flySpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
-        mRenderer.mCamera.setState(Camera::FIRST_PERSON);
-    }
+
     ImGui::End();
 }
 
@@ -616,8 +600,8 @@ void Editor::debugPanel()
 void Editor::plotPerformanceGraphs()
 {
     static constexpr uint32_t maxSamples = 500;
-    static std::vector<float> fpsValues;
-    static std::vector<float> dtValues;
+    static std::vector<float> fpsValues(maxSamples, 0.f);
+    static std::vector<float> dtValues(maxSamples, 0.f);
 
     float dt = mDt * 1000.0f;
     float fps = 1.0f / mDt;

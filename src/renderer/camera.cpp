@@ -53,6 +53,15 @@ void Camera::update(float dt)
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Right))
         mRightButtonDown = false;
 
+    if (ImGui::IsKeyPressed(ImGuiKey_V))
+        mState = State::VIEW_MODE;
+
+    if (ImGui::IsKeyPressed(ImGuiKey_E))
+        mState = State::EDITOR_MODE;
+
+    if (ImGui::IsKeyPressed(ImGuiKey_F))
+        mState = State::FIRST_PERSON;
+
     switch (mState)
     {
         case FIRST_PERSON:
