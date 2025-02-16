@@ -73,7 +73,7 @@ private:
     void modelDragDropSource(uuid32_t modelID);
     void modelDragDropTargetWholeWindow();
 
-    void importModel();
+    void importModel(const char* type);
     void checkPayloadType(const char* type);
     void resetBuffer();
     GraphNode* copyGraphNode(GraphNode* node);

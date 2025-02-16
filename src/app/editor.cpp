@@ -73,10 +73,10 @@ void Editor::mainMenuBar()
         if (ImGui::BeginMenu("File"))
         {
             if (ImGui::MenuItem("Import glTF"))
-                importModel();
+                importModel("gltf");
 
             if (ImGui::MenuItem("Import glb"))
-                importModel();
+                importModel("glb");
 
             ImGui::EndMenu();
         }
@@ -872,10 +872,10 @@ void Editor::assetPanelPopup()
     if (ImGui::BeginPopup("assetPanelPopup"))
     {
         if (ImGui::MenuItem("Import glTF##assetPanel"))
-            importModel();
+            importModel("gltf");
 
         if (ImGui::MenuItem("Import glb##assetPanel"))
-            importModel();
+            importModel("glb");
 
         ImGui::Separator();
 
@@ -1005,9 +1005,14 @@ void Editor::modelDragDropTargetWholeWindow()
     }
 }
 
-void Editor::importModel()
+void Editor::importModel(const char* type)
 {
-    std::filesystem::path path = fileDialog("Select glTF Model", "glTF Files *.gltf *.glb\0*.gltf\0\0");
+    std::filesystem::path path;
+
+    if (!strcmp(type, "gltf"))
+        path = fileDialog("Select glTF Model", "glTF Files *.gltf\0*.gltf\0\0");
+    else
+        path = fileDialog("Select glb Model", "glb Files *.glb\0*.glb\0\0");
 
     if (!path.empty())
     {
