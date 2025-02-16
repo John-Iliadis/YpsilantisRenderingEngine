@@ -26,6 +26,10 @@ public:
 
     void importModel(const std::filesystem::path& path);
     void deleteModel(uuid32_t id);
+
+    void importCubemapFaces(const std::array<std::filesystem::path, 6>& paths);
+    void importCubemapEquirectangular(const std::filesystem::path& path);
+
     void resize(uint32_t width, uint32_t height);
 
     void processMainThreadTasks();
@@ -172,6 +176,8 @@ private:
         alignas(4) float minPixelsBetweenCells = 1.2f;
     } mGridData;
 
+    bool mSkyboxLoaded = false;
+    bool mRenderSkybox = true;
     bool mRenderGrid = true;
 
 private:

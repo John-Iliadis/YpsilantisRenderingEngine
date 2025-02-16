@@ -146,6 +146,16 @@ void Renderer::deleteModel(uuid32_t id)
     mModels.erase(id);
 }
 
+void Renderer::importCubemapFaces(const std::array<std::filesystem::path, 6> &paths)
+{
+
+}
+
+void Renderer::importCubemapEquirectangular(const std::filesystem::path &path)
+{
+
+}
+
 void Renderer::resize(uint32_t width, uint32_t height)
 {
     mWidth = width;

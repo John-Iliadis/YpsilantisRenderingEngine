@@ -28,7 +28,7 @@ Camera::Camera(glm::vec3 position, float fovY, float width, float height, float 
     , mFlySpeed(2.f)
     , mPanSpeed(0.2f)
     , mZScrollOffset(0.3f)
-    , mRotateSensitivity(0.2f)
+    , mRotateSensitivity(6.f)
     , mLeftButtonDown()
     , mRightButtonDown()
 {
@@ -197,6 +197,7 @@ void Camera::updateFirstPerson(float dt)
 
         mTheta += mouseDt.x * dt * mRotateSensitivity;
         mPhi += -mouseDt.y * dt * mRotateSensitivity;
+        mPhi = glm::clamp(mPhi, -89.f, 89.f);
     }
 }
 
@@ -212,13 +213,14 @@ void Camera::updateViewMode(float dt)
         {
             mTheta += mouseDt.x * dt * mRotateSensitivity;
             mPhi += -mouseDt.y * dt * mRotateSensitivity;
+            mPhi = glm::clamp(mPhi, -89.f, 89.f);
         }
         else if (mLeftButtonDown)
         {
             float xOffset = mPanSpeed * dt * mouseDt.x;
             float yOffset = mPanSpeed * dt * mouseDt.y;
 
-            mPosition += mBasis[0] * xOffset + mBasis[1] * yOffset; // todo check
+            mPosition += mBasis[0] * xOffset + mBasis[1] * yOffset;
         }
     }
 }
@@ -236,15 +238,19 @@ void Camera::updateEditorMode(float dt)
     {
         mTheta += mouseDt.x * dt * mRotateSensitivity;
         mPhi += -mouseDt.y * dt * mRotateSensitivity;
+        mPhi = glm::clamp(mPhi, -89.f, 89.f);
     }
 }
 
 void Camera::calculateBasis()
 {
+    float theta = glm::radians(mTheta);
+    float phi = glm::radians(mPhi);
+
     mBasis[2] = {
-        glm::sin(mTheta) * glm::cos(mPhi),
-        glm::sin(mPhi),
-        glm::cos(mTheta) * glm::cos(mPhi)
+        glm::sin(theta) * glm::cos(phi),
+        glm::sin(phi),
+        glm::cos(theta) * glm::cos(phi)
     };
 
     mBasis[2] *= -1.f;

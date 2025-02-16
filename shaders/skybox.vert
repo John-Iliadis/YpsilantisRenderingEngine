@@ -17,6 +17,6 @@ layout (set = 0, binding = 0) uniform CameraUBO {
 void main()
 {
     vTexCoords = position;
-    vec4 pos = viewProj * vec4(position, 1.0);
-    gl_Position = pos.xyww;
+    vec4 pos = view * vec4(position, 1.0);
+    gl_Position = vec4(pos.xyz, pos.z);
 }
