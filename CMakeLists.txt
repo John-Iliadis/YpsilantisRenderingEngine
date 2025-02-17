@@ -77,6 +77,8 @@ add_executable(${PROJECT_NAME}
         src/scene_graph/graph_node.hpp
         src/app/save_data.cpp
         src/app/save_data.hpp
+        src/utils/timer.cpp
+        src/utils/timer.hpp
 )
 
 add_subdirectory(${DEPENDENCY_DIR}/tiny_gltf/)
