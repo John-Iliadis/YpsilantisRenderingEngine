@@ -143,13 +143,13 @@ void Editor::cameraPanel()
 
     cameraState = mRenderer.mCamera.state();
 
-    ImGui::DragFloat("Rotate Sensitivity", mRenderer.mCamera.rotateSensitivity(), 0.01f, 0.f, FLT_MAX, "%.1f");
+    ImGui::DragFloat("Rotate Sensitivity", mRenderer.mCamera.rotateSensitivity(), 0.1f, -FLT_MAX, FLT_MAX, "%.0f");
 
     if (cameraState == Camera::State::VIEW_MODE || cameraState == Camera::State::EDITOR_MODE)
-        ImGui::DragFloat("Z Scroll Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.1f");
+        ImGui::DragFloat("Z Scroll Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.2f");
 
     if (cameraState == Camera::State::VIEW_MODE)
-        ImGui::DragFloat("Pan Speed", mRenderer.mCamera.panSpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
+        ImGui::DragFloat("Pan Speed", mRenderer.mCamera.panSpeed(), 0.01f, 0.f, FLT_MAX, "%.2f");
 
     if (cameraState == Camera::State::FIRST_PERSON)
         ImGui::DragFloat("Fly Speed", mRenderer.mCamera.flySpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
@@ -595,14 +595,16 @@ void Editor::debugPanel()
 
     ImGui::Separator();
 
-    ImGui::Text("Clear renderpass: %.3lf", mRenderpassTimes.clearRenderpassDurMs);
-    ImGui::Text("Prepass: %.3lf", mRenderpassTimes.prepassRenderpassDurMs);
-    ImGui::Text("Skybox renderpass: %.3lf", mRenderpassTimes.skyboxRenderpassDurMs);
-    ImGui::Text("SSAO renderpass: %.3lf", mRenderpassTimes.ssaoRenderpassDurMs);
-    ImGui::Text("Shading renderpass: %.3lf", mRenderpassTimes.shadingRenderpassDurMs);
-    ImGui::Text("Grid renderpass: %.3lf", mRenderpassTimes.gridRenderpassDurMs);
-    ImGui::Text("Temp color renderpass: %.3lf", mRenderpassTimes.tempColorTransitionDurMs);
-    ImGui::Text("Post processing renderpass: %.3lf", mRenderpassTimes.postProcessingRenderpassDurMs);
+    ImGui::SeparatorText("Renderpass times");
+    ImGui::Text("Clear renderpass: %.3lfms", mRenderpassTimes.clearRenderpassDurMs);
+    ImGui::Text("Prepass: %.3lfms", mRenderpassTimes.prepassRenderpassDurMs);
+    ImGui::Text("Skybox renderpass: %.3lfms", mRenderpassTimes.skyboxRenderpassDurMs);
+    ImGui::Text("SSAO renderpass: %.3lfms", mRenderpassTimes.ssaoRenderpassDurMs);
+    ImGui::Text("Shading renderpass: %.3lfms", mRenderpassTimes.shadingRenderpassDurMs);
+    ImGui::Text("Grid renderpass: %.3lfms", mRenderpassTimes.gridRenderpassDurMs);
+    ImGui::Text("Temp color renderpass: %.3lfms", mRenderpassTimes.tempColorTransitionDurMs);
+    ImGui::Text("Post processing renderpass: %.3lfms", mRenderpassTimes.postProcessingRenderpassDurMs);
+    ImGui::Separator();
 
     ImGui::End();
 }
