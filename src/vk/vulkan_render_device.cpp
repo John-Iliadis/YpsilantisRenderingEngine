@@ -9,7 +9,8 @@
 static const std::vector<const char*> extensions {
     "VK_KHR_swapchain",
     "VK_EXT_descriptor_indexing",
-    "VK_EXT_extended_dynamic_state"
+    "VK_EXT_extended_dynamic_state",
+    "VK_EXT_host_query_reset"
 };
 
 static bool checkExtSupport(VkPhysicalDevice physicalDevice)
@@ -78,8 +79,15 @@ void VulkanRenderDevice::pickPhysicalDevice(const VulkanInstance &instance)
 
 void VulkanRenderDevice::createLogicalDevice()
 {
+    VkPhysicalDeviceHostQueryResetFeaturesEXT resetFeatures {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES,
+        .pNext = nullptr,
+        .hostQueryReset = VK_TRUE
+    };
+
     VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptorIndexingFeatures {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+        .pNext = &resetFeatures,
         .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
         .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
         .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,

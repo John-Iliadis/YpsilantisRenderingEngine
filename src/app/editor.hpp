@@ -83,6 +83,7 @@ private:
     bool isNodeSelected();
     bool isModelSelected();
     void countFPS();
+    void updateFrametimeStats();
 
 private:
     Renderer& mRenderer;
@@ -105,6 +106,7 @@ private:
     std::array<char, 256> mBuffer;
     CopyFlags mCopyFlag;
     uuid32_t mCopiedNodeID;
+    Renderer::RenderpassTimes mRenderpassTimes{};
 };
 
 enum class CopyFlags

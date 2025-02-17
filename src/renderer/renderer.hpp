@@ -6,6 +6,7 @@
 #define VULKANRENDERINGENGINE_RENDERER_HPP
 
 #include "../utils/utils.hpp"
+#include "../utils/timer.hpp"
 #include "../utils/main_thread_task_queue.hpp"
 #include "../app/save_data.hpp"
 #include "../vk/vulkan_pipeline.hpp"
@@ -27,9 +28,6 @@ public:
     void importModel(const std::filesystem::path& path);
     void deleteModel(uuid32_t id);
 
-    void importCubemapFaces(const std::array<std::filesystem::path, 6>& paths);
-    void importCubemapEquirectangular(const std::filesystem::path& path);
-
     void resize(uint32_t width, uint32_t height);
 
     void processMainThreadTasks();
@@ -46,6 +44,10 @@ private:
     void setViewport(VkCommandBuffer commandBuffer);
     void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
     void updateCameraUBO();
+    void beginRenderpassTimestamp(VkCommandBuffer commandBuffer, uint32_t index);
+    void endRenderpassTimestamp(VkCommandBuffer commandBuffer, uint32_t index);
+    void getRenderpassDurations();
+    double getRenderpassDurationMs(uint32_t index);
 
     void createColorTexture();
     void createDepthTexture();
@@ -53,6 +55,7 @@ private:
     void createSsaoTexture();
     void createPostProcessTexture();
 
+    void createQueryPool();
     void createSingleImageDsLayout();
     void createCameraRenderDataDsLayout();
     void createMaterialsDsLayout();
@@ -161,6 +164,19 @@ private:
     VkDescriptorSet mColorDs{};
     VkDescriptorSet mPostProcessingDs{};
 
+    // monitoring
+    VkQueryPool mRenderpassQueryPool;
+    struct RenderpassTimes {
+        double clearRenderpassDurMs;
+        double prepassRenderpassDurMs;
+        double skyboxRenderpassDurMs;
+        double ssaoRenderpassDurMs;
+        double shadingRenderpassDurMs;
+        double gridRenderpassDurMs;
+        double tempColorTransitionDurMs;
+        double postProcessingRenderpassDurMs;
+    } mRenderpassTimes;
+
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
 
@@ -177,7 +193,7 @@ private:
     } mGridData;
 
     bool mSkyboxLoaded = false;
-    bool mRenderSkybox = true;
+    bool mRenderSkybox = false;
     bool mRenderGrid = true;
 
 private:

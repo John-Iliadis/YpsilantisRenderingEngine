@@ -35,6 +35,8 @@ void Editor::update(float dt)
     ImGui::ShowDemoWindow();
 
     countFPS();
+    updateFrametimeStats();
+
     imguiEvents();
     mainMenuBar();
 
@@ -53,11 +55,11 @@ void Editor::update(float dt)
     if (mShowRendererPanel)
         rendererPanel();
 
-    if (mShowDebugPanel)
-        debugPanel();
-
     if (mShowViewport)
         viewPort();
+
+    if (mShowDebugPanel)
+        debugPanel();
 }
 
 void Editor::imguiEvents()
@@ -590,6 +592,17 @@ void Editor::debugPanel()
     ImGui::Separator();
 
     plotPerformanceGraphs();
+
+    ImGui::Separator();
+
+    ImGui::Text("Clear renderpass: %.3lf", mRenderpassTimes.clearRenderpassDurMs);
+    ImGui::Text("Prepass: %.3lf", mRenderpassTimes.prepassRenderpassDurMs);
+    ImGui::Text("Skybox renderpass: %.3lf", mRenderpassTimes.skyboxRenderpassDurMs);
+    ImGui::Text("SSAO renderpass: %.3lf", mRenderpassTimes.ssaoRenderpassDurMs);
+    ImGui::Text("Shading renderpass: %.3lf", mRenderpassTimes.shadingRenderpassDurMs);
+    ImGui::Text("Grid renderpass: %.3lf", mRenderpassTimes.gridRenderpassDurMs);
+    ImGui::Text("Temp color renderpass: %.3lf", mRenderpassTimes.tempColorTransitionDurMs);
+    ImGui::Text("Post processing renderpass: %.3lf", mRenderpassTimes.postProcessingRenderpassDurMs);
 
     ImGui::End();
 }
@@ -1134,11 +1147,9 @@ void Editor::countFPS()
 {
     static float frameCount = 0;
     static float accumulatedTime = 0.f;
-    static float accumulatedTimeDt = 0.f;
 
     ++frameCount;
     accumulatedTime += mDt;
-    accumulatedTimeDt += mDt;
 
     if (accumulatedTime >= 1.f)
     {
@@ -1147,10 +1158,18 @@ void Editor::countFPS()
         frameCount = 0;
         accumulatedTime = 0.f;
     }
+}
 
-    if (accumulatedTimeDt >= 0.3f)
+void Editor::updateFrametimeStats()
+{
+    static float accumulatedTime = 0.f;
+
+    accumulatedTime += mDt;
+
+    if (accumulatedTime > 0.3f)
     {
         mFrametimeMs = mDt * 1000.f;
-        accumulatedTimeDt = 0.f;
+        mRenderpassTimes = mRenderer.mRenderpassTimes;
+        accumulatedTime = 0.f;
     }
 }

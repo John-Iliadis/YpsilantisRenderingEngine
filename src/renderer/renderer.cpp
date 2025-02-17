@@ -4,6 +4,25 @@
 
 #include "renderer.hpp"
 
+enum : uint32_t {
+    ClearRenderpassQueryIndexBegin,
+    ClearRenderpassQueryIndexEnd,
+    PrepassQueryIndexBegin,
+    PrepassQueryIndexEnd,
+    SkyboxRenderpassQueryIndexBegin,
+    SkyboxRenderpassQueryIndexEnd,
+    SsaoRenderpassQueryIndexBegin,
+    SsaoRenderpassQueryIndexEnd,
+    ShadingRenderpassQueryIndexBegin,
+    ShadingRenderpassQueryIndexEnd,
+    GridRenderpassQueryIndexBegin,
+    GridRenderpassQueryIndexEnd,
+    TempColorRenderpassQueryIndexBegin,
+    TempColorRenderpassQueryIndexEnd,
+    PostProcessingRenderpassQueryIndexBegin,
+    PostProcessingRenderpassQueryIndexEnd,
+};
+
 Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     : mRenderDevice(renderDevice)
     , mSaveData(saveData)
@@ -17,7 +36,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
         mHeight = saveData["viewport"]["height"];
     }
 
-    mCamera = Camera(glm::vec3(-0.2f, 0.2f, 0.2f), 30.f, mWidth, mHeight, 0.01f);
+    mCamera = Camera(glm::vec3(0.f, 0.1f, 0.f), 30.f, mWidth, mHeight, 0.01f);
 
     createColorTexture();
     createDepthTexture();
@@ -25,6 +44,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createSsaoTexture();
     createPostProcessTexture();
 
+    createQueryPool();
     createSingleImageDsLayout();
     createCameraRenderDataDsLayout();
     createMaterialsDsLayout();
@@ -102,6 +122,8 @@ Renderer::~Renderer()
     vkDestroyDescriptorSetLayout(mRenderDevice.device, mCameraRenderDataDsLayout, nullptr);
     vkDestroyDescriptorSetLayout(mRenderDevice.device, mMaterialsDsLayout, nullptr);
     vkDestroyDescriptorSetLayout(mRenderDevice.device, mDepthNormalInputDsLayout, nullptr);
+
+    vkDestroyQueryPool(mRenderDevice.device, mRenderpassQueryPool, nullptr);
 }
 
 void Renderer::render()
@@ -122,6 +144,8 @@ void Renderer::render()
     executePostProcessingRenderpass(commandBuffer);
 
     endSingleTimeCommands(mRenderDevice, commandBuffer);
+
+    getRenderpassDurations();
 }
 
 void Renderer::importModel(const std::filesystem::path &path)
@@ -144,16 +168,6 @@ void Renderer::deleteModel(uuid32_t id)
 {
     SNS::publishMessage(Topic::Type::Renderer, Message::modelDeleted(id));
     mModels.erase(id);
-}
-
-void Renderer::importCubemapFaces(const std::array<std::filesystem::path, 6> &paths)
-{
-
-}
-
-void Renderer::importCubemapEquirectangular(const std::filesystem::path &path)
-{
-
 }
 
 void Renderer::resize(uint32_t width, uint32_t height)
@@ -242,8 +256,12 @@ void Renderer::executeClearRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Clear Renderpass");
+    beginRenderpassTimestamp(commandBuffer, ClearRenderpassQueryIndexBegin);
+
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(commandBuffer);
+
+    endRenderpassTimestamp(commandBuffer, ClearRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -262,6 +280,8 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Prepass");
+    beginRenderpassTimestamp(commandBuffer, PrepassQueryIndexBegin);
+
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPrepassPipeline);
 
@@ -273,6 +293,8 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
     renderModels(commandBuffer, mPrepassPipelineLayout, 1);
 
     vkCmdEndRenderPass(commandBuffer);
+
+    endRenderpassTimestamp(commandBuffer, PrepassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -303,6 +325,8 @@ void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "SSAO Renderpass");
+    beginRenderpassTimestamp(commandBuffer, SsaoRenderpassQueryIndexBegin);
+
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSsaoPipeline);
 
@@ -315,6 +339,8 @@ void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
+
+    endRenderpassTimestamp(commandBuffer, SsaoRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -338,6 +364,8 @@ void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Shading Renderpass");
+    beginRenderpassTimestamp(commandBuffer, ShadingRenderpassQueryIndexBegin);
+
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadingPipeline);
 
@@ -350,6 +378,8 @@ void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
     renderModels(commandBuffer, mShadingPipelineLayout, 2);
 
     vkCmdEndRenderPass(commandBuffer);
+
+    endRenderpassTimestamp(commandBuffer, ShadingRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -371,6 +401,8 @@ void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Grid");
+    beginRenderpassTimestamp(commandBuffer, GridRenderpassQueryIndexBegin);
+
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGridPipeline);
 
@@ -389,6 +421,8 @@ void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
+
+    endRenderpassTimestamp(commandBuffer, GridRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -407,8 +441,12 @@ void Renderer::executeTempColorTransitionRenderpass(VkCommandBuffer commandBuffe
     };
 
     beginDebugLabel(commandBuffer, "Temp Color Transition");
+    beginRenderpassTimestamp(commandBuffer, TempColorRenderpassQueryIndexBegin);
+
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(commandBuffer);
+
+    endRenderpassTimestamp(commandBuffer, TempColorRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -429,6 +467,8 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Post Processing Renderpass");
+    beginRenderpassTimestamp(commandBuffer, PostProcessingRenderpassQueryIndexBegin);
+
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPostProcessingPipeline);
 
@@ -441,6 +481,8 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
+
+    endRenderpassTimestamp(commandBuffer, PostProcessingRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -474,6 +516,86 @@ void Renderer::updateCameraUBO()
 {
     CameraRenderData renderData(mCamera.renderData());
     mCameraUBO.update(0, sizeof(CameraRenderData), &renderData);
+}
+
+void Renderer::beginRenderpassTimestamp(VkCommandBuffer commandBuffer, uint32_t index)
+{
+    vkCmdWriteTimestamp(commandBuffer,
+                        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                        mRenderpassQueryPool,
+                        index);
+}
+
+void Renderer::endRenderpassTimestamp(VkCommandBuffer commandBuffer, uint32_t index)
+{
+    vkCmdWriteTimestamp(commandBuffer,
+                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                        mRenderpassQueryPool,
+                        index);
+}
+
+void Renderer::getRenderpassDurations()
+{
+    mRenderpassTimes.clearRenderpassDurMs = getRenderpassDurationMs(ClearRenderpassQueryIndexBegin);
+    mRenderpassTimes.prepassRenderpassDurMs = getRenderpassDurationMs(PrepassQueryIndexBegin);
+
+    if (mRenderSkybox)
+        mRenderpassTimes.skyboxRenderpassDurMs = getRenderpassDurationMs(SkyboxRenderpassQueryIndexBegin);
+
+    mRenderpassTimes.ssaoRenderpassDurMs = getRenderpassDurationMs(SsaoRenderpassQueryIndexBegin);
+    mRenderpassTimes.shadingRenderpassDurMs = getRenderpassDurationMs(ShadingRenderpassQueryIndexBegin);
+
+    if (mRenderGrid)
+        mRenderpassTimes.gridRenderpassDurMs = getRenderpassDurationMs(GridRenderpassQueryIndexBegin);
+
+    mRenderpassTimes.tempColorTransitionDurMs = getRenderpassDurationMs(TempColorRenderpassQueryIndexBegin);
+    mRenderpassTimes.postProcessingRenderpassDurMs = getRenderpassDurationMs(PostProcessingRenderpassQueryIndexBegin);
+
+    if (mRenderpassTimes.clearRenderpassDurMs > 33.0)
+        debugLog(std::format("Large clear renderpass duration: {}ms", mRenderpassTimes.clearRenderpassDurMs));
+
+    if (mRenderpassTimes.prepassRenderpassDurMs > 33.0)
+        debugLog(std::format("Large prepass duration: {}ms", mRenderpassTimes.prepassRenderpassDurMs));
+
+    if (mRenderpassTimes.ssaoRenderpassDurMs > 33.0)
+        debugLog(std::format("Large ssao renderpass duration: {}ms", mRenderpassTimes.ssaoRenderpassDurMs));
+
+    if (mRenderpassTimes.shadingRenderpassDurMs > 33.0)
+        debugLog(std::format("Large shading renderpass duration: {}ms", mRenderpassTimes.shadingRenderpassDurMs));
+
+    if (mRenderpassTimes.gridRenderpassDurMs > 33.0)
+        debugLog(std::format("Large grid renderpass duration: {}ms", mRenderpassTimes.gridRenderpassDurMs));
+
+    if (mRenderpassTimes.tempColorTransitionDurMs > 33.0)
+        debugLog(std::format("Large temp color renderpass duration: {}ms", mRenderpassTimes.tempColorTransitionDurMs));
+
+    if (mRenderpassTimes.postProcessingRenderpassDurMs > 33.0)
+        debugLog(std::format("Large post processing renderpass duration: {}ms", mRenderpassTimes.postProcessingRenderpassDurMs));
+}
+
+double Renderer::getRenderpassDurationMs(uint32_t index)
+{
+    uint64_t timestamps[2];
+
+    VkResult result = vkGetQueryPoolResults(mRenderDevice.device,
+                                            mRenderpassQueryPool,
+                                            index, 2,
+                                            sizeof(uint64_t) * 2,
+                                            timestamps,
+                                            sizeof(uint64_t),
+                                            VK_QUERY_RESULT_64_BIT);
+    vulkanCheck(result, "Failed to get query results.");
+
+    pfnResetQueryPoolEXT(mRenderDevice.device, mRenderpassQueryPool, index, 2);
+
+    double timestampPeriod = mRenderDevice.getDeviceProperties().limits.timestampPeriod;
+
+    double startTime = timestamps[0] * timestampPeriod;
+    double endTime = timestamps[1] * timestampPeriod;
+
+    double duration = endTime - startTime;
+
+    return duration / 1e6;
 }
 
 void Renderer::createColorTexture()
@@ -591,6 +713,27 @@ void Renderer::createPostProcessTexture()
 
     mPostProcessingTexture = VulkanTexture(mRenderDevice, specification);
     mPostProcessingTexture.setDebugName("Renderer::mPostProcessTexture");
+}
+
+void Renderer::createQueryPool()
+{
+    uint32_t queryCount = 100;
+
+    VkQueryPoolCreateInfo queryPoolCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        .queryType = VK_QUERY_TYPE_TIMESTAMP,
+        .queryCount = queryCount
+    };
+
+    VkResult result = vkCreateQueryPool(mRenderDevice.device, &queryPoolCreateInfo, nullptr, &mRenderpassQueryPool);
+    vulkanCheck(result, "Failed to create query pool.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_QUERY_POOL,
+                             "Renderer::mRenderpassQueryPool",
+                             mRenderpassQueryPool);
+
+    pfnResetQueryPoolEXT(mRenderDevice.device, mRenderpassQueryPool, 0, queryCount);
 }
 
 void Renderer::createSingleImageDsLayout()

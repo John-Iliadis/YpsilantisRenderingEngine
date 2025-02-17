@@ -17,6 +17,9 @@ inline PFN_vkCmdInsertDebugUtilsLabelEXT pfnCmdInsertDebugUtilsLabelEXT;
 inline PFN_vkCmdSetCullModeEXT pfnCmdSetCullModeEXT;
 inline PFN_vkCmdSetFrontFaceEXT pfnCmdSetFrontFaceEXT;
 
+// VK_EXT_host_query_reset
+inline PFN_vkResetQueryPoolEXT pfnResetQueryPoolEXT;
+
 inline void loadExtensionFunctionsPointers(VkInstance instance)
 {
 #ifdef DEBUG_MODE
@@ -30,6 +33,8 @@ inline void loadExtensionFunctionsPointers(VkInstance instance)
 
     pfnCmdSetCullModeEXT = reinterpret_cast<PFN_vkCmdSetCullModeEXT>(vkGetInstanceProcAddr(instance, "vkCmdSetCullModeEXT"));
     pfnCmdSetFrontFaceEXT = reinterpret_cast<PFN_vkCmdSetFrontFaceEXT>(vkGetInstanceProcAddr(instance, "vkCmdSetFrontFaceEXT"));
+
+    pfnResetQueryPoolEXT = reinterpret_cast<PFN_vkResetQueryPoolEXT>(vkGetInstanceProcAddr(instance, "vkResetQueryPoolEXT"));
 }
 
 #endif //VULKANRENDERINGENGINE_VULKAN_FUNCTION_POINTERS_HPP
