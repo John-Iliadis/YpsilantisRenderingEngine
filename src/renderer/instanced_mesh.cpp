@@ -102,7 +102,7 @@ void InstancedMesh::render(VkCommandBuffer commandBuffer) const
     vkCmdDrawIndexed(commandBuffer, getIndexCount(mIndexBuffer), mInstanceCount, 0, 0, 0);
 }
 
-std::array<VkVertexInputBindingDescription, 2> InstancedMesh::bindingDescriptions()
+std::vector<VkVertexInputBindingDescription> InstancedMesh::bindingDescriptions()
 {
     VkVertexInputBindingDescription vertexBindingDescription {
         .binding = 0,
@@ -122,65 +122,34 @@ std::array<VkVertexInputBindingDescription, 2> InstancedMesh::bindingDescription
     };
 }
 
-std::array<VkVertexInputAttributeDescription, 13> InstancedMesh::attributeDescriptions()
+std::vector<VkVertexInputAttributeDescription> InstancedMesh::attributeDescriptions()
 {
-    std::array<VkVertexInputAttributeDescription, 13> attributeDescriptions;
+    static auto vertAttrib = [] (uint32_t loc, uint32_t binding, VkFormat format, uint32_t offset) {
+        VkVertexInputAttributeDescription vertexInputAttributeDescription {
+            .location = loc,
+            .binding = binding,
+            .format = format,
+            .offset = offset
+        };
 
-    // Vertex::position
-    attributeDescriptions.at(0).location = 0;
-    attributeDescriptions.at(0).binding = 0;
-    attributeDescriptions.at(0).format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions.at(0).offset = offsetof(Vertex, position);
+        return vertexInputAttributeDescription;
+    };
 
-    // Vertex::texCoords
-    attributeDescriptions.at(1).location = 1;
-    attributeDescriptions.at(1).binding = 0;
-    attributeDescriptions.at(1).format = VK_FORMAT_R32G32_SFLOAT;
-    attributeDescriptions.at(1).offset = offsetof(Vertex, texCoords);
-
-    // Vertex::normal
-    attributeDescriptions.at(2).location = 2;
-    attributeDescriptions.at(2).binding = 0;
-    attributeDescriptions.at(2).format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions.at(2).offset = offsetof(Vertex, normal);
-
-    // Vertex::tangent
-    attributeDescriptions.at(3).location = 3;
-    attributeDescriptions.at(3).binding = 0;
-    attributeDescriptions.at(3).format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions.at(3).offset = offsetof(Vertex, tangent);
-
-    // Vertex::bitangent
-    attributeDescriptions.at(4).location = 4;
-    attributeDescriptions.at(4).binding = 0;
-    attributeDescriptions.at(4).format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions.at(4).offset = offsetof(Vertex, bitangent);
-
-    // PerInstanceData::modelMatrix
-    for (size_t i = 0; i < 4; ++i)
-    {
-        attributeDescriptions.at(5 + i).location = 5 + i;
-        attributeDescriptions.at(5 + i).binding = 1;
-        attributeDescriptions.at(5 + i).format = VK_FORMAT_R32G32B32A32_SFLOAT;
-        attributeDescriptions.at(5 + i).offset = offsetof(InstanceData, modelMatrix) + i * sizeof(glm::vec4);
-    }
-
-    // PerInstanceData::normalMatrix
-    for (size_t i = 0; i < 3; ++i)
-    {
-        attributeDescriptions.at(9 + i).location = 9 + i;
-        attributeDescriptions.at(9 + i).binding = 1;
-        attributeDescriptions.at(9 + i).format = VK_FORMAT_R32G32B32A32_SFLOAT;
-        attributeDescriptions.at(9 + i).offset = offsetof(InstanceData, normalMatrix) + i * sizeof(glm::vec4);
-    }
-
-    // PerInstanceData::id
-    attributeDescriptions.at(12).location = 12;
-    attributeDescriptions.at(12).binding = 1;
-    attributeDescriptions.at(12).format = VK_FORMAT_R32_UINT;
-    attributeDescriptions.at(12).offset = offsetof(InstanceData, id);
-
-    return attributeDescriptions;
+    return {
+        vertAttrib(0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position)),
+        vertAttrib(1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, texCoords)),
+        vertAttrib(2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal)),
+        vertAttrib(3, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, tangent)),
+        vertAttrib(4, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, bitangent)),
+        vertAttrib(5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix)),
+        vertAttrib(6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + sizeof(glm::vec4)),
+        vertAttrib(7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + 2 * sizeof(glm::vec4)),
+        vertAttrib(8, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + 3 * sizeof(glm::vec4)),
+        vertAttrib(9, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix)),
+        vertAttrib(10, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix) + sizeof(glm::vec4)),
+        vertAttrib(11, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix) + 2 * sizeof(glm::vec4)),
+        vertAttrib(12, 1, VK_FORMAT_R32_UINT, offsetof(InstanceData, id)),
+    };
 }
 
 void InstancedMesh::checkResize()

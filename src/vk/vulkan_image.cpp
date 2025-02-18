@@ -105,6 +105,8 @@ VulkanImage::~VulkanImage()
 
         format = VK_FORMAT_UNDEFINED;
         layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        mRenderDevice = nullptr;
     }
 }
 

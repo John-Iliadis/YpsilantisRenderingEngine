@@ -71,24 +71,18 @@ private:
 
     void createPrepassRenderpass();
     void createPrepassFramebuffer();
-    void createPrepassPipelineLayout();
     void createPrepassPipeline();
 
     void createColorDepthRenderpass();
     void createColorDepthFramebuffer();
 
-    void createSkyboxPipelineLayout();
     void createSkyboxPipeline();
 
     void createSsaoRenderpass();
     void createSsaoFramebuffer();
-    void createSsaoPipelineLayout();
     void createSsaoPipeline();
 
-    void createShadingPipelineLayout();
     void createShadingPipeline();
-
-    void createGridPipelineLayout();
     void createGridPipeline();
 
     void createTempColorTransitionRenderpass();
@@ -96,7 +90,6 @@ private:
 
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
-    void createPostProcessingPipelineLayout();
     void createPostProcessingPipeline();
 
 private:
@@ -134,21 +127,13 @@ private:
     VkFramebuffer mTempColorTransitionFramebuffer{};
     VkFramebuffer mPostProcessingFramebuffer{};
 
-    // pipeline layouts
-    VkPipelineLayout mPrepassPipelineLayout{};
-    VkPipelineLayout mSkyboxPipelineLayout{};
-    VkPipelineLayout mGridPipelineLayout{};
-    VkPipelineLayout mSsaoPipelineLayout{};
-    VkPipelineLayout mShadingPipelineLayout{};
-    VkPipelineLayout mPostProcessingPipelineLayout{};
-
     // pipelines
-    VkPipeline mPrepassPipeline{};
-    VkPipeline mSkyboxPipeline{};
-    VkPipeline mGridPipeline{};
-    VkPipeline mSsaoPipeline{};
-    VkPipeline mShadingPipeline{};
-    VkPipeline mPostProcessingPipeline{};
+    VulkanGraphicsPipeline mPrepassPipeline{};
+    VulkanGraphicsPipeline mSkyboxPipeline{};
+    VulkanGraphicsPipeline mGridPipeline{};
+    VulkanGraphicsPipeline mSsaoPipeline{};
+    VulkanGraphicsPipeline mShadingPipeline{};
+    VulkanGraphicsPipeline mPostProcessingPipeline{};
 
     // descriptor set layouts
     VkDescriptorSetLayout mSingleImageDsLayout{};
