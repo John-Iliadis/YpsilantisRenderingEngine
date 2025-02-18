@@ -9,10 +9,40 @@
 #include "vulkan_buffer.hpp"
 #include "vulkan_texture.hpp"
 
-void setDsLayoutDebugName(const VulkanRenderDevice& renderDevice,
-                          VkDescriptorSetLayout dsLayout,
-                          const std::string& debugName);
+struct DsLayoutSpecification
+{
+    VkDescriptorSetLayoutCreateFlagBits flags;
+    std::vector<VkDescriptorSetLayoutBinding> bindings;
+    std::optional<std::string> debugName;
+};
 
-void setDSDebugName(const VulkanRenderDevice& renderDevice, VkDescriptorSet ds, const std::string& debugName);
+class VulkanDsLayout
+{
+public:
+    VulkanDsLayout();
+    VulkanDsLayout(const VulkanRenderDevice& renderDevice, const DsLayoutSpecification& specification);
+    ~VulkanDsLayout();
+
+    VulkanDsLayout(const VulkanDsLayout&) = delete;
+    VulkanDsLayout& operator=(const VulkanDsLayout&) = delete;
+
+    VulkanDsLayout(VulkanDsLayout&& other) noexcept;
+    VulkanDsLayout& operator=(VulkanDsLayout&& other) noexcept;
+
+    void swap(VulkanDsLayout& other);
+
+    operator VkDescriptorSetLayout() const;
+
+private:
+    const VulkanRenderDevice* mRenderDevice;
+    VkDescriptorSetLayout mDsLayout;
+};
+
+class VulkanDs
+{
+public:
+
+private:
+};
 
 #endif //VULKANRENDERINGENGINE_VULKAN_DESCRIPTOR_HPP

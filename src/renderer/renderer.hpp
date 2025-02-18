@@ -128,18 +128,18 @@ private:
     VkFramebuffer mPostProcessingFramebuffer{};
 
     // pipelines
-    VulkanGraphicsPipeline mPrepassPipeline{};
-    VulkanGraphicsPipeline mSkyboxPipeline{};
-    VulkanGraphicsPipeline mGridPipeline{};
-    VulkanGraphicsPipeline mSsaoPipeline{};
-    VulkanGraphicsPipeline mShadingPipeline{};
-    VulkanGraphicsPipeline mPostProcessingPipeline{};
+    VulkanGraphicsPipeline mPrepassPipeline;
+    VulkanGraphicsPipeline mSkyboxPipeline;
+    VulkanGraphicsPipeline mGridPipeline;
+    VulkanGraphicsPipeline mSsaoPipeline;
+    VulkanGraphicsPipeline mShadingPipeline;
+    VulkanGraphicsPipeline mPostProcessingPipeline;
 
     // descriptor set layouts
-    VkDescriptorSetLayout mSingleImageDsLayout{};
-    VkDescriptorSetLayout mCameraRenderDataDsLayout{};
-    VkDescriptorSetLayout mMaterialsDsLayout{};
-    VkDescriptorSetLayout mDepthNormalInputDsLayout{};
+    VulkanDsLayout mSingleImageDsLayout;
+    VulkanDsLayout mCameraRenderDataDsLayout;
+    VulkanDsLayout mMaterialsDsLayout;
+    VulkanDsLayout mDepthNormalInputDsLayout;
 
     // descriptor sets
     VkDescriptorSet mCameraDs{};

@@ -97,11 +97,6 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mTempColorTransitionRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
 
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mSingleImageDsLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mCameraRenderDataDsLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mMaterialsDsLayout, nullptr);
-    vkDestroyDescriptorSetLayout(mRenderDevice.device, mDepthNormalInputDsLayout, nullptr);
-
     vkDestroyQueryPool(mRenderDevice.device, mRenderpassQueryPool, nullptr);
 }
 
@@ -717,118 +712,88 @@ void Renderer::createQueryPool()
 
 void Renderer::createSingleImageDsLayout()
 {
-    VkDescriptorSetLayoutBinding dsLayoutBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    DsLayoutSpecification specification {
+        .bindings = {
+            {
+                .binding = 0,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+            },
+            {
+                .binding = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = PerModelMaxTextureCount,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+            }
+        },
+        .debugName = "Renderer::mSingleImageDsLayout"
     };
 
-    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &dsLayoutBinding
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device,
-                                                  &dsLayoutCreateInfo,
-                                                  nullptr,
-                                                  &mSingleImageDsLayout);
-    vulkanCheck(result, "Failed to create ds layout");
-    setDsLayoutDebugName(mRenderDevice, mSingleImageDsLayout, "Renderer::mSingleImageDsLayout");
+    mSingleImageDsLayout = VulkanDsLayout(mRenderDevice, specification);
 }
 
 void Renderer::createCameraRenderDataDsLayout()
 {
-    VkDescriptorSetLayoutBinding cameraBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT
+    DsLayoutSpecification specification {
+        .bindings = {
+            {
+                .binding = 0,
+                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT
+            }
+        },
+        .debugName = "Renderer::mCameraRenderDataDsLayout"
     };
 
-    VkDescriptorSetLayoutCreateInfo dsLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &cameraBinding
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device,
-                                                  &dsLayoutCreateInfo,
-                                                  nullptr,
-                                                  &mCameraRenderDataDsLayout);
-    vulkanCheck(result, "Failed to create ds layout");
-    setDsLayoutDebugName(mRenderDevice, mCameraRenderDataDsLayout, "Renderer::mCameraRenderDataDsLayout");
+    mCameraRenderDataDsLayout = VulkanDsLayout(mRenderDevice, specification);
 }
 
 void Renderer::createMaterialsDsLayout()
 {
-    VkDescriptorSetLayoutBinding materialsBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .descriptorCount = PerModelMaxMaterialCount,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    DsLayoutSpecification specification {
+        .bindings = {
+            {
+                .binding = 0,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .descriptorCount = PerModelMaxMaterialCount,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+            },
+            {
+                .binding = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = PerModelMaxTextureCount,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+            }
+        },
+        .debugName = "Renderer::mMaterialsDsLayout"
     };
 
-    VkDescriptorSetLayoutBinding texturesBinding {
-        .binding = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = PerModelMaxTextureCount,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    std::array<VkDescriptorSetLayoutBinding, 2> bindings {
-        materialsBinding,
-        texturesBinding
-    };
-
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = static_cast<uint32_t>(bindings.size()),
-        .pBindings = bindings.data()
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device,
-                                                  &descriptorSetLayoutCreateInfo,
-                                                  nullptr,
-                                                  &mMaterialsDsLayout);
-    vulkanCheck(result, "Failed to create ds layout");
-    setDsLayoutDebugName(mRenderDevice, mMaterialsDsLayout, "Renderer::mMaterialsDsLayout");
+    mMaterialsDsLayout = VulkanDsLayout(mRenderDevice, specification);
 }
 
 void Renderer::createDepthNormalInputDsLayout()
 {
-    VkDescriptorSetLayoutBinding depthBinding {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+    DsLayoutSpecification specification {
+        .bindings = {
+            {
+                .binding = 0,
+                .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+            },
+            {
+                .binding = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+            }
+        },
+        .debugName = "Renderer::mDepthNormalInputDsLayout"
     };
 
-    VkDescriptorSetLayoutBinding normalBinding {
-        .binding = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-    };
-
-    std::array<VkDescriptorSetLayoutBinding, 2> bindings {
-        depthBinding,
-        normalBinding
-    };
-
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = static_cast<uint32_t>(bindings.size()),
-        .pBindings = bindings.data()
-    };
-
-    VkResult result = vkCreateDescriptorSetLayout(mRenderDevice.device,
-                                                  &descriptorSetLayoutCreateInfo,
-                                                  nullptr,
-                                                  &mDepthNormalInputDsLayout);
-    vulkanCheck(result, "Failed to create ds layout");
-    setDsLayoutDebugName(mRenderDevice, mDepthNormalInputDsLayout, "Renderer::mDepthNormalInputDsLayout");
+    mDepthNormalInputDsLayout = VulkanDsLayout(mRenderDevice, specification);
 }
 
 void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &texture, const char *name)
@@ -1000,7 +965,7 @@ void Renderer::createClearRenderPass()
         normalAttachmentRef,
     };
 
-    VkSubpassDescription multisampledClearSubpass {
+    VkSubpassDescription clearSubpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
         .colorAttachmentCount = static_cast<uint32_t>(multisampledColorAttachments.size()),
         .pColorAttachments = multisampledColorAttachments.data(),
@@ -1012,7 +977,7 @@ void Renderer::createClearRenderPass()
         .attachmentCount = static_cast<uint32_t>(attachments.size()),
         .pAttachments = attachments.data(),
         .subpassCount = 1,
-        .pSubpasses = &multisampledClearSubpass
+        .pSubpasses = &clearSubpass
     };
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mClearRenderpass);

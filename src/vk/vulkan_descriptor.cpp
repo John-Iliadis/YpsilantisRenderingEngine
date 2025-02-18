@@ -4,12 +4,70 @@
 
 #include "vulkan_descriptor.hpp"
 
-void setDsLayoutDebugName(const VulkanRenderDevice& renderDevice, VkDescriptorSetLayout dsLayout, const std::string& debugName)
+// -- VulkanDsLayout -- //
+
+VulkanDsLayout::VulkanDsLayout()
+    : mRenderDevice()
+    , mDsLayout()
 {
-    setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, debugName, dsLayout);
 }
 
-void setDSDebugName(const VulkanRenderDevice& renderDevice, VkDescriptorSet ds, const std::string& debugName)
+VulkanDsLayout::VulkanDsLayout(const VulkanRenderDevice &renderDevice, const DsLayoutSpecification &specification)
+    : mRenderDevice(&renderDevice)
 {
-    setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, debugName, ds);
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .flags = specification.flags,
+        .bindingCount = static_cast<uint32_t>(specification.bindings.size()),
+        .pBindings = specification.bindings.data()
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(renderDevice.device,
+                                                  &descriptorSetLayoutCreateInfo,
+                                                  nullptr,
+                                                  &mDsLayout);
+    vulkanCheck(result, "Failed to create ds layout");
+
+    if (const auto& debugName = specification.debugName)
+    {
+        setVulkanObjectDebugName(renderDevice,
+                                 VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                                 *debugName,
+                                 mDsLayout);
+    }
 }
+
+VulkanDsLayout::~VulkanDsLayout()
+{
+    if (mRenderDevice)
+    {
+        vkDestroyDescriptorSetLayout(mRenderDevice->device, mDsLayout, nullptr);
+        mRenderDevice = nullptr;
+    }
+}
+
+VulkanDsLayout::VulkanDsLayout(VulkanDsLayout &&other) noexcept
+    : VulkanDsLayout()
+{
+    swap(other);
+}
+
+VulkanDsLayout &VulkanDsLayout::operator=(VulkanDsLayout &&other) noexcept
+{
+    if (this != &other)
+        swap(other);
+    return *this;
+}
+
+void VulkanDsLayout::swap(VulkanDsLayout &other)
+{
+    std::swap(mRenderDevice, other.mRenderDevice);
+    std::swap(mDsLayout, other.mDsLayout);
+}
+
+VulkanDsLayout::operator VkDescriptorSetLayout() const
+{
+    return mDsLayout;
+}
+
+// -- VulkanDs -- //
