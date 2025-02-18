@@ -161,11 +161,29 @@ void VulkanRenderDevice::createCommandPool()
 
 void VulkanRenderDevice::createDescriptorPool()
 {
-    descriptorPool = ::createDescriptorPool(device, 1000, 100, 100, 500);
+    uint32_t maxSets = 500;
+
+    std::vector<VkDescriptorPoolSize> poolSizes {
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 100},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 100},
+        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 100},
+    };
+
+    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT ,
+        .maxSets = maxSets,
+        .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+        .pPoolSizes = poolSizes.data()
+    };
+
+    VkResult result = vkCreateDescriptorPool(device, &descriptorPoolCreateInfo, nullptr, &descriptorPool);
+    vulkanCheck(result, "Failed to create descriptor pool.");
 
     setVulkanObjectDebugName(*this,
                              VK_OBJECT_TYPE_DESCRIPTOR_POOL,
-                             "VulkanRenderDevice::mDescriptorPool",
+                             "VulkanRenderDevice::descriptorPool",
                              descriptorPool);
 }
 
