@@ -26,7 +26,19 @@ public:
 
     void begin();
     void end();
-    void render(VkCommandBuffer commandBuffer);
+    void onSwapchainRecreate();
+    void render(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+
+private:
+    void createRenderpass();
+    void createFramebuffers();
+
+private:
+    const VulkanRenderDevice& mRenderDevice;
+    const VulkanSwapchain& mSwapchain;
+
+    VkRenderPass mRenderpass;
+    std::array<VkFramebuffer, 2> mFramebuffers;
 };
 
 #endif //VULKANRENDERINGENGINE_VULKAN_IMGUI_HPP

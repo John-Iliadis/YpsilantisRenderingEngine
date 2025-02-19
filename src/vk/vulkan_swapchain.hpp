@@ -18,7 +18,6 @@ public:
     VkSurfaceKHR surface;
 
     VkCommandBuffer commandBuffer;
-    VkRenderPass renderPass;
 
     VkFence inFlightFence;
     VkSemaphore imageReadySemaphore;
@@ -26,7 +25,6 @@ public:
 
     std::array<VkImage, 2> images;
     std::array<VkImageView, 2> imageViews;
-    std::array<VkFramebuffer, 2> framebuffers;
 
 public:
     VulkanSwapchain(const VulkanInstance& instance, const VulkanRenderDevice& renderDevice);
@@ -41,8 +39,6 @@ private:
     void createSurface();
     void createSwapchain();
     void createSwapchainImages();
-    void createRenderpass();
-    void createFramebuffers();
     void createCommandBuffer();
     void createSyncObjects();
 

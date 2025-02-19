@@ -46,6 +46,7 @@ void Application::recreateSwapchain()
     vkDeviceWaitIdle(mRenderDevice.device);
 
     mSwapchain.recreate();
+    mVulkanImGui.onSwapchainRecreate();
 }
 
 void Application::handleEvents()
@@ -71,28 +72,15 @@ void Application::fillCommandBuffer(uint32_t imageIndex)
 {
     VkCommandBufferBeginInfo commandBufferBeginInfo {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
     };
 
     VkResult result = vkBeginCommandBuffer(mSwapchain.commandBuffer, &commandBufferBeginInfo);
     vulkanCheck(result, "Failed to begin command buffer.");
 
-    VkClearValue clearValue {{0.2f, 0.2f, 0.2f, 0.2f}};
+    mRenderer.render(mSwapchain.commandBuffer);
+    mVulkanImGui.render(mSwapchain.commandBuffer, imageIndex);
 
-    VkRenderPassBeginInfo renderPassBeginInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mSwapchain.renderPass,
-        .framebuffer = mSwapchain.framebuffers.at(imageIndex),
-        .renderArea = {
-            .offset = {0, 0},
-            .extent = mSwapchain.getExtent()
-        },
-        .clearValueCount = 1,
-        .pClearValues = &clearValue
-    };
-
-    vkCmdBeginRenderPass(mSwapchain.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    mVulkanImGui.render(mSwapchain.commandBuffer);
-    vkCmdEndRenderPass(mSwapchain.commandBuffer);
     vkEndCommandBuffer(mSwapchain.commandBuffer);
 }
 

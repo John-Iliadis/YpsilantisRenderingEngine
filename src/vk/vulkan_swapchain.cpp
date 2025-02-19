@@ -11,8 +11,6 @@ VulkanSwapchain::VulkanSwapchain(const VulkanInstance &instance, const VulkanRen
     createSurface();
     createSwapchain();
     createSwapchainImages();
-    createRenderpass();
-    createFramebuffers();
     createCommandBuffer();
     createSyncObjects();
 }
@@ -25,11 +23,9 @@ VulkanSwapchain::~VulkanSwapchain()
 
     for (size_t i = 0; i < 2; ++i)
     {
-        vkDestroyFramebuffer(mRenderDevice.device, framebuffers.at(i), nullptr);
         vkDestroyImageView(mRenderDevice.device, imageViews.at(i), nullptr);
     }
 
-    vkDestroyRenderPass(mRenderDevice.device, renderPass, nullptr);
     vkDestroySwapchainKHR(mRenderDevice.device, swapchain, nullptr);
     vkDestroySurfaceKHR(mInstance.instance, surface, nullptr);
 }
@@ -39,7 +35,6 @@ void VulkanSwapchain::recreate()
     // swapchain
     for (size_t i = 0; i < 2; ++i)
     {
-        vkDestroyFramebuffer(mRenderDevice.device, framebuffers.at(i), nullptr);
         vkDestroyImageView(mRenderDevice.device, imageViews.at(i), nullptr);
     }
 
@@ -47,7 +42,6 @@ void VulkanSwapchain::recreate()
 
     createSwapchain();
     createSwapchainImages();
-    createFramebuffers();
 
     // sync objects
     vkDestroyFence(mRenderDevice.device, inFlightFence, nullptr);
@@ -158,70 +152,4 @@ void VulkanSwapchain::createSyncObjects()
     inFlightFence = createFence(mRenderDevice, false, "VulkanSwapchain::inFlightFence");
     imageReadySemaphore = createSemaphore(mRenderDevice, "VulkanSwapchain::imageReadySemaphore");
     renderCompleteSemaphore = createSemaphore(mRenderDevice, "VulkanSwapchain::renderCompleteSemaphore");
-}
-
-void VulkanSwapchain::createRenderpass()
-{
-    VkAttachmentDescription attachmentDescription {
-        .format = VK_FORMAT_R8G8B8A8_UNORM,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-    };
-
-    VkAttachmentReference attachmentReference {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkSubpassDescription subpassDescription {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &attachmentReference
-    };
-
-    VkRenderPassCreateInfo renderPassCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &attachmentDescription,
-        .subpassCount = 1,
-        .pSubpasses = &subpassDescription
-    };
-
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &renderPass);
-    vulkanCheck(result, "Failed to create renderpass");
-
-    setVulkanObjectDebugName(mRenderDevice,
-                             VK_OBJECT_TYPE_RENDER_PASS,
-                             "VulkanSwapchain::renderPass",
-                             renderPass);
-}
-
-void VulkanSwapchain::createFramebuffers()
-{
-    for (uint32_t i = 0; i < 2; ++i)
-    {
-        VkFramebufferCreateInfo framebufferCreateInfo {
-            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            .renderPass = renderPass,
-            .attachmentCount = 1,
-            .pAttachments = &imageViews.at(i),
-            .width = mExtent.width,
-            .height = mExtent.height,
-            .layers = 1
-        };
-
-        VkResult result = vkCreateFramebuffer(mRenderDevice.device,
-                                              &framebufferCreateInfo,
-                                              nullptr,
-                                              &framebuffers.at(i));
-        vulkanCheck(result, "Failed to create swapchain framebuffer");
-
-        setVulkanObjectDebugName(mRenderDevice,
-                                 VK_OBJECT_TYPE_FRAMEBUFFER,
-                                 std::format("VulkanSwapchain::framebuffers.at({})", i),
-                                 framebuffers.at(i));
-    }
 }
