@@ -18,7 +18,7 @@ Camera::Camera(glm::vec3 position, float fovY, float width, float height, float 
     , mPosition(position)
     , mTheta()
     , mPhi()
-    , mProjection(glm::perspective(fovY, width / height, nearZ, farZ))
+    , mProjection(glm::perspective(glm::radians(fovY), width / height, nearZ, farZ))
     , mFovY(fovY)
     , mAspectRatio(width / height)
     , mNearZ(nearZ)
@@ -187,9 +187,9 @@ void Camera::updateFirstPerson(float dt)
         if (ImGui::IsKeyDown(ImGuiKey_S))
             ++z;
         if (ImGui::IsKeyDown(ImGuiKey_A))
-            ++x;
-        if (ImGui::IsKeyDown(ImGuiKey_D))
             --x;
+        if (ImGui::IsKeyDown(ImGuiKey_D))
+            ++x;
     }
 
     glm::vec2 mouseDt{};
@@ -205,7 +205,7 @@ void Camera::updateFirstPerson(float dt)
         float zOffset = mFlySpeed * dt * glm::sign(z);
         mPosition += mBasis[0] * xOffset + mBasis[2] * zOffset;
 
-        mTheta += mouseDt.x * dt * mRotateSensitivity;
+        mTheta += -mouseDt.x * dt * mRotateSensitivity;
         mPhi += -mouseDt.y * dt * mRotateSensitivity;
         mPhi = glm::clamp(mPhi, -89.f, 89.f);
     }
@@ -221,13 +221,13 @@ void Camera::updateViewMode(float dt)
     {
         if (mRightButtonDown)
         {
-            mTheta += mouseDt.x * dt * mRotateSensitivity;
+            mTheta += -mouseDt.x * dt * mRotateSensitivity;
             mPhi += -mouseDt.y * dt * mRotateSensitivity;
             mPhi = glm::clamp(mPhi, -89.f, 89.f);
         }
         else if (mLeftButtonDown)
         {
-            float xOffset = mPanSpeed * dt * mouseDt.x;
+            float xOffset = -mPanSpeed * dt * mouseDt.x;
             float yOffset = mPanSpeed * dt * mouseDt.y;
 
             mPosition += mBasis[0] * xOffset + mBasis[1] * yOffset;
@@ -246,7 +246,7 @@ void Camera::updateEditorMode(float dt)
 
     if (mouseDt.x || mouseDt.y)
     {
-        mTheta += mouseDt.x * dt * mRotateSensitivity;
+        mTheta += -mouseDt.x * dt * mRotateSensitivity;
         mPhi += -mouseDt.y * dt * mRotateSensitivity;
         mPhi = glm::clamp(mPhi, -89.f, 89.f);
     }
@@ -286,8 +286,8 @@ void Camera::calculateViewProjection()
     mView[3].z = -glm::dot(mPosition, mBasis[2]);
     mView[3].w = 1.f;
 
-    mProjection = glm::perspective(mFovY, mAspectRatio, mNearZ, mFarZ);
-    mViewProjection = mProjection * mView;
+    mProjection = glm::perspective(glm::radians(mFovY), mAspectRatio, mNearZ, mFarZ);
+    mViewProjection = sRightHandedBasis * mProjection * mView;
 }
 
 const CameraRenderData Camera::renderData() const

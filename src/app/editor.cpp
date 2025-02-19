@@ -112,7 +112,7 @@ void Editor::cameraPanel()
     ImGui::Begin("Camera", &mShowCameraPanel);
 
     ImGui::SeparatorText("Settings");
-    ImGui::SliderFloat("Field of View", mRenderer.mCamera.fov(), 1.f, 177.f, "%0.f");
+    ImGui::SliderFloat("Field of View", mRenderer.mCamera.fov(), 1.f, 145.f, "%0.f");
 
     ImGui::DragFloat("Near Plane",
                      mRenderer.mCamera.nearPlane(),
