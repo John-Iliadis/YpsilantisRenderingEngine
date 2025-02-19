@@ -22,7 +22,6 @@ public:
     uint32_t layerCount;
 
     VkFormat format;
-    VkImageLayout layout;
     VkImageAspectFlags imageAspect;
 
 public:
@@ -45,7 +44,13 @@ public:
     VulkanImage(VulkanImage&& other) noexcept;
     VulkanImage& operator=(VulkanImage&& other) noexcept;
 
-    void transitionLayout(VkImageLayout newLayout);
+    void transitionLayout(VkCommandBuffer commandBuffer,
+                          VkImageLayout oldLayout, VkImageLayout newLayout,
+                          VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
+                          VkAccessFlags srcAccess, VkAccessFlags dstAccess);
+    void transitionLayout(VkImageLayout oldLayout, VkImageLayout newLayout,
+                          VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
+                          VkAccessFlags srcAccess, VkAccessFlags dstAccess);
     void copyBuffer(const VulkanBuffer& buffer, uint32_t layerIndex = 0);
     void resolveImage(const VulkanImage& multisampledImage);
     void swap(VulkanImage& other) noexcept;

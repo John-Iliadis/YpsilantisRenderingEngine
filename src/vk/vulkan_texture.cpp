@@ -81,7 +81,9 @@ VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const Textu
 VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const TextureSpecification &specification, const void *data)
     : VulkanTexture(renderDevice, specification)
 {
-    transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    transitionLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                     0, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                     0, VK_ACCESS_TRANSFER_WRITE_BIT);
     uploadImageData(data);
 }
 
@@ -95,8 +97,6 @@ VulkanTexture::~VulkanTexture()
 
 void VulkanTexture::uploadImageData(const void *data, uint32_t layerIndex)
 {
-    assert(layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
     VkDeviceSize size = width * height * formatSize(format);
 
     VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
@@ -104,12 +104,8 @@ void VulkanTexture::uploadImageData(const void *data, uint32_t layerIndex)
     copyBuffer(stagingBuffer, layerIndex);
 }
 
-void VulkanTexture::generateMipMaps()
+void VulkanTexture::generateMipMaps(VkCommandBuffer commandBuffer)
 {
-    assert(layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
-
     int32_t mipWidth = width;
     int32_t mipHeight = height;
 
@@ -184,8 +180,6 @@ void VulkanTexture::generateMipMaps()
                              0, 0, nullptr, 0, nullptr,
                              1, &imageMemoryBarrier);
     }
-
-    endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 
 void VulkanTexture::setDebugName(const std::string &debugName)

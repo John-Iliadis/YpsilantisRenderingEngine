@@ -45,8 +45,6 @@ void Model::createTextureDescriptorSets(VkDescriptorSetLayout dsLayout)
         VkResult result = vkAllocateDescriptorSets(mRenderDevice->device, &dsAllocateInfo, &texture.descriptorSet);
         vulkanCheck(result, "Failed to allocate texture descriptor set.");
 
-        setDSDebugName(*mRenderDevice, texture.descriptorSet, texture.name);
-
         VkDescriptorImageInfo imageInfo {
             .sampler = texture.vulkanTexture.vulkanSampler.sampler,
             .imageView = texture.vulkanTexture.imageView,
@@ -87,7 +85,6 @@ void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
 
     VkResult result = vkAllocateDescriptorSets(mRenderDevice->device, &descriptorSetAllocateInfo, &mMaterialsDS);
     vulkanCheck(result, "Failed to create mMaterialsDS.");
-    setDSDebugName(*mRenderDevice, mMaterialsDS, name + " Materials DS");
 
     VkDescriptorBufferInfo materialBufferInfo {
         .buffer = mMaterialsSSBO.getBuffer(),

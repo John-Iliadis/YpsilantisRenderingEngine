@@ -14,13 +14,10 @@ layout (set = 0, binding = 0) uniform CameraUBO {
     float farPlane;
 };
 
-layout (input_attachment_index = 0, set = 1, binding = 0) uniform subpassInput inputDepth;
-layout (input_attachment_index = 1, set = 1, binding = 1) uniform subpassInput inputNormal;
+layout (set = 1, binding = 0) uniform sampler2D depthTexture;
+layout (set = 1, binding = 1) uniform sampler2D normalTexture;
 
 void main()
 {
-    float depth = subpassLoad(inputDepth).r;
-    vec4 normal = subpassLoad(inputNormal);
-
     outFragColor = 1.f;
 }

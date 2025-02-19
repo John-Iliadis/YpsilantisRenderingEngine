@@ -79,6 +79,8 @@ add_executable(${PROJECT_NAME}
         src/app/save_data.hpp
         src/utils/timer.cpp
         src/utils/timer.hpp
+        src/vk/vulkan_renderpass.cpp
+        src/vk/vulkan_renderpass.hpp
 )
 
 add_subdirectory(${DEPENDENCY_DIR}/tiny_gltf/)

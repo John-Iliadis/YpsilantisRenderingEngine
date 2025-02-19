@@ -4,25 +4,6 @@
 
 #include "renderer.hpp"
 
-enum : uint32_t {
-    ClearRenderpassQueryIndexBegin,
-    ClearRenderpassQueryIndexEnd,
-    PrepassQueryIndexBegin,
-    PrepassQueryIndexEnd,
-    SkyboxRenderpassQueryIndexBegin,
-    SkyboxRenderpassQueryIndexEnd,
-    SsaoRenderpassQueryIndexBegin,
-    SsaoRenderpassQueryIndexEnd,
-    ShadingRenderpassQueryIndexBegin,
-    ShadingRenderpassQueryIndexEnd,
-    GridRenderpassQueryIndexBegin,
-    GridRenderpassQueryIndexEnd,
-    TempColorRenderpassQueryIndexBegin,
-    TempColorRenderpassQueryIndexEnd,
-    PostProcessingRenderpassQueryIndexBegin,
-    PostProcessingRenderpassQueryIndexEnd,
-};
-
 Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     : mRenderDevice(renderDevice)
     , mSaveData(saveData)
@@ -44,7 +25,6 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createSsaoTexture();
     createPostProcessTexture();
 
-    createQueryPool();
     createSingleImageDsLayout();
     createCameraRenderDataDsLayout();
     createMaterialsDsLayout();
@@ -52,7 +32,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 
     createCameraDs();
     createSingleImageDescriptorSets();
-    createDepthNormalInputDs();
+    createDepthNormalDs();
 
     createClearRenderPass();
     createClearFramebuffer();
@@ -73,9 +53,6 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createShadingPipeline();
     createGridPipeline();
 
-    createTempColorTransitionRenderpass();
-    createTempColorTransitionFramebuffer();
-
     createPostProcessingRenderpass();
     createPostProcessingFramebuffer();
     createPostProcessingPipeline();
@@ -87,39 +64,36 @@ Renderer::~Renderer()
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mColorDepthFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mSsaoFramebuffer, nullptr);
-    vkDestroyFramebuffer(mRenderDevice.device, mTempColorTransitionFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
 
     vkDestroyRenderPass(mRenderDevice.device, mClearRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mColorDepthRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSsaoRenderpass, nullptr);
-    vkDestroyRenderPass(mRenderDevice.device, mTempColorTransitionRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
-
-    vkDestroyQueryPool(mRenderDevice.device, mRenderpassQueryPool, nullptr);
 }
 
-void Renderer::render()
+void Renderer::render(VkCommandBuffer commandBuffer)
 {
     updateCameraUBO();
 
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
-
     setViewport(commandBuffer);
-
     executeClearRenderpass(commandBuffer);
     executePrepass(commandBuffer);
     executeSkyboxRenderpass(commandBuffer);
     executeSsaoRenderpass(commandBuffer);
     executeShadingRenderpass(commandBuffer);
     executeGridRenderpass(commandBuffer);
-    executeTempColorTransitionRenderpass(commandBuffer);
+
+    mColorTexture.transitionLayout(commandBuffer,
+                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                               VK_PIPELINE_STAGE_TRANSFER_BIT,
+                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                               VK_ACCESS_TRANSFER_WRITE_BIT,
+                               VK_ACCESS_SHADER_READ_BIT);
+
     executePostProcessingRenderpass(commandBuffer);
-
-    endSingleTimeCommands(mRenderDevice, commandBuffer);
-
-    getRenderpassDurations();
 }
 
 void Renderer::importModel(const std::filesystem::path &path)
@@ -152,7 +126,7 @@ void Renderer::resize(uint32_t width, uint32_t height)
     mCamera.resize(width, height);
 
     std::vector<VkDescriptorSet> freeDs {
-        mDepthNormalInputDs,
+        mDepthNormalDs,
         mSsaoDs,
         mDepthDs,
         mColorDs,
@@ -171,11 +145,10 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createPrepassFramebuffer();
     createColorDepthFramebuffer();
     createSsaoFramebuffer();
-    createTempColorTransitionFramebuffer();
     createPostProcessingFramebuffer();
 
     createSingleImageDescriptorSets();
-    createDepthNormalInputDs();
+    createDepthNormalDs();
 }
 
 void Renderer::processMainThreadTasks()
@@ -230,12 +203,8 @@ void Renderer::executeClearRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Clear Renderpass");
-    beginRenderpassTimestamp(commandBuffer, ClearRenderpassQueryIndexBegin);
-
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdEndRenderPass(commandBuffer);
-
-    endRenderpassTimestamp(commandBuffer, ClearRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -254,8 +223,6 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Prepass");
-    beginRenderpassTimestamp(commandBuffer, PrepassQueryIndexBegin);
-
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPrepassPipeline);
 
@@ -267,8 +234,6 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
     renderModels(commandBuffer, mPrepassPipeline, 1);
 
     vkCmdEndRenderPass(commandBuffer);
-
-    endRenderpassTimestamp(commandBuffer, PrepassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -295,12 +260,10 @@ void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
 
     std::array<VkDescriptorSet, 2> descriptorSets {
         mCameraDs,
-        mDepthNormalInputDs
+        mDepthNormalDs
     };
 
     beginDebugLabel(commandBuffer, "SSAO Renderpass");
-    beginRenderpassTimestamp(commandBuffer, SsaoRenderpassQueryIndexBegin);
-
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSsaoPipeline);
 
@@ -313,8 +276,6 @@ void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
-
-    endRenderpassTimestamp(commandBuffer, SsaoRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -338,8 +299,6 @@ void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Shading Renderpass");
-    beginRenderpassTimestamp(commandBuffer, ShadingRenderpassQueryIndexBegin);
-
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadingPipeline);
 
@@ -352,8 +311,6 @@ void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
     renderModels(commandBuffer, mShadingPipeline, 2);
 
     vkCmdEndRenderPass(commandBuffer);
-
-    endRenderpassTimestamp(commandBuffer, ShadingRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -375,8 +332,6 @@ void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Grid");
-    beginRenderpassTimestamp(commandBuffer, GridRenderpassQueryIndexBegin);
-
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGridPipeline);
 
@@ -395,32 +350,6 @@ void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
-
-    endRenderpassTimestamp(commandBuffer, GridRenderpassQueryIndexEnd);
-    endDebugLabel(commandBuffer);
-}
-
-void Renderer::executeTempColorTransitionRenderpass(VkCommandBuffer commandBuffer)
-{
-    VkRenderPassBeginInfo renderPassBeginInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mTempColorTransitionRenderpass,
-        .framebuffer = mTempColorTransitionFramebuffer,
-        .renderArea = {
-            .offset = {.x = 0, .y = 0},
-            .extent = {.width = mWidth, .height = mHeight}
-        },
-        .clearValueCount = 0,
-        .pClearValues = nullptr
-    };
-
-    beginDebugLabel(commandBuffer, "Temp Color Transition");
-    beginRenderpassTimestamp(commandBuffer, TempColorRenderpassQueryIndexBegin);
-
-    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdEndRenderPass(commandBuffer);
-
-    endRenderpassTimestamp(commandBuffer, TempColorRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -441,8 +370,6 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
     };
 
     beginDebugLabel(commandBuffer, "Post Processing Renderpass");
-    beginRenderpassTimestamp(commandBuffer, PostProcessingRenderpassQueryIndexBegin);
-
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPostProcessingPipeline);
 
@@ -455,8 +382,6 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
-
-    endRenderpassTimestamp(commandBuffer, PostProcessingRenderpassQueryIndexEnd);
     endDebugLabel(commandBuffer);
 }
 
@@ -490,86 +415,6 @@ void Renderer::updateCameraUBO()
 {
     CameraRenderData renderData(mCamera.renderData());
     mCameraUBO.update(0, sizeof(CameraRenderData), &renderData);
-}
-
-void Renderer::beginRenderpassTimestamp(VkCommandBuffer commandBuffer, uint32_t index)
-{
-    vkCmdWriteTimestamp(commandBuffer,
-                        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                        mRenderpassQueryPool,
-                        index);
-}
-
-void Renderer::endRenderpassTimestamp(VkCommandBuffer commandBuffer, uint32_t index)
-{
-    vkCmdWriteTimestamp(commandBuffer,
-                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                        mRenderpassQueryPool,
-                        index);
-}
-
-void Renderer::getRenderpassDurations()
-{
-    mRenderpassTimes.clearRenderpassDurMs = getRenderpassDurationMs(ClearRenderpassQueryIndexBegin);
-    mRenderpassTimes.prepassRenderpassDurMs = getRenderpassDurationMs(PrepassQueryIndexBegin);
-
-    if (mRenderSkybox)
-        mRenderpassTimes.skyboxRenderpassDurMs = getRenderpassDurationMs(SkyboxRenderpassQueryIndexBegin);
-
-    mRenderpassTimes.ssaoRenderpassDurMs = getRenderpassDurationMs(SsaoRenderpassQueryIndexBegin);
-    mRenderpassTimes.shadingRenderpassDurMs = getRenderpassDurationMs(ShadingRenderpassQueryIndexBegin);
-
-    if (mRenderGrid)
-        mRenderpassTimes.gridRenderpassDurMs = getRenderpassDurationMs(GridRenderpassQueryIndexBegin);
-
-    mRenderpassTimes.tempColorTransitionDurMs = getRenderpassDurationMs(TempColorRenderpassQueryIndexBegin);
-    mRenderpassTimes.postProcessingRenderpassDurMs = getRenderpassDurationMs(PostProcessingRenderpassQueryIndexBegin);
-
-    if (mRenderpassTimes.clearRenderpassDurMs > 33.0)
-        debugLog(std::format("Large clear renderpass duration: {}ms", mRenderpassTimes.clearRenderpassDurMs));
-
-    if (mRenderpassTimes.prepassRenderpassDurMs > 33.0)
-        debugLog(std::format("Large prepass duration: {}ms", mRenderpassTimes.prepassRenderpassDurMs));
-
-    if (mRenderpassTimes.ssaoRenderpassDurMs > 33.0)
-        debugLog(std::format("Large ssao renderpass duration: {}ms", mRenderpassTimes.ssaoRenderpassDurMs));
-
-    if (mRenderpassTimes.shadingRenderpassDurMs > 33.0)
-        debugLog(std::format("Large shading renderpass duration: {}ms", mRenderpassTimes.shadingRenderpassDurMs));
-
-    if (mRenderpassTimes.gridRenderpassDurMs > 33.0)
-        debugLog(std::format("Large grid renderpass duration: {}ms", mRenderpassTimes.gridRenderpassDurMs));
-
-    if (mRenderpassTimes.tempColorTransitionDurMs > 33.0)
-        debugLog(std::format("Large temp color renderpass duration: {}ms", mRenderpassTimes.tempColorTransitionDurMs));
-
-    if (mRenderpassTimes.postProcessingRenderpassDurMs > 33.0)
-        debugLog(std::format("Large post processing renderpass duration: {}ms", mRenderpassTimes.postProcessingRenderpassDurMs));
-}
-
-double Renderer::getRenderpassDurationMs(uint32_t index)
-{
-    uint64_t timestamps[2];
-
-    VkResult result = vkGetQueryPoolResults(mRenderDevice.device,
-                                            mRenderpassQueryPool,
-                                            index, 2,
-                                            sizeof(uint64_t) * 2,
-                                            timestamps,
-                                            sizeof(uint64_t),
-                                            VK_QUERY_RESULT_64_BIT);
-    vulkanCheck(result, "Failed to get query results.");
-
-    pfnResetQueryPoolEXT(mRenderDevice.device, mRenderpassQueryPool, index, 2);
-
-    double timestampPeriod = mRenderDevice.getDeviceProperties().limits.timestampPeriod;
-
-    double startTime = timestamps[0] * timestampPeriod;
-    double endTime = timestamps[1] * timestampPeriod;
-
-    double duration = endTime - startTime;
-
-    return duration / 1e6;
 }
 
 void Renderer::createColorTexture()
@@ -689,27 +534,6 @@ void Renderer::createPostProcessTexture()
     mPostProcessingTexture.setDebugName("Renderer::mPostProcessTexture");
 }
 
-void Renderer::createQueryPool()
-{
-    uint32_t queryCount = 100;
-
-    VkQueryPoolCreateInfo queryPoolCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
-        .queryType = VK_QUERY_TYPE_TIMESTAMP,
-        .queryCount = queryCount
-    };
-
-    VkResult result = vkCreateQueryPool(mRenderDevice.device, &queryPoolCreateInfo, nullptr, &mRenderpassQueryPool);
-    vulkanCheck(result, "Failed to create query pool.");
-
-    setVulkanObjectDebugName(mRenderDevice,
-                             VK_OBJECT_TYPE_QUERY_POOL,
-                             "Renderer::mRenderpassQueryPool",
-                             mRenderpassQueryPool);
-
-    pfnResetQueryPoolEXT(mRenderDevice.device, mRenderpassQueryPool, 0, queryCount);
-}
-
 void Renderer::createSingleImageDsLayout()
 {
     DsLayoutSpecification specification {
@@ -718,12 +542,6 @@ void Renderer::createSingleImageDsLayout()
                 .binding = 0,
                 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-            },
-            {
-                .binding = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = PerModelMaxTextureCount,
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
             }
         },
@@ -779,35 +597,36 @@ void Renderer::createDepthNormalInputDsLayout()
         .bindings = {
             {
                 .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .descriptorCount = 1,
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
             },
             {
                 .binding = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .descriptorCount = 1,
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
             }
         },
-        .debugName = "Renderer::mDepthNormalInputDsLayout"
+        .debugName = "Renderer::mDepthNormalDsLayout"
     };
 
-    mDepthNormalInputDsLayout = VulkanDsLayout(mRenderDevice, specification);
+    mDepthNormalDsLayout = VulkanDsLayout(mRenderDevice, specification);
 }
 
 void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &texture, const char *name)
 {
+    VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
+
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = mRenderDevice.descriptorPool,
         .descriptorSetCount = 1,
-        .pSetLayouts = &mSingleImageDsLayout
+        .pSetLayouts = &dsLayout
     };
 
     VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &ds);
     vulkanCheck(result, "Failed to allocate descriptor set.");
-    setDSDebugName(mRenderDevice, ds, name);
 
     VkDescriptorImageInfo imageInfo {
         .sampler = texture.vulkanSampler.sampler,
@@ -830,16 +649,17 @@ void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &tex
 
 void Renderer::createCameraDs()
 {
+    VkDescriptorSetLayout dsLayout = mCameraRenderDataDsLayout;
+
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = mRenderDevice.descriptorPool,
         .descriptorSetCount = 1,
-        .pSetLayouts = &mCameraRenderDataDsLayout
+        .pSetLayouts = &dsLayout
     };
 
     VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mCameraDs);
     vulkanCheck(result, "Failed to allocate descriptor set.");
-    setDSDebugName(mRenderDevice, mCameraDs, "Renderer::mCameraDs");
 
     VkDescriptorBufferInfo bufferInfo {
         .buffer = mCameraUBO.getBuffer(),
@@ -868,18 +688,19 @@ void Renderer::createSingleImageDescriptorSets()
     createSingleImageDs(mPostProcessingDs, mPostProcessingTexture, "Renderer::mPostProcessingDs");
 }
 
-void Renderer::createDepthNormalInputDs()
+void Renderer::createDepthNormalDs()
 {
+    VkDescriptorSetLayout dsLayout = mDepthNormalDsLayout;
+
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = mRenderDevice.descriptorPool,
         .descriptorSetCount = 1,
-        .pSetLayouts = &mDepthNormalInputDsLayout
+        .pSetLayouts = &dsLayout
     };
 
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mDepthNormalInputDs);
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mDepthNormalDs);
     vulkanCheck(result, "Failed to allocate descriptor set.");
-    setDSDebugName(mRenderDevice, mDepthNormalInputDs, "Renderer::mDepthNormalInputDs");
 
     VkDescriptorImageInfo depthImageInfo {
         .sampler = mDepthTexture.vulkanSampler.sampler,
@@ -895,11 +716,11 @@ void Renderer::createDepthNormalInputDs()
 
     VkWriteDescriptorSet writeDescriptorSet {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mDepthNormalInputDs,
+        .dstSet = mDepthNormalDs,
         .dstBinding = 0,
         .dstArrayElement = 0,
         .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         .pImageInfo = &depthImageInfo
     };
 
@@ -960,15 +781,15 @@ void Renderer::createClearRenderPass()
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
-    std::array<VkAttachmentReference, 2> multisampledColorAttachments {
+    std::array<VkAttachmentReference, 2> colorAttachments {
         colorAttachmentRef,
         normalAttachmentRef,
     };
 
     VkSubpassDescription clearSubpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = static_cast<uint32_t>(multisampledColorAttachments.size()),
-        .pColorAttachments = multisampledColorAttachments.data(),
+        .colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size()),
+        .pColorAttachments = colorAttachments.data(),
         .pDepthStencilAttachment = &depthAttachmentRed
     };
 
@@ -977,7 +798,7 @@ void Renderer::createClearRenderPass()
         .attachmentCount = static_cast<uint32_t>(attachments.size()),
         .pAttachments = attachments.data(),
         .subpassCount = 1,
-        .pSubpasses = &clearSubpass
+        .pSubpasses = &clearSubpass,
     };
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mClearRenderpass);
@@ -1057,7 +878,7 @@ void Renderer::createPrepassRenderpass()
         .attachmentCount = static_cast<uint32_t>(attachments.size()),
         .pAttachments = attachments.data(),
         .subpassCount = 1,
-        .pSubpasses = &subpass,
+        .pSubpasses = &subpass
     };
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mPrepassRenderpass);
@@ -1188,7 +1009,7 @@ void Renderer::createColorDepthRenderpass()
         .attachmentCount = static_cast<uint32_t>(attachments.size()),
         .pAttachments = attachments.data(),
         .subpassCount = 1,
-        .pSubpasses = &subpass,
+        .pSubpasses = &subpass
     };
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mColorDepthRenderpass);
@@ -1296,62 +1117,21 @@ void Renderer::createSsaoRenderpass()
         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
-    VkAttachmentDescription normalAttachment {
-        .format = mNormalTexture.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkAttachmentDescription depthAttachment {
-        .format = mDepthTexture.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-
-    std::array<VkAttachmentDescription, 3> attachments {
-        ssaoAttachment,
-        normalAttachment,
-        depthAttachment,
-    };
-
     VkAttachmentReference ssaoAttachmentRef {
         .attachment = 0,
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
-    VkAttachmentReference normalAttachmentRef {
-        .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkAttachmentReference depthAttachmentRef {
-        .attachment = 2,
-        .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    std::array<VkAttachmentReference, 2> inputAttachments {
-        normalAttachmentRef,
-        depthAttachmentRef,
-    };
-
     VkSubpassDescription subpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .inputAttachmentCount = static_cast<uint32_t>(inputAttachments.size()),
-        .pInputAttachments = inputAttachments.data(),
         .colorAttachmentCount = 1,
         .pColorAttachments = &ssaoAttachmentRef
     };
 
     VkRenderPassCreateInfo renderPassCreateInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = static_cast<uint32_t>(attachments.size()),
-        .pAttachments = attachments.data(),
+        .attachmentCount = 1,
+        .pAttachments = &ssaoAttachment,
         .subpassCount = 1,
         .pSubpasses = &subpass,
     };
@@ -1365,17 +1145,11 @@ void Renderer::createSsaoFramebuffer()
 {
     vkDestroyFramebuffer(mRenderDevice.device, mSsaoFramebuffer, nullptr);
 
-    std::array<VkImageView, 3> attachments {
-        mSsaoTexture.imageView,
-        mNormalTexture.imageView,
-        mDepthTexture.imageView,
-    };
-
     VkFramebufferCreateInfo framebufferCreateInfo {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = mSsaoRenderpass,
-        .attachmentCount = static_cast<uint32_t>(attachments.size()),
-        .pAttachments = attachments.data(),
+        .attachmentCount = 1,
+        .pAttachments = &mSsaoTexture.imageView,
         .width = mWidth,
         .height = mHeight,
         .layers = 1
@@ -1422,7 +1196,7 @@ void Renderer::createSsaoPipeline()
         .pipelineLayout = {
             .dsLayouts = {
                 mCameraRenderDataDsLayout,
-                mDepthNormalInputDsLayout
+                mDepthNormalDsLayout
             }
         },
         .renderPass = mSsaoRenderpass,
@@ -1548,60 +1322,6 @@ void Renderer::createGridPipeline()
     };
 
     mGridPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
-}
-
-void Renderer::createTempColorTransitionRenderpass()
-{
-    VkAttachmentDescription colorAttachment {
-        .format = mColorTexture.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkAttachmentReference colorAttachmentRef {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkSubpassDescription subpass {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachmentRef
-    };
-
-    VkRenderPassCreateInfo renderPassCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &colorAttachment,
-        .subpassCount = 1,
-        .pSubpasses = &subpass
-    };
-
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mTempColorTransitionRenderpass);
-    vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mTempColorTransitionRenderpass, "Renderer::mTempColorTransitionRenderpass");
-}
-
-void Renderer::createTempColorTransitionFramebuffer()
-{
-    vkDestroyFramebuffer(mRenderDevice.device, mTempColorTransitionFramebuffer, nullptr);
-
-    VkFramebufferCreateInfo framebufferCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mTempColorTransitionRenderpass,
-        .attachmentCount = 1,
-        .pAttachments = &mColorTexture.imageView,
-        .width = mWidth,
-        .height = mHeight,
-        .layers = 1
-    };
-
-    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mTempColorTransitionFramebuffer);
-    vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mTempColorTransitionFramebuffer, "Renderer::mColorTransitionFramebuffer");
 }
 
 void Renderer::createPostProcessingRenderpass()

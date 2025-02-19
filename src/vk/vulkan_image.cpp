@@ -16,7 +16,6 @@ VulkanImage::VulkanImage()
     , mipLevels()
     , layerCount()
     , format(VK_FORMAT_UNDEFINED)
-    , layout(VK_IMAGE_LAYOUT_UNDEFINED)
     , imageAspect()
 {
 }
@@ -40,7 +39,6 @@ VulkanImage::VulkanImage(const VulkanRenderDevice &renderDevice,
     , mipLevels(mipLevels)
     , layerCount(layerCount)
     , format(format)
-    , layout(VK_IMAGE_LAYOUT_UNDEFINED)
     , imageAspect(imageAspect)
 {
     VkImageCreateInfo imageCreateInfo {
@@ -59,7 +57,7 @@ VulkanImage::VulkanImage(const VulkanRenderDevice &renderDevice,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .initialLayout = layout
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
     };
 
     VkResult result = vkCreateImage(renderDevice.device, &imageCreateInfo, nullptr, &image);
@@ -102,9 +100,7 @@ VulkanImage::~VulkanImage()
         height = 0;
         mipLevels = 0;
         layerCount = 0;
-
         format = VK_FORMAT_UNDEFINED;
-        layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         mRenderDevice = nullptr;
     }
@@ -134,17 +130,19 @@ void VulkanImage::swap(VulkanImage &other) noexcept
     std::swap(mipLevels, other.mipLevels);
     std::swap(layerCount, other.layerCount);
     std::swap(format, other.format);
-    std::swap(layout, other.layout);
     std::swap(imageAspect, other.imageAspect);
 }
 
-void VulkanImage::transitionLayout(VkImageLayout newLayout)
+void VulkanImage::transitionLayout(VkCommandBuffer commandBuffer,
+                                   VkImageLayout oldLayout, VkImageLayout newLayout,
+                                   VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
+                                   VkAccessFlags srcAccess, VkAccessFlags dstAccess)
 {
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
-
     VkImageMemoryBarrier imageMemoryBarrier {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .oldLayout = layout,
+        .srcAccessMask = srcAccess,
+        .dstAccessMask = dstAccess,
+        .oldLayout = oldLayout,
         .newLayout = newLayout,
         .image = image,
         .subresourceRange {
@@ -156,64 +154,18 @@ void VulkanImage::transitionLayout(VkImageLayout newLayout)
         }
     };
 
-    VkPipelineStageFlags srcStageMask {};
-    VkPipelineStageFlags dstStageMask {};
-
-    if (layout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-    {
-        imageMemoryBarrier.srcAccessMask = 0;
-        imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    }
-    else if (layout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
-    {
-        imageMemoryBarrier.srcAccessMask = 0;
-        imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    }
-    else if (layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
-    {
-        imageMemoryBarrier.srcAccessMask = 0;
-        imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    }
-    else if (layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-    {
-        imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    }
-    else if (layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-    {
-        imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        imageMemoryBarrier.dstAccessMask = 0;
-        srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    }
-    else if (layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-    {
-        imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    }
-    else
-    {
-        check(false, "Operation not supported yet.");
-    }
-
     vkCmdPipelineBarrier(commandBuffer,
-                         srcStageMask,
-                         dstStageMask,
+                         srcStage, dstStage,
                          0, 0, nullptr, 0, nullptr,
                          1, &imageMemoryBarrier);
+}
 
-    layout = newLayout;
-
+void VulkanImage::transitionLayout(VkImageLayout oldLayout, VkImageLayout newLayout,
+                                   VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
+                                   VkAccessFlags srcAccess, VkAccessFlags dstAccess)
+{
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
+    transitionLayout(commandBuffer, oldLayout, newLayout, srcStage, dstStage, srcAccess, dstAccess);
     endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 

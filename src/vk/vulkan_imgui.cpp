@@ -126,12 +126,23 @@ void VulkanImGui::createRenderpass()
         .pColorAttachments = &attachmentReference
     };
 
+    VkSubpassDependency dependency {
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    };
+
     VkRenderPassCreateInfo renderPassCreateInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = 1,
         .pAttachments = &attachmentDescription,
         .subpassCount = 1,
-        .pSubpasses = &subpassDescription
+        .pSubpasses = &subpassDescription,
+        .dependencyCount = 1,
+        .pDependencies = &dependency
     };
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mRenderpass);

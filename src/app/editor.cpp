@@ -406,7 +406,6 @@ void Editor::viewPort()
     }
 
     mRenderer.mCamera.update(mDt);
-    mRenderer.render();
 
     ImTextureID renderedImageHandle = reinterpret_cast<ImTextureID>(mRenderer.mPostProcessingDs);
 
@@ -593,17 +592,6 @@ void Editor::debugPanel()
 
     plotPerformanceGraphs();
 
-    ImGui::Separator();
-
-    ImGui::SeparatorText("Renderpass times");
-    ImGui::Text("Clear renderpass: %.3lfms", mRenderpassTimes.clearRenderpassDurMs);
-    ImGui::Text("Prepass: %.3lfms", mRenderpassTimes.prepassRenderpassDurMs);
-    ImGui::Text("Skybox renderpass: %.3lfms", mRenderpassTimes.skyboxRenderpassDurMs);
-    ImGui::Text("SSAO renderpass: %.3lfms", mRenderpassTimes.ssaoRenderpassDurMs);
-    ImGui::Text("Shading renderpass: %.3lfms", mRenderpassTimes.shadingRenderpassDurMs);
-    ImGui::Text("Grid renderpass: %.3lfms", mRenderpassTimes.gridRenderpassDurMs);
-    ImGui::Text("Temp color renderpass: %.3lfms", mRenderpassTimes.tempColorTransitionDurMs);
-    ImGui::Text("Post processing renderpass: %.3lfms", mRenderpassTimes.postProcessingRenderpassDurMs);
     ImGui::Separator();
 
     ImGui::End();
@@ -1171,7 +1159,6 @@ void Editor::updateFrametimeStats()
     if (accumulatedTime > 0.3f)
     {
         mFrametimeMs = mDt * 1000.f;
-        mRenderpassTimes = mRenderer.mRenderpassTimes;
         accumulatedTime = 0.f;
     }
 }

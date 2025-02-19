@@ -66,6 +66,7 @@ const char* toStr(TextureWrap wrapMode);
 const char* toStr(TextureMagFilter magFilter);
 const char* toStr(TextureMinFilter minFilter);
 
+// todo: add resize function
 class VulkanTexture : public VulkanImage
 {
 public:
@@ -81,7 +82,7 @@ public:
     VulkanTexture& operator=(VulkanTexture&& other) noexcept;
 
     void uploadImageData(const void* data, uint32_t layerIndex = 0);
-    void generateMipMaps();
+    void generateMipMaps(VkCommandBuffer commandBuffer);
     void setDebugName(const std::string& debugName) override;
 
     void swap(VulkanTexture& other) noexcept;

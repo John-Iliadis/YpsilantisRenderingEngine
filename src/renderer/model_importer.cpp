@@ -419,9 +419,23 @@ namespace ModelImporter
         Texture texture {.name = imageData->loadedImage.path().filename().string()};
 
         VulkanTexture vkTexture(*renderDevice, textureSpecification, imageData->loadedImage.data());
-        vkTexture.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-        vkTexture.generateMipMaps();
-        vkTexture.transitionLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands(*renderDevice);
+
+        vkTexture.transitionLayout(commandBuffer,
+                                   VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   0, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                   0, VK_ACCESS_TRANSFER_WRITE_BIT);
+
+        vkTexture.generateMipMaps(commandBuffer); // converts mip levels from src transfer to dst transfer then back to src transfer
+
+        vkTexture.transitionLayout(commandBuffer,
+                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+
+        endSingleTimeCommands(*renderDevice, commandBuffer);
+
         vkTexture.setDebugName(texture.name);
 
         texture.vulkanTexture = std::move(vkTexture);

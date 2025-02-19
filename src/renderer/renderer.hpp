@@ -23,7 +23,7 @@ public:
     Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData);
     ~Renderer();
 
-    void render();
+    void render(VkCommandBuffer commandBuffer);
 
     void importModel(const std::filesystem::path& path);
     void deleteModel(uuid32_t id);
@@ -39,15 +39,10 @@ private:
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
     void executeShadingRenderpass(VkCommandBuffer commandBuffer);
     void executeGridRenderpass(VkCommandBuffer commandBuffer);
-    void executeTempColorTransitionRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
     void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
     void updateCameraUBO();
-    void beginRenderpassTimestamp(VkCommandBuffer commandBuffer, uint32_t index);
-    void endRenderpassTimestamp(VkCommandBuffer commandBuffer, uint32_t index);
-    void getRenderpassDurations();
-    double getRenderpassDurationMs(uint32_t index);
 
     void createColorTexture();
     void createDepthTexture();
@@ -55,7 +50,6 @@ private:
     void createSsaoTexture();
     void createPostProcessTexture();
 
-    void createQueryPool();
     void createSingleImageDsLayout();
     void createCameraRenderDataDsLayout();
     void createMaterialsDsLayout();
@@ -64,7 +58,7 @@ private:
     void createSingleImageDs(VkDescriptorSet& ds, const VulkanTexture& texture, const char* name);
     void createCameraDs();
     void createSingleImageDescriptorSets();
-    void createDepthNormalInputDs();
+    void createDepthNormalDs();
 
     void createClearRenderPass();
     void createClearFramebuffer();
@@ -84,9 +78,6 @@ private:
 
     void createShadingPipeline();
     void createGridPipeline();
-
-    void createTempColorTransitionRenderpass();
-    void createTempColorTransitionFramebuffer();
 
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
@@ -116,7 +107,6 @@ private:
     VkRenderPass mPrepassRenderpass{};
     VkRenderPass mColorDepthRenderpass{};
     VkRenderPass mSsaoRenderpass{};
-    VkRenderPass mTempColorTransitionRenderpass{};
     VkRenderPass mPostProcessingRenderpass{};
 
     // framebuffers
@@ -124,7 +114,6 @@ private:
     VkFramebuffer mPrepassFramebuffer{};
     VkFramebuffer mColorDepthFramebuffer{};
     VkFramebuffer mSsaoFramebuffer{};
-    VkFramebuffer mTempColorTransitionFramebuffer{};
     VkFramebuffer mPostProcessingFramebuffer{};
 
     // pipelines
@@ -139,28 +128,15 @@ private:
     VulkanDsLayout mSingleImageDsLayout;
     VulkanDsLayout mCameraRenderDataDsLayout;
     VulkanDsLayout mMaterialsDsLayout;
-    VulkanDsLayout mDepthNormalInputDsLayout;
+    VulkanDsLayout mDepthNormalDsLayout;
 
     // descriptor sets
     VkDescriptorSet mCameraDs{};
-    VkDescriptorSet mDepthNormalInputDs{};
+    VkDescriptorSet mDepthNormalDs{};
     VkDescriptorSet mSsaoDs{};
     VkDescriptorSet mDepthDs{};
     VkDescriptorSet mColorDs{};
     VkDescriptorSet mPostProcessingDs{};
-
-    // monitoring
-    VkQueryPool mRenderpassQueryPool;
-    struct RenderpassTimes {
-        double clearRenderpassDurMs;
-        double prepassRenderpassDurMs;
-        double skyboxRenderpassDurMs;
-        double ssaoRenderpassDurMs;
-        double shadingRenderpassDurMs;
-        double gridRenderpassDurMs;
-        double tempColorTransitionDurMs;
-        double postProcessingRenderpassDurMs;
-    } mRenderpassTimes;
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
