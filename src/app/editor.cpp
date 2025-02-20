@@ -43,6 +43,9 @@ void Editor::update(float dt)
     if (mShowAssetPanel)
         assetPanel();
 
+    if (mShowViewport)
+        viewPort();
+
     if (mShowSceneGraph)
         sceneGraphPanel();
 
@@ -54,9 +57,6 @@ void Editor::update(float dt)
 
     if (mShowRendererPanel)
         rendererPanel();
-
-    if (mShowViewport)
-        viewPort();
 
     if (mShowDebugPanel)
         debugPanel();
@@ -152,7 +152,7 @@ void Editor::cameraPanel()
         ImGui::DragFloat("Pan Speed", mRenderer.mCamera.panSpeed(), 0.01f, 0.f, FLT_MAX, "%.2f");
 
     if (cameraState == Camera::State::FIRST_PERSON)
-        ImGui::DragFloat("Fly Speed", mRenderer.mCamera.flySpeed(), 0.01f, 0.f, FLT_MAX, "%.1f");
+        ImGui::DragFloat("Fly Speed", mRenderer.mCamera.flySpeed(), 0.01f, 0.01f, FLT_MAX, "%.1f", ImGuiSliderFlags_AlwaysClamp);
 
     ImGui::End();
 }

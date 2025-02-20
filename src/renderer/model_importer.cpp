@@ -4,15 +4,11 @@
 
 #include "model_importer.hpp"
 
-// todo: handle texture loading fails
 // todo: handle embedded image data
-// todo: error handling
-// todo: load lights
-// todo: check if a mesh has materials
-// todo: check if mesh has indices
 // todo: support specular glossiness
 // todo: load sampler data
-// todo: handle color vertices. Including alpha channel.
+// todo: handle multiple texture coordinates
+// todo: handle color vertices. Including alpha channel
 
 static constexpr uint32_t sImportFlags
 {
@@ -154,7 +150,6 @@ namespace ModelImporter
         return sceneNode;
     }
 
-    // todo: test meshes that don't have materials
     Mesh createMesh(const VulkanRenderDevice* renderDevice, const MeshData &meshData)
     {
         Mesh mesh {
@@ -322,7 +317,13 @@ namespace ModelImporter
     {
         auto getTexIndex = [&assimpMaterial, &texIndices, &dir] (aiTextureType type) {
             if (auto texName = getTextureName(assimpMaterial, type))
-                return texIndices.at(dir / *texName);
+            {
+                std::filesystem::path path = dir / *texName;
+
+                if (texIndices.contains(path))
+                    return texIndices.at(path);
+            }
+
             return -1;
         };
 
