@@ -149,7 +149,7 @@ private:
     {
         alignas(16) glm::vec4 thinLineColor = glm::vec4(0.5, 0.5, 0.5, 1.f);
         alignas(16) glm::vec4 thickLineColor = glm::vec4(0.f, 0.f, 0.f, 1.f);
-        alignas(4) float cellSize = 0.025f;
+        alignas(4) float cellSize = 0.5f;
         alignas(4) float minPixelsBetweenCells = 1.2f;
     } mGridData;
 

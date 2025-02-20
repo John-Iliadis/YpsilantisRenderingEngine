@@ -2,8 +2,7 @@
 
 #include "material.glsl"
 
-#define MAX_MATERIALS 16
-#define MAX_TEXTURES 32
+#extension GL_EXT_nonuniform_qualifier : require
 
 layout (location = 0) in vec2 vTexCoords;
 layout (location = 1) in vec3 vNormal;
@@ -24,10 +23,17 @@ layout (set = 0, binding = 0) uniform CameraUBO {
 
 layout (set = 1, binding = 0) uniform sampler2D ssaoTexture;
 
-layout (set = 2, binding = 0) readonly buffer MaterialsSSBO { Material materials[MAX_MATERIALS]; };
-layout (set = 2, binding = 1) uniform sampler2D textures[MAX_TEXTURES];
+layout (set = 2, binding = 0) readonly buffer MaterialsSSBO { Material materials[]; };
+layout (set = 2, binding = 1) uniform sampler2D textures[];
 
 void main()
 {
-    outFragColor = vec4(0.5);
+//    int baseColorTexIndex = materials[nonuniformEXT(materialIndex)].baseColorTexIndex;
+//
+//    vec4 base = materials[nonuniformEXT(materialIndex)].baseColorFactor;
+//
+//    vec4 baseCol = texture(textures[nonuniformEXT(baseColorTexIndex)], vTexCoords);
+//
+//    outFragColor = base * baseCol;
+    outFragColor = vec4(vec3(0.5), 1.0);
 }

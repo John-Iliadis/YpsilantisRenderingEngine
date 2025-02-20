@@ -12,15 +12,15 @@ class MeshNode : public GraphNode
 public:
     MeshNode();
     MeshNode(NodeType type, const std::string& name, const glm::mat4& transformation, GraphNode* parent,
-             uuid32_t modelID, uuid32_t meshID);
+             uuid32_t modelID, std::vector<uuid32_t> meshIDs);
     ~MeshNode();
 
     void updateGlobalTransform() override;
 
-    uuid32_t meshID() const;
+    const std::vector<uuid32_t>& meshIDs() const;
 
 private:
-    uuid32_t mMeshID;
+    std::vector<uuid32_t> mMeshIDs;
 };
 
 #endif //OPENGLRENDERINGENGINE_MESH_NODE_HPP

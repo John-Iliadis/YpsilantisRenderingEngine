@@ -215,13 +215,13 @@ void Editor::modelInspector(uuid32_t modelID)
         uint32_t selectedMaterialIndex = sSelectedMatIndex.at(modelID);
 
         Material& mat = model.materials.at(selectedMaterialIndex);
-        std::string& name = model.materialNames.at(selectedMaterialIndex);
         bool matNeedsUpdate = false;
 
         ImGui::SeparatorText("Material Textures");
 
         if (mat.baseColorTexIndex != -1) matTexInspector("Base Color", model.textures.at(mat.baseColorTexIndex));
-        if (mat.metallicRoughnessTexIndex != -1) matTexInspector("Metallic Roughness", model.textures.at(mat.metallicRoughnessTexIndex));
+        if (mat.metallicTexIndex != -1) matTexInspector("Metallic", model.textures.at(mat.metallicTexIndex));
+        if (mat.roughnessTexIndex != -1) matTexInspector("Roughness", model.textures.at(mat.roughnessTexIndex));
         if (mat.normalTexIndex != -1) matTexInspector("Normal", model.textures.at(mat.normalTexIndex));
         if (mat.aoTexIndex != -1) matTexInspector("AO", model.textures.at(mat.aoTexIndex));
         if (mat.emissionTexIndex != -1) matTexInspector("Emission", model.textures.at(mat.emissionTexIndex));
@@ -243,9 +243,6 @@ void Editor::modelInspector(uuid32_t modelID)
             matNeedsUpdate = true;
 
         if (ImGui::SliderFloat("Roughness", &mat.roughnessFactor, 0.f, 1.f))
-            matNeedsUpdate = true;
-
-        if (ImGui::SliderFloat("AO", &mat.occlusionFactor, 0.f, 1.f))
             matNeedsUpdate = true;
 
         ImGui::SeparatorText("Texture Coordinates");
@@ -344,12 +341,36 @@ void Editor::meshNodeInspector(GraphNode *node)
     ImGui::SeparatorText("Info");
 
     auto& model = *mRenderer.mModels.at(meshNode->modelID().value());
-    auto& mesh = model.getMesh(meshNode->meshID());
+
+    std::vector<Mesh*> meshes;
+    for (uuid32_t meshID : meshNode->meshIDs())
+        meshes.push_back(model.getMesh(meshID));
 
     ImGui::Text("Associated Model: %s", model.name.c_str());
-    ImGui::Text("Mesh: %s", mesh.name.c_str());
-    ImGui::Text("Material: %s", mesh.materialIndex == -1? "None" :
-                            model.materialNames.at(mesh.materialIndex).c_str());
+
+    if (meshes.size() == 1)
+    {
+        Mesh& mesh = *meshes.front();
+        int32_t materialIndex = mesh.materialIndex;
+
+        ImGui::Text("Mesh: %s", mesh.name.c_str());
+        ImGui::Text("Material: %s", mesh.materialIndex == -1? "None"
+                                                                : model.materialNames.at(materialIndex).c_str());
+    }
+    else
+    {
+        for (uint32_t i = 0; i < meshes.size(); ++i)
+        {
+            Mesh& mesh = *meshes.at(i);
+            uint32_t materialIndex = mesh.materialIndex;
+
+            ImGui::Text("Mesh %d: %s", i, mesh.name.c_str());
+            ImGui::Text("Material %d: %s", i, mesh.materialIndex == -1? "None"
+                                                                             : model.materialNames.at(materialIndex).c_str());
+            if (i != meshes.size() - 1)
+                ImGui::Spacing();
+        }
+    }
 }
 
 void Editor::nodeTransform(GraphNode *node)
@@ -366,13 +387,13 @@ void Editor::nodeTransform(GraphNode *node)
 
     bool modified = false;
 
-    if (ImGui::DragFloat3("Translation", translation, 0.001f))
+    if (ImGui::DragFloat3("Translation", translation, 0.01f))
         modified = true;
 
-    if (ImGui::DragFloat3("Rotation", rotation, 0.001f))
+    if (ImGui::DragFloat3("Rotation", rotation, 0.1f))
         modified = true;
 
-    if (ImGui::DragFloat3("Scale", scale, 0.001f))
+    if (ImGui::DragFloat3("Scale", scale, 0.01f, 0.001f, FLT_MAX, "%.3f", ImGuiSliderFlags_AlwaysClamp))
         modified = true;
 
     if (modified)
@@ -447,10 +468,63 @@ void Editor::deleteSelectedModel()
     mSelectedObjectID = 0;
 }
 
+void Editor::debugPanel()
+{
+    ImGui::Begin("Debug", &mShowDebugPanel);
+
+    ImGui::Text("GPU: %s", mRenderer.mRenderDevice.getDeviceProperties().deviceName);
+    ImGui::Separator();
+
+    ImGui::Text("Window size: %lux%lu px",
+                static_cast<uint32_t>(ImGui::GetIO().DisplaySize.x),
+                static_cast<uint32_t>(ImGui::GetIO().DisplaySize.y));
+    ImGui::Text("Rendering viewport size: %lux%lu px",
+                static_cast<uint32_t>(mViewportSize.x),
+                static_cast<uint32_t>(mViewportSize.y));
+    ImGui::Separator();
+
+    plotPerformanceGraphs();
+
+    ImGui::Separator();
+
+    ImGui::End();
+}
+
+void Editor::plotPerformanceGraphs()
+{
+    static constexpr uint32_t maxSamples = 500;
+    static std::vector<float> fpsValues(maxSamples, 0.f);
+    static std::vector<float> dtValues(maxSamples, 0.f);
+
+    float dt = mDt * 1000.0f;
+    float fps = 1.0f / mDt;
+
+    if (dt > 33.f)
+        debugLog(std::format("Large dt: {}ms", dt));
+
+    if (dtValues.size() >= maxSamples)
+        dtValues.erase(dtValues.begin());
+
+    if (fpsValues.size() >= maxSamples)
+        fpsValues.erase(fpsValues.begin());
+
+    dtValues.push_back(dt);
+    fpsValues.push_back(fps);
+
+    ImGui::Text("FPS: %lu", mFPS);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::PlotLines("##FPS", fpsValues.data(), fpsValues.size(), 0, nullptr, 0, 1000, ImVec2(0, 50));
+    ImGui::Separator();
+
+    ImGui::Text("Frame time: %.2f ms", mFrametimeMs);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::PlotLines("##Frametime", dtValues.data(), dtValues.size(),  0, nullptr, 0, 100, ImVec2(0, 50));
+}
+
 void Editor::rendererPanel()
 {
     static constexpr ImGuiColorEditFlags colorEditFlags = ImGuiColorEditFlags_DisplayRGB |
-        ImGuiColorEditFlags_AlphaBar;
+                                                          ImGuiColorEditFlags_AlphaBar;
 
     ImGui::Begin("Renderer", &mShowRendererPanel);
 
@@ -461,8 +535,8 @@ void Editor::rendererPanel()
 
         ImGui::ColorEdit4("Thin line color", glm::value_ptr(mRenderer.mGridData.thinLineColor), colorEditFlags);
         ImGui::ColorEdit4("Thick line color", glm::value_ptr(mRenderer.mGridData.thickLineColor), colorEditFlags);
-        ImGui::SliderFloat("Cell size", &mRenderer.mGridData.cellSize, 0.001f, 0.25f);
-        ImGui::SliderFloat("Min pixels between cells", &mRenderer.mGridData.minPixelsBetweenCells, 1.f, 5.f);
+        ImGui::SliderFloat("Cell size", &mRenderer.mGridData.cellSize, 0.01, 100.f);
+        ImGui::SliderFloat("Min pixels between cells", &mRenderer.mGridData.minPixelsBetweenCells, 0.1f, 5.f);
     }
 
     if (ImGui::CollapsingHeader("Skybox", ImGuiTreeNodeFlags_DefaultOpen))
@@ -492,9 +566,9 @@ void Editor::rendererPanel()
 void Editor::skyboxImportPopup()
 {
     static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoResize;
+                                          ImGuiWindowFlags_NoSavedSettings |
+                                          ImGuiWindowFlags_NoScrollbar |
+                                          ImGuiWindowFlags_NoResize;
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 
@@ -575,59 +649,6 @@ void Editor::skyboxImportPopup()
     }
 }
 
-void Editor::debugPanel()
-{
-    ImGui::Begin("Debug", &mShowDebugPanel);
-
-    ImGui::Text("GPU: %s", mRenderer.mRenderDevice.getDeviceProperties().deviceName);
-    ImGui::Separator();
-
-    ImGui::Text("Window size: %lux%lu px",
-                static_cast<uint32_t>(ImGui::GetIO().DisplaySize.x),
-                static_cast<uint32_t>(ImGui::GetIO().DisplaySize.y));
-    ImGui::Text("Rendering viewport size: %lux%lu px",
-                static_cast<uint32_t>(mViewportSize.x),
-                static_cast<uint32_t>(mViewportSize.y));
-    ImGui::Separator();
-
-    plotPerformanceGraphs();
-
-    ImGui::Separator();
-
-    ImGui::End();
-}
-
-void Editor::plotPerformanceGraphs()
-{
-    static constexpr uint32_t maxSamples = 500;
-    static std::vector<float> fpsValues(maxSamples, 0.f);
-    static std::vector<float> dtValues(maxSamples, 0.f);
-
-    float dt = mDt * 1000.0f;
-    float fps = 1.0f / mDt;
-
-    if (dt > 33.f)
-        debugLog(std::format("Large dt: {}ms", dt));
-
-    if (dtValues.size() >= maxSamples)
-        dtValues.erase(dtValues.begin());
-
-    if (fpsValues.size() >= maxSamples)
-        fpsValues.erase(fpsValues.begin());
-
-    dtValues.push_back(dt);
-    fpsValues.push_back(fps);
-
-    ImGui::Text("FPS: %lu", mFPS);
-    ImGui::SetNextItemWidth(-1);
-    ImGui::PlotLines("##FPS", fpsValues.data(), fpsValues.size(), 0, nullptr, 0, 1000, ImVec2(0, 50));
-    ImGui::Separator();
-
-    ImGui::Text("Frame time: %.2f ms", mFrametimeMs);
-    ImGui::SetNextItemWidth(-1);
-    ImGui::PlotLines("##Frametime", dtValues.data(), dtValues.size(),  0, nullptr, 0, 100, ImVec2(0, 50));
-}
-
 void Editor::sceneGraphPanel()
 {
     ImGui::Begin("Scene Graph", &mShowSceneGraph);
@@ -686,7 +707,7 @@ void Editor::sceneGraphPopup()
         ImGui::Separator();
 
         if (ImGui::MenuItem("Create Empty##sceneGraph"))
-            createEmptyNode();
+            mSceneGraph.addNode(createEmptyNode(nullptr, "Empty Node"));
 
         ImGui::MenuItem("Create from Model##sceneGraph", nullptr, false, !mRenderer.mModels.empty());
         if (ImGui::IsItemClicked())
@@ -773,43 +794,49 @@ void Editor::sceneNodeRecursive(GraphNode *node)
     }
 }
 
-static GraphNode* createModelGraphImpl(Model& model, const SceneNode& sceneNode, GraphNode* parent)
+void Editor::createModelGraph(Model &model)
+{
+    GraphNode* graphNode = createModelGraphRecursive(model, model.root, nullptr);
+    mSceneGraph.addNode(graphNode);
+}
+
+GraphNode *Editor::createModelGraphRecursive(Model &model, const SceneNode &sceneNode, GraphNode *parent)
 {
     GraphNode* graphNode;
 
-    if (sceneNode.meshIndex != -1)
-    {
-        Mesh& mesh = model.meshes.at(sceneNode.meshIndex);
-
-        uuid32_t meshID = mesh.meshID;
-
-        graphNode = new MeshNode(NodeType::Mesh, sceneNode.name, sceneNode.transformation, parent, model.id, meshID);
-
-        mesh.mesh.addInstance(graphNode->id());
-    }
+    if (!sceneNode.meshIndices.empty())
+        graphNode = createMeshNode(model, sceneNode, parent);
     else
-    {
-        graphNode = new GraphNode(NodeType::Empty, sceneNode.name, sceneNode.transformation, parent, model.id);
-    }
+        graphNode = createEmptyNode(parent, sceneNode.name);
 
     for (const auto& child : sceneNode.children)
-        graphNode->addChild(createModelGraphImpl(model, child, graphNode));
+        graphNode->addChild(createModelGraphRecursive(model, child, graphNode));
 
     return graphNode;
 }
 
-void Editor::createModelGraph(Model &model)
+GraphNode *Editor::createEmptyNode(GraphNode *parent, const std::string& name)
 {
-    for (const auto& sceneNode : model.scenes)
-    {
-        GraphNode* graphNode = createModelGraphImpl(model, sceneNode, nullptr);
-        mSceneGraph.addNode(graphNode);
-    }
+    return new GraphNode(NodeType::Empty, name, glm::identity<glm::mat4>(), parent);
 }
 
-void Editor::createEmptyNode()
+GraphNode* Editor::createMeshNode(Model &model, const SceneNode &sceneNode, GraphNode* parent)
 {
-    mSceneGraph.addNode(new GraphNode(NodeType::Empty, "Empty Node", glm::identity<glm::mat4>(), nullptr));
+    std::vector<uuid32_t> meshIDs;
+
+    for (uint32_t i = 0; i < sceneNode.meshIndices.size(); ++i)
+    {
+        uint32_t meshIndex = sceneNode.meshIndices.at(i);
+        const Mesh& mesh = model.meshes.at(meshIndex);
+        meshIDs.push_back(mesh.meshID);
+    }
+
+    GraphNode* graphNode = new MeshNode(NodeType::Mesh, sceneNode.name, sceneNode.transformation, parent, model.id, meshIDs);
+
+    for (uuid32_t meshID : meshIDs)
+        model.getMesh(meshID)->mesh.addInstance(graphNode->id());
+
+    return graphNode;
 }
 
 void Editor::copyNode(uuid32_t nodeID)
@@ -1056,18 +1083,22 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
         }
         case NodeType::Mesh:
         {
+            Model& model = *mRenderer.mModels.at(*node->modelID());
+
             MeshNode* meshNode = dynamic_cast<MeshNode*>(node);
 
             uuid32_t modelID = meshNode->modelID().value();
-            uint32_t meshID = meshNode->meshID();
+            std::vector<uuid32_t> meshIDs = meshNode->meshIDs();
 
             newNode = new MeshNode(meshNode->type(),
                                    meshNode->name(),
                                    meshNode->localTransform(),
                                    meshNode->parent(),
-                                   modelID, meshID);
+                                   modelID, meshIDs);
 
-            mRenderer.mModels.at(modelID)->getMesh(meshID).mesh.addInstance(newNode->id());
+            for (uuid32_t meshID : meshIDs)
+                model.getMesh(meshID)->mesh.addInstance(newNode->id());
+
             break;
         }
         default: assert(false);

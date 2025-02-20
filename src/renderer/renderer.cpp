@@ -570,12 +570,28 @@ void Renderer::createCameraRenderDataDsLayout()
 
 void Renderer::createMaterialsDsLayout()
 {
+    // WHAT THE FUCK IS THE POINT OF THIS EXTENSION IF I STILL HAVE TO SPECIFY THE SIZE OF THE DESCRIPTOR ARRAY
+    // STUPID FUCKING API
+
+    std::array<VkDescriptorBindingFlagsEXT, 2> descriptorBindingFlags {
+        0,
+        VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
+    };
+
+    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT dsLayoutBindingFlagsCI {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT,
+        .bindingCount = 2,
+        .pBindingFlags = descriptorBindingFlags.data()
+    };
+
     DsLayoutSpecification specification {
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
+        .pNext = &dsLayoutBindingFlagsCI,
         .bindings = {
             {
                 .binding = 0,
                 .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .descriptorCount = PerModelMaxMaterialCount,
+                .descriptorCount = 1,
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
             },
             {
@@ -951,7 +967,13 @@ void Renderer::createPrepassPipeline()
         },
         .pipelineLayout = {
             .dsLayouts = {
-                mCameraRenderDataDsLayout
+                mCameraRenderDataDsLayout,
+                mMaterialsDsLayout
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(uint32_t)
             }
         },
         .renderPass = mPrepassRenderpass,

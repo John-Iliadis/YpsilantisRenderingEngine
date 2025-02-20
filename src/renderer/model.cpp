@@ -147,12 +147,13 @@ void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayou
     }
 }
 
-Mesh &Model::getMesh(uuid32_t meshID)
+Mesh* Model::getMesh(uuid32_t meshID)
 {
     for (auto& mesh : meshes)
         if (mesh.meshID == meshID)
-            return mesh;
-    return meshes.front();
+            return &mesh;
+
+    return nullptr;
 }
 
 void Model::updateMaterial(index_t matIndex)
@@ -164,13 +165,17 @@ void Model::notify(const Message &message)
 {
     if (const auto m = message.getIf<Message::MeshInstanceUpdate>())
     {
-        Mesh& mesh = getMesh(m->meshID);
-        mesh.mesh.updateInstance(m->objectID, m->transformation);
+        if (auto mesh = getMesh(m->meshID))
+        {
+            mesh->mesh.updateInstance(m->objectID, m->transformation);
+        }
     }
 
     if (const auto m = message.getIf<Message::RemoveMeshInstance>())
     {
-        Mesh& mesh = getMesh(m->meshID);
-        mesh.mesh.removeInstance(m->objectID);
+        if (auto mesh = getMesh(m->meshID))
+        {
+            mesh->mesh.removeInstance(m->objectID);
+        }
     }
 }

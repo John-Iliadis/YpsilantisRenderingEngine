@@ -5,7 +5,7 @@
 #ifndef VULKANRENDERINGENGINE_SAVE_DATA_HPP
 #define VULKANRENDERINGENGINE_SAVE_DATA_HPP
 
-#include <tiny_gltf/json.hpp>
+#include <json/json.hpp>
 
 class SaveData : public nlohmann::json
 {

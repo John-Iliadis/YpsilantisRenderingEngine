@@ -44,7 +44,9 @@ private:
     void sceneGraphPopup();
     void sceneNodeRecursive(GraphNode* node);
     void createModelGraph(Model& model);
-    void createEmptyNode();
+    GraphNode* createModelGraphRecursive(Model& model, const SceneNode& sceneNode, GraphNode* parent);
+    GraphNode* createEmptyNode(GraphNode* parent, const std::string& name);
+    GraphNode* createMeshNode(Model& model, const SceneNode& sceneNode, GraphNode* parent);
     void copyNode(uuid32_t nodeID);
     void cutNode(uuid32_t nodeID);
     void pasteNode(GraphNode* parent);

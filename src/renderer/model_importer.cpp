@@ -70,9 +70,12 @@ namespace ModelImporter
 
             // load materials
             auto texNames = getTextureNames(*assimpScene);
+
             MaterialData materialData = loadMaterials(*assimpScene, texNames);
+
             model->materials = std::move(materialData.materials);
             model->materialNames = std::move(materialData.materialNames);
+            model->textures.resize(texNames.size());
 
             // load texture data
             std::filesystem::path directory = path.parent_path();
@@ -90,8 +93,7 @@ namespace ModelImporter
                 int32_t textureIndex = texNames.at(loadedImage->loadedImage.path().filename().string());
 
                 callback([renderDevice, model, textureIndex, loadedImage] () {
-                    model->textures.insert(model->textures.begin() + textureIndex,
-                                           createTexture(renderDevice, loadedImage));
+                    model->textures.at(textureIndex) = createTexture(renderDevice, loadedImage);
                 });
             }
 
@@ -166,7 +168,7 @@ namespace ModelImporter
                 .name = assimpMesh.mName.C_Str(),
                 .vertices = loadMeshVertices(assimpMesh),
                 .indices = loadMeshIndices(assimpMesh),
-                .materialIndex = assimpMesh.
+                .materialIndex = static_cast<int32_t>(assimpMesh.mMaterialIndex)
             };
 
             return meshData;
@@ -327,7 +329,7 @@ namespace ModelImporter
             .baseColorTexIndex = getTexIndex(aiTextureType_BASE_COLOR),
             .metallicTexIndex = getTexIndex(aiTextureType_METALNESS),
             .roughnessTexIndex = getTexIndex(aiTextureType_DIFFUSE_ROUGHNESS),
-            .normalTexIndex = getTexIndex(aiTextureType_NORMAL_CAMERA),
+            .normalTexIndex = getTexIndex(aiTextureType_NORMALS),
             .aoTexIndex = getTexIndex(aiTextureType_AMBIENT_OCCLUSION),
             .emissionTexIndex = getTexIndex(aiTextureType_EMISSIVE),
             .metallicFactor = getMetallicFactor(assimpMaterial),
@@ -404,7 +406,7 @@ namespace ModelImporter
         int32_t index = 0;
 
         auto addTexture = [&texNames, &index] (const std::optional<std::string>& texName) {
-            if (texNames.contains(*texName))
+            if (texName.has_value() && !texNames.contains(*texName))
             {
                 texNames.emplace(*texName, index);
                 ++index;
@@ -416,7 +418,7 @@ namespace ModelImporter
             const aiMaterial& material = *assimpScene.mMaterials[i];
 
             addTexture(getTextureName(material, aiTextureType_BASE_COLOR));
-            addTexture(getTextureName(material, aiTextureType_NORMAL_CAMERA));
+            addTexture(getTextureName(material, aiTextureType_NORMALS));
             addTexture(getTextureName(material, aiTextureType_EMISSION_COLOR));
             addTexture(getTextureName(material, aiTextureType_METALNESS));
             addTexture(getTextureName(material, aiTextureType_DIFFUSE_ROUGHNESS));

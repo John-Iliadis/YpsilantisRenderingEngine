@@ -80,7 +80,7 @@ public:
 
     void render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex) const;
 
-    Mesh& getMesh(uuid32_t meshID);
+    Mesh* getMesh(uuid32_t meshID);
 
 private:
     const VulkanRenderDevice* mRenderDevice;
