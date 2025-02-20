@@ -182,11 +182,12 @@ void Editor::modelInspector(uuid32_t modelID)
     ImGui::Text("Asset Type: Model");
     ImGui::Text("Name: %s", model.name.c_str());
 
-    ImGui::SeparatorText("Info");
-
-    ImGui::Text("Mesh Count: %zu", model.meshes.size());
-    ImGui::Text("Material Count: %zu", model.materials.size());
-    ImGui::Text("Texture Count: %zu", model.textures.size());
+    if (ImGui::CollapsingHeader("Info", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Text("Mesh Count: %zu", model.meshes.size());
+        ImGui::Text("Material Count: %zu", model.materials.size());
+        ImGui::Text("Texture Count: %zu", model.textures.size());
+    }
 
     if (!model.materials.empty())
     {
@@ -194,69 +195,63 @@ void Editor::modelInspector(uuid32_t modelID)
         if (!sSelectedMatIndex.contains(modelID))
             sSelectedMatIndex[modelID] = 0;
 
-        ImGui::SeparatorText("Materials");
-        ImGui::BeginChild("LeftMaterialPanel", ImVec2(150.f, 0.f), ImGuiChildFlags_Border | ImGuiChildFlags_ResizeX);
-
-        for (uint32_t i = 0; i < model.materials.size(); ++i)
+        if (ImGui::CollapsingHeader("Material Preview", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            const std::string& matName = model.materialNames.at(i);
+            ImGui::Spacing();
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+            if (ImGui::BeginCombo("##MaterialPreviewCombo", model.materialNames.at(sSelectedMatIndex.at(modelID)).c_str()))
+            {
+                for (uint32_t i = 0; i < model.materials.size(); ++i)
+                {
+                    const std::string& matName = model.materialNames.at(i);
 
-            bool selected = i == sSelectedMatIndex.at(modelID);
+                    if (ImGui::Selectable(matName.c_str(), i == sSelectedMatIndex.at(modelID)))
+                        sSelectedMatIndex.at(modelID) = i;
+                }
 
-            if (ImGui::Selectable(matName.c_str(), selected))
-                sSelectedMatIndex.at(modelID) = i;
+                ImGui::EndCombo();
+            }
+
+            ImGui::SeparatorText("Material Textures");
+
+            Material& mat = model.materials.at(sSelectedMatIndex.at(modelID));
+            bool matNeedsUpdate = false;
+
+            if (mat.baseColorTexIndex != -1) matTexInspector("Base Color", model.textures.at(mat.baseColorTexIndex));
+            if (mat.metallicTexIndex != -1) matTexInspector("Metallic", model.textures.at(mat.metallicTexIndex));
+            if (mat.roughnessTexIndex != -1) matTexInspector("Roughness", model.textures.at(mat.roughnessTexIndex));
+            if (mat.normalTexIndex != -1) matTexInspector("Normal", model.textures.at(mat.normalTexIndex));
+            if (mat.aoTexIndex != -1) matTexInspector("AO", model.textures.at(mat.aoTexIndex));
+            if (mat.emissionTexIndex != -1) matTexInspector("Emission", model.textures.at(mat.emissionTexIndex));
+
+            ImGui::SeparatorText("Material Factors");
+
+            static constexpr ImGuiColorEditFlags sColorEditFlags = ImGuiColorEditFlags_DisplayRGB |
+                ImGuiColorEditFlags_AlphaBar;
+
+            if (ImGui::ColorEdit4("Base Color", glm::value_ptr(mat.baseColorFactor), sColorEditFlags))
+                matNeedsUpdate = true;
+
+            if (ImGui::ColorEdit3("Emission", glm::value_ptr(mat.emissionFactor), sColorEditFlags))
+                matNeedsUpdate = true;
+
+            if (ImGui::SliderFloat("Metallic", &mat.metallicFactor, 0.f, 1.f))
+                matNeedsUpdate = true;
+
+            if (ImGui::SliderFloat("Roughness", &mat.roughnessFactor, 0.f, 1.f))
+                matNeedsUpdate = true;
+
+            ImGui::SeparatorText("Texture Coordinates");
+
+            if (ImGui::DragFloat2("Tiling", glm::value_ptr(mat.tiling), 0.01f))
+                matNeedsUpdate = true;
+
+            if (ImGui::DragFloat2("Offset", glm::value_ptr(mat.offset), 0.01f))
+                matNeedsUpdate = true;
+
+            if (matNeedsUpdate)
+                model.updateMaterial(sSelectedMatIndex.at(modelID));
         }
-
-        ImGui::EndChild();
-
-        ImGui::SameLine();
-        ImGui::BeginChild("RightMaterialsPanel", ImVec2(), ImGuiChildFlags_Border);
-
-        uint32_t selectedMaterialIndex = sSelectedMatIndex.at(modelID);
-
-        Material& mat = model.materials.at(selectedMaterialIndex);
-        bool matNeedsUpdate = false;
-
-        ImGui::SeparatorText("Material Textures");
-
-        if (mat.baseColorTexIndex != -1) matTexInspector("Base Color", model.textures.at(mat.baseColorTexIndex));
-        if (mat.metallicTexIndex != -1) matTexInspector("Metallic", model.textures.at(mat.metallicTexIndex));
-        if (mat.roughnessTexIndex != -1) matTexInspector("Roughness", model.textures.at(mat.roughnessTexIndex));
-        if (mat.normalTexIndex != -1) matTexInspector("Normal", model.textures.at(mat.normalTexIndex));
-        if (mat.aoTexIndex != -1) matTexInspector("AO", model.textures.at(mat.aoTexIndex));
-        if (mat.emissionTexIndex != -1) matTexInspector("Emission", model.textures.at(mat.emissionTexIndex));
-
-        ImGui::SeparatorText("Material Factors");
-
-        static constexpr ImGuiColorEditFlags sColorEditFlags {
-            ImGuiColorEditFlags_DisplayRGB |
-            ImGuiColorEditFlags_AlphaBar
-        };
-
-        if (ImGui::ColorEdit4("Base Color", glm::value_ptr(mat.baseColorFactor), sColorEditFlags))
-            matNeedsUpdate = true;
-
-        if (ImGui::ColorEdit3("Emission", glm::value_ptr(mat.emissionFactor), sColorEditFlags))
-            matNeedsUpdate = true;
-
-        if (ImGui::SliderFloat("Metallic", &mat.metallicFactor, 0.f, 1.f))
-            matNeedsUpdate = true;
-
-        if (ImGui::SliderFloat("Roughness", &mat.roughnessFactor, 0.f, 1.f))
-            matNeedsUpdate = true;
-
-        ImGui::SeparatorText("Texture Coordinates");
-
-        if (ImGui::DragFloat2("Tiling", glm::value_ptr(mat.tiling), 0.01f))
-            matNeedsUpdate = true;
-
-        if (ImGui::DragFloat2("Offset", glm::value_ptr(mat.offset), 0.01f))
-            matNeedsUpdate = true;
-
-        ImGui::EndChild();
-
-        if (matNeedsUpdate)
-            model.updateMaterial(selectedMaterialIndex);
     }
 }
 
