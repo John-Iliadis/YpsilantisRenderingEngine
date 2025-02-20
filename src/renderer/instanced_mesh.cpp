@@ -157,9 +157,9 @@ void InstancedMesh::checkResize()
     if (mInstanceCount < mInstanceBufferCapacity)
         return;
 
-    uint32_t newCapacity = glm::ceil(glm::log2(static_cast<float>(mInstanceCount)));
+    uint32_t newCapacity = mInstanceCount * 2;
 
-    VulkanBuffer newInstanceBuffer(*mRenderDevice, newCapacity * sizeof(sInstanceSize), BufferType::Vertex, MemoryType::GPU);
+    VulkanBuffer newInstanceBuffer(*mRenderDevice, newCapacity * sInstanceSize, BufferType::Vertex, MemoryType::GPU);
     newInstanceBuffer.copyBuffer(mInstanceBuffer, 0, 0, mInstanceBufferCapacity * sInstanceSize);
     newInstanceBuffer.swap(mInstanceBuffer);
 
