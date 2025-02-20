@@ -83,7 +83,6 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_renderpass.hpp
 )
 
-add_subdirectory(${DEPENDENCY_DIR}/tiny_gltf/)
 add_subdirectory(${DEPENDENCY_DIR}/stb/)
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.hpp)
@@ -94,12 +93,7 @@ find_package(Vulkan REQUIRED)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIRS})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
-        Vulkan::Vulkan
-        tiny_gltf
-        stb
-        ${LIBS}
-)
+target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan stb ${LIBS})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
         $<$<CONFIG:Debug>:DEBUG_MODE>

@@ -4,30 +4,61 @@
 
 #include "model_importer.hpp"
 
-// todo: load all mesh primitives
-// todo: handle multiple primitive types
 // todo: handle embedded image data
 // todo: error handling
 // todo: handle texture loading fails
-// todo: handle "Load error: No LoadImageData callback specified"
 // todo: load lights
+// todo: check if a mesh has materials
+// todo: check if mesh has indices
+// todo: support specular glossiness
+// todo: load sampler data
+
+static constexpr uint32_t sImportFlags
+{
+    aiProcess_CalcTangentSpace |
+    aiProcess_Triangulate |
+    aiProcess_RemoveComponent |
+    aiProcess_GenNormals |
+    aiProcess_ImproveCacheLocality |
+    aiProcess_RemoveRedundantMaterials |
+    aiProcess_SortByPType |
+    aiProcess_GenUVCoords
+};
+
+static constexpr int sRemoveComponents
+{
+    aiComponent_BONEWEIGHTS |
+    aiComponent_ANIMATIONS |
+    aiComponent_LIGHTS |
+    aiComponent_CAMERAS |
+    aiComponent_COLORS
+};
+
+static constexpr int sRemovePrimitives
+{
+    aiPrimitiveType_POINT |
+    aiPrimitiveType_LINE
+};
 
 namespace ModelImporter
 {
     std::future<std::shared_ptr<Model>> loadModel(const std::filesystem::path& path, const VulkanRenderDevice* renderDevice, EnqueueCallback callback)
     {
         return std::async(std::launch::async, [path, renderDevice, callback] () {
-            std::shared_ptr<tinygltf::Model> gltfModel = loadGltfScene(path);
+            std::shared_ptr<aiScene> assimpScene = loadScene(path);
             std::shared_ptr<Model> model = std::make_shared<Model>(renderDevice);
 
             model->name = path.filename().string();
             model->path = path;
-            model->scenes = loadScenes(*gltfModel);
+            model->root = createRootSceneNode(*assimpScene->mRootNode);
 
             // load mesh data
             std::vector<std::future<MeshData>> meshDataFutures;
-            for (const auto& gltfMesh : gltfModel->meshes)
-                meshDataFutures.push_back(createMeshData(*gltfModel, gltfMesh));
+            for (uint32_t i = 0; i < assimpScene->mNumMeshes; ++i)
+            {
+                const aiMesh& assimpMesh = *assimpScene->mMeshes[i];
+                meshDataFutures.push_back(loadMeshData(assimpMesh));
+            }
 
             // upload mesh data to vulkan
             for (auto& meshDataFuture : meshDataFutures)
@@ -38,22 +69,29 @@ namespace ModelImporter
             }
 
             // load materials
-            MaterialData materialData = loadMaterials(*gltfModel);
-
+            auto texNames = getTextureNames(*assimpScene);
+            MaterialData materialData = loadMaterials(*assimpScene, texNames);
             model->materials = std::move(materialData.materials);
             model->materialNames = std::move(materialData.materialNames);
 
             // load texture data
             std::filesystem::path directory = path.parent_path();
             std::vector<std::future<std::shared_ptr<ImageData>>> loadedImageFutures;
-            for (const auto& texture : gltfModel->textures)
-                loadedImageFutures.push_back(loadImageData(*gltfModel, texture, directory));
+            for (const auto [texFilename, texIndex] : texNames)
+            {
+                loadedImageFutures.push_back(loadImageData(directory, texFilename));
+            }
 
             // upload texture data to vulkan
             for (auto& loadedImageFuture : loadedImageFutures)
             {
-                callback([renderDevice, model, imageData = loadedImageFuture.get()] () {
-                    model->textures.push_back(createTexture(renderDevice, imageData));
+                auto loadedImage = loadedImageFuture.get();
+
+                int32_t textureIndex = texNames.at(loadedImage->loadedImage.path().filename().string());
+
+                callback([renderDevice, model, textureIndex, loadedImage] () {
+                    model->textures.insert(model->textures.begin() + textureIndex,
+                                           createTexture(renderDevice, loadedImage));
                 });
             }
 
@@ -61,118 +99,51 @@ namespace ModelImporter
         });
     }
 
-    std::shared_ptr<tinygltf::Model> loadGltfScene(const std::filesystem::path &path)
+    std::shared_ptr<aiScene> loadScene(const std::filesystem::path& path)
     {
-        debugLog("Loading model: " + path.string());
+        Assimp::Importer importer;
 
-        std::shared_ptr<tinygltf::Model> model = std::make_shared<tinygltf::Model>();
-        tinygltf::TinyGLTF loader;
-        std::string error;
-        std::string warning;
+        importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, sRemoveComponents);
+        importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, sRemovePrimitives);
+        importer.SetPropertyBool(AI_CONFIG_PP_PTV_NORMALIZE, true);
 
-        if (fileExtension(path) == ".gltf")
-            loader.LoadASCIIFromFile(model.get(), &error, &warning, path.string());
-        else if (fileExtension(path) == ".glb")
-            loader.LoadBinaryFromFile(model.get(), &error, &warning, path.string());
+        importer.ReadFile(path.string(), sImportFlags);
 
-        check(error.empty(), std::format("Failed to load model {}\nLoad error: {}", path.string(), error).c_str());
+        std::shared_ptr<aiScene> scene(importer.GetOrphanedScene());
 
-        if (!warning.empty())
-            debugLog("Model load warning: " + warning);
-
-        return model;
-    }
-
-    std::vector<SceneNode> loadScenes(const tinygltf::Model& gltfModel)
-    {
-        std::vector<SceneNode> rootNodes;
-
-        if (gltfModel.scenes.size() == 1)
+        if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)
         {
-            const tinygltf::Scene& scene = gltfModel.scenes.at(0);
-            const tinygltf::Node& root = gltfModel.nodes.at(scene.nodes.at(0));
-
-            SceneNode rootSceneNode = createRootSceneNode(gltfModel, root);
-            rootNodes.push_back(std::move(rootSceneNode));
-        }
-        else
-        {
-            for (const tinygltf::Scene& scene : gltfModel.scenes)
-            {
-                SceneNode rootSceneNode = createRootSceneNode(gltfModel, scene);
-                rootNodes.push_back(std::move(rootSceneNode));
-            }
+            debugLog("Failed to load Assimp scene.");
+            return nullptr;
         }
 
-        return rootNodes;
+        return scene;
     }
 
-    SceneNode createRootSceneNode(const tinygltf::Model& gltfModel, const tinygltf::Scene& gltfScene)
+    SceneNode createRootSceneNode(const aiNode& assimpNode)
     {
         SceneNode sceneNode {
-            .name = gltfScene.name.empty()? "Unnamed" : gltfScene.name,
-            .transformation = glm::identity<glm::mat4>(),
-            .meshIndex = -1
+            .name = assimpNode.mName.length? assimpNode.mName.C_Str() : "Unnamed",
+            .transformation = assimpToGlmMat4(assimpNode.mTransformation)
         };
 
-        for (int32_t nodeIndex : gltfScene.nodes)
+        if (uint32_t meshCount = assimpNode.mNumMeshes)
         {
-            const tinygltf::Node& gltfNode = gltfModel.nodes.at(nodeIndex);
-            sceneNode.children.push_back(createRootSceneNode(gltfModel, gltfNode));
+            sceneNode.meshIndices.insert(sceneNode.meshIndices.begin(),
+                                         assimpNode.mMeshes,
+                                         assimpNode.mMeshes + meshCount);
+        }
+
+        for (uint32_t i = 0; i < assimpNode.mNumChildren; ++i)
+        {
+            const aiNode& child = *assimpNode.mChildren[i];
+            sceneNode.children.push_back(createRootSceneNode(child));
         }
 
         return sceneNode;
     }
 
-    SceneNode createRootSceneNode(const tinygltf::Model& gltfModel, const tinygltf::Node& gltfNode)
-    {
-        SceneNode sceneNode {
-            .name = gltfNode.name.empty()? "Unnamed" : gltfNode.name,
-            .transformation = getNodeTransformation(gltfNode),
-            .meshIndex = gltfNode.mesh
-        };
-
-        for (int32_t childIndex : gltfNode.children)
-        {
-            const tinygltf::Node& gltfChildNode = gltfModel.nodes.at(childIndex);
-            sceneNode.children.push_back(createRootSceneNode(gltfModel, gltfChildNode));
-        }
-
-        return sceneNode;
-    }
-
-    glm::mat4 getNodeTransformation(const tinygltf::Node& gltfNode)
-    {
-        glm::mat4 transformation = glm::identity<glm::mat4>();
-
-        if (!gltfNode.matrix.empty())
-        {
-            transformation = glm::make_mat4(gltfNode.matrix.data());
-        }
-        else
-        {
-            if (!gltfNode.translation.empty())
-            {
-                glm::dvec3 translation = glm::make_vec3(gltfNode.translation.data());
-                transformation = glm::translate(transformation, static_cast<glm::vec3>(translation));
-            }
-
-            if (!gltfNode.rotation.empty())
-            {
-                glm::dquat q = glm::make_quat(gltfNode.rotation.data());
-                transformation *= glm::mat4(static_cast<glm::quat>(q));
-            }
-
-            if (!gltfNode.scale.empty())
-            {
-                glm::dvec3 scale = glm::make_vec3(gltfNode.scale.data());
-                transformation = glm::scale(transformation, static_cast<glm::vec3>(scale));
-            }
-        }
-
-        return transformation;
-    }
-
+    // todo: test meshes that don't have materials
     Mesh createMesh(const VulkanRenderDevice* renderDevice, const MeshData &meshData)
     {
         Mesh mesh {
@@ -185,214 +156,95 @@ namespace ModelImporter
         return mesh;
     }
 
-    std::future<MeshData> createMeshData(const tinygltf::Model& model, const tinygltf::Mesh& gltfMesh)
+    std::future<MeshData> loadMeshData(const aiMesh& assimpMesh)
     {
-        debugLog("Loading mesh: " + gltfMesh.name);
+        debugLog(std::format("Loading mesh: {}", assimpMesh.mName.C_Str()));
 
-        return std::async(std::launch::async, [&model, &gltfMesh] () {
+        return std::async(std::launch::async, [&assimpMesh] () {
 
             MeshData meshData {
-                .name = gltfMesh.name,
-                .vertices = loadMeshVertices(model, gltfMesh),
-                .indices = loadMeshIndices(model, gltfMesh),
-                .materialIndex = gltfMesh.primitives.at(0).material
+                .name = assimpMesh.mName.C_Str(),
+                .vertices = loadMeshVertices(assimpMesh),
+                .indices = loadMeshIndices(assimpMesh),
+                .materialIndex = assimpMesh.
             };
 
             return meshData;
         });
     }
 
-    std::vector<Vertex> loadMeshVertices(const tinygltf::Model& model, const tinygltf::Mesh& mesh)
+    std::vector<Vertex> loadMeshVertices(const aiMesh& assimpMesh)
     {
-        std::vector<Vertex> vertices;
-
-        const tinygltf::Primitive& primitive = mesh.primitives.at(0);
-
-        size_t vertexCount = getVertexCount(model, primitive);
-        vertices.reserve(vertexCount);
-
-        const float* positionBuffer = getBufferVertexData(model, primitive, "POSITION");
-        const float* texCoordsBuffer = getBufferVertexData(model, primitive, "TEXCOORD_0");
-        const float* normalsBuffer = getBufferVertexData(model, primitive, "NORMAL");
-        const float* tangentBuffer = getBufferVertexData(model, primitive, "TANGENT");
-
-        for (size_t i = 0; i < vertexCount; ++i)
+        std::vector<Vertex> vertices(assimpMesh.mNumVertices);
+        
+        for (size_t i = 0; i < assimpMesh.mNumVertices; ++i)
         {
-            Vertex vertex{};
-
-            if (positionBuffer)
+            if (assimpMesh.HasPositions())
             {
-                vertex.position = glm::make_vec3(&positionBuffer[i * 3]);
+                vertices.at(i).position = *reinterpret_cast<glm::vec3*>(&assimpMesh.mVertices[i]);
             }
 
-            if (texCoordsBuffer)
+            if (assimpMesh.HasNormals())
             {
-                vertex.texCoords = glm::make_vec2(&texCoordsBuffer[i * 2]);
+                vertices.at(i).normal = *reinterpret_cast<glm::vec3*>(&assimpMesh.mNormals[i]);
             }
 
-            if (normalsBuffer)
+            if (assimpMesh.HasTangentsAndBitangents())
             {
-                vertex.normal = glm::normalize(glm::make_vec3(&normalsBuffer[i * 3]));
+                vertices.at(i).tangent = *reinterpret_cast<glm::vec3*>(&assimpMesh.mTangents[i]);
+                vertices.at(i).bitangent = *reinterpret_cast<glm::vec3*>(&assimpMesh.mBitangents[i]);
             }
 
-            if (tangentBuffer)
+            if (assimpMesh.HasTextureCoords(0))
             {
-                vertex.tangent = glm::normalize(glm::make_vec3(&tangentBuffer[i * 3]));
-                vertex.bitangent = glm::normalize(glm::cross(vertex.tangent, vertex.normal));
+                vertices.at(i).texCoords = *reinterpret_cast<glm::vec2*>(&assimpMesh.mTextureCoords[0][i]);
             }
-
-            vertices.push_back(vertex);
         }
 
         return vertices;
     }
 
-    const float* getBufferVertexData(const tinygltf::Model& model, const tinygltf::Primitive& primitive, const std::string& attribute)
-    {
-        const float* data = nullptr;
-
-        if (primitive.attributes.contains(attribute))
-        {
-            const tinygltf::Accessor& accessor = model.accessors.at(primitive.attributes.at(attribute));
-            const tinygltf::BufferView& bufferView = model.bufferViews.at(accessor.bufferView);
-            const tinygltf::Buffer& buffer = model.buffers.at(bufferView.buffer);
-            data = reinterpret_cast<const float*>(&buffer.data.at(bufferView.byteOffset + accessor.byteOffset));
-        }
-
-        return data;
-    }
-
-    uint32_t getVertexCount(const tinygltf::Model& model, const tinygltf::Primitive& primitive)
-    {
-        if (primitive.attributes.contains("POSITION"))
-            return model.accessors.at(primitive.attributes.at("POSITION")).count;
-        return 0;
-    }
-
-    std::vector<uint32_t> loadMeshIndices(const tinygltf::Model& model, const tinygltf::Mesh& mesh)
+    std::vector<uint32_t> loadMeshIndices(const aiMesh& assimpMesh)
     {
         std::vector<uint32_t> indices;
 
-        const tinygltf::Primitive& primitive = mesh.primitives.at(0);
+        if (assimpMesh.HasFaces())
+        {
+            indices.reserve(assimpMesh.mNumFaces * 3);
 
-        if (primitive.indices == -1)
-            return indices;
+            for (uint32_t i = 0; i < assimpMesh.mNumFaces; ++i)
+            {
+                const aiFace& face = assimpMesh.mFaces[i];
 
-        indices.reserve(model.accessors.at(primitive.indices).count);
-
-        const tinygltf::Accessor& accessor = model.accessors.at(primitive.indices);
-        const tinygltf::BufferView& bufferView = model.bufferViews.at(accessor.bufferView);
-        const tinygltf::Buffer& buffer = model.buffers.at(bufferView.buffer);
-        const uint8_t* data = &buffer.data.at(bufferView.byteOffset + accessor.byteOffset);
-
-        for (size_t i = 0; i < accessor.count; ++i)
-            indices.push_back(static_cast<uint32_t>(data[i]));
+                indices.push_back(face.mIndices[0]);
+                indices.push_back(face.mIndices[1]);
+                indices.push_back(face.mIndices[2]);
+            }
+        }
 
         return indices;
     }
 
-    MaterialData loadMaterials(const tinygltf::Model& gltfModel)
+    std::future<std::shared_ptr<ImageData>> loadImageData(const std::filesystem::path& directory, const std::string& filename)
     {
-        MaterialData materialData;
+        std::filesystem::path imagePath = directory / filename;
 
-        for (const tinygltf::Material& gltfMaterial : gltfModel.materials)
-        {
-            Material material {
-                .baseColorTexIndex = gltfMaterial.pbrMetallicRoughness.baseColorTexture.index,
-                .metallicRoughnessTexIndex = gltfMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index,
-                .normalTexIndex = gltfMaterial.normalTexture.index,
-                .aoTexIndex = gltfMaterial.occlusionTexture.index,
-                .emissionTexIndex = gltfMaterial.emissiveTexture.index,
-                .metallicFactor = static_cast<float>(gltfMaterial.pbrMetallicRoughness.metallicFactor),
-                .roughnessFactor = static_cast<float>(gltfMaterial.pbrMetallicRoughness.roughnessFactor),
-                .occlusionFactor = static_cast<float>(gltfMaterial.occlusionTexture.strength),
-                .baseColorFactor = glm::make_vec4(gltfMaterial.pbrMetallicRoughness.baseColorFactor.data()),
-                .emissionFactor = glm::vec4(glm::make_vec3(gltfMaterial.emissiveFactor.data()), 0.f),
-                .tiling = glm::vec2(1.f),
-                .offset = glm::vec2(0.f)
-            };
+        debugLog("Loading texture: " + imagePath.string());
 
-            materialData.materials.push_back(material);
-            materialData.materialNames.push_back(gltfMaterial.name);
-        }
-
-        return materialData;
-    }
-
-    // todo: handle load fail
-    std::future<std::shared_ptr<ImageData>> loadImageData(const tinygltf::Model& gltfModel, const tinygltf::Texture& texture, const std::filesystem::path& directory)
-    {
-        const tinygltf::Image& image = gltfModel.images.at(texture.source);
-
-        std::filesystem::path imagePath = directory / image.uri;
-
-        debugLog("Loading image: " + imagePath.string());
-
-        return std::async(std::launch::async, [&gltfModel, &texture, imagePath] () {
+        return std::async(std::launch::async, [imagePath] {
             std::shared_ptr<ImageData> imageData = std::make_shared<ImageData>();
 
-            if (texture.sampler != -1)
-            {
-                const tinygltf::Sampler& sampler = gltfModel.samplers.at(texture.sampler);
-
-                imageData->magFilter = getMagFilter(sampler.magFilter);
-                imageData->minFilter = getMipFilter(sampler.minFilter);
-                imageData->wrapModeS = getWrapMode(sampler.wrapS);
-                imageData->wrapModeT = getWrapMode(sampler.wrapT);
-            }
-            else
-            {
-                imageData->magFilter = getMagFilter(-1);
-                imageData->minFilter = getMipFilter(-1);
-                imageData->wrapModeS = getWrapMode(-1);
-                imageData->wrapModeT = getWrapMode(-1);
-            }
-
             imageData->loadedImage = LoadedImage(imagePath);
+            imageData->magFilter = TextureMagFilter::Linear;
+            imageData->minFilter = TextureMinFilter::Linear;
+            imageData->wrapModeS = TextureWrap::Repeat;
+            imageData->wrapModeT = TextureWrap::Repeat;
 
             return imageData;
         });
     }
 
-    TextureWrap getWrapMode(int wrapMode)
-    {
-        switch (wrapMode)
-        {
-            case TINYGLTF_TEXTURE_WRAP_REPEAT: return TextureWrap::Repeat;
-            case TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE: return TextureWrap::ClampToEdge;
-            case TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT: return TextureWrap::MirroredRepeat;
-        }
-
-        return TextureWrap::Repeat;
-    }
-
-    TextureMagFilter getMagFilter(int filterMode)
-    {
-        switch (filterMode)
-        {
-            case TINYGLTF_TEXTURE_FILTER_NEAREST: return TextureMagFilter::Nearest;
-            case TINYGLTF_TEXTURE_FILTER_LINEAR: return TextureMagFilter::Linear;
-        }
-
-        return TextureMagFilter::Linear;
-    }
-
-    TextureMinFilter getMipFilter(int filterMode)
-    {
-        switch (filterMode)
-        {
-            case TINYGLTF_TEXTURE_FILTER_NEAREST: return TextureMinFilter::Nearest;
-            case TINYGLTF_TEXTURE_FILTER_LINEAR: return TextureMinFilter::Linear;
-            case TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST: return TextureMinFilter::NearestMipmapNearest;
-            case TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_NEAREST: return TextureMinFilter::LinearMipmapNearest;
-            case TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR: return TextureMinFilter::NearestMipmapLinear;
-            case TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR: return TextureMinFilter::LinearMipmapLinear;
-        }
-
-        return TextureMinFilter::Linear;
-    }
-
-    Texture createTexture(const VulkanRenderDevice* renderDevice, const std::shared_ptr<ImageData> imageData)
+    Texture createTexture(const VulkanRenderDevice* renderDevice, std::shared_ptr<ImageData> imageData)
     {
         const LoadedImage& loadedImage = imageData->loadedImage;
 
@@ -423,16 +275,21 @@ namespace ModelImporter
         VkCommandBuffer commandBuffer = beginSingleTimeCommands(*renderDevice);
 
         vkTexture.transitionLayout(commandBuffer,
-                                   VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                   0, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                   VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                   VK_PIPELINE_STAGE_TRANSFER_BIT,
                                    0, VK_ACCESS_TRANSFER_WRITE_BIT);
 
-        vkTexture.generateMipMaps(commandBuffer); // converts mip levels from src transfer to dst transfer then back to src transfer
+        vkTexture.generateMipMaps(commandBuffer);
 
         vkTexture.transitionLayout(commandBuffer,
-                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                   VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                   VK_ACCESS_TRANSFER_WRITE_BIT,
+                                   VK_ACCESS_SHADER_READ_BIT);
 
         endSingleTimeCommands(*renderDevice, commandBuffer);
 
@@ -441,5 +298,153 @@ namespace ModelImporter
         texture.vulkanTexture = std::move(vkTexture);
 
         return texture;
+    }
+
+    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::string, int32_t>& texNames)
+    {
+        MaterialData materialData;
+
+        for (uint32_t i = 0; i < assimpScene.mNumMaterials; ++i)
+        {
+            const aiMaterial& assimpMaterial = *assimpScene.mMaterials[i];
+
+            materialData.materials.push_back(loadMaterial(assimpMaterial, texNames));
+            materialData.materialNames.emplace_back(assimpMaterial.GetName().C_Str());
+        }
+
+        return materialData;
+    }
+
+    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::string, int32_t>& texNames)
+    {
+        auto getTexIndex = [&assimpMaterial, &texNames] (aiTextureType type) {
+            if (auto texName = getTextureName(assimpMaterial, type))
+                return texNames.at(*texName);
+            return -1;
+        };
+
+        Material material {
+            .baseColorTexIndex = getTexIndex(aiTextureType_BASE_COLOR),
+            .metallicTexIndex = getTexIndex(aiTextureType_METALNESS),
+            .roughnessTexIndex = getTexIndex(aiTextureType_DIFFUSE_ROUGHNESS),
+            .normalTexIndex = getTexIndex(aiTextureType_NORMAL_CAMERA),
+            .aoTexIndex = getTexIndex(aiTextureType_AMBIENT_OCCLUSION),
+            .emissionTexIndex = getTexIndex(aiTextureType_EMISSIVE),
+            .metallicFactor = getMetallicFactor(assimpMaterial),
+            .roughnessFactor = getRoughnessFactor(assimpMaterial),
+            .baseColorFactor = getBaseColorFactor(assimpMaterial),
+            .emissionFactor = getEmissionFactor(assimpMaterial),
+            .tiling = glm::vec4(1.f),
+            .offset = glm::vec3(0.f)
+        };
+
+        return material;
+    }
+
+    glm::vec4 getBaseColorFactor(const aiMaterial& assimpMaterial)
+    {
+        static constexpr glm::vec4 defaultBaseColorFactor(1.f, 1.f, 1.f, 1.f);
+
+        aiColor4D aiBaseColor;
+
+        if (assimpMaterial.Get(AI_MATKEY_BASE_COLOR, aiBaseColor) == aiReturn_SUCCESS)
+            return *reinterpret_cast<glm::vec4*>(&aiBaseColor);
+
+        return defaultBaseColorFactor;
+    }
+
+    glm::vec4 getEmissionFactor(const aiMaterial& assimpMaterial)
+    {
+        static constexpr glm::vec4 defaultEmissionFactor(0.f, 0.f, 0.f, 0.f);
+
+        aiColor3D aiEmissionColor;
+
+        if (assimpMaterial.Get(AI_MATKEY_COLOR_EMISSIVE, aiEmissionColor) == aiReturn_SUCCESS)
+        {
+            return {
+                aiEmissionColor.r,
+                aiEmissionColor.g,
+                aiEmissionColor.b,
+                0.f
+            };
+        }
+
+        return defaultEmissionFactor;
+    }
+
+    float getMetallicFactor(const aiMaterial& assimpMaterial)
+    {
+        static constexpr float defaultMetallicFactor = 1.f;
+
+        ai_real metallicFactor;
+
+        if (assimpMaterial.Get(AI_MATKEY_METALLIC_FACTOR, metallicFactor) == aiReturn_SUCCESS)
+            return metallicFactor;
+
+        return defaultMetallicFactor;
+    }
+
+    float getRoughnessFactor(const aiMaterial& assimpMaterial)
+    {
+        static constexpr float defaultRoughnessFactor = 1.f;
+
+        ai_real roughnessFactor;
+
+        if (assimpMaterial.Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessFactor) == aiReturn_SUCCESS)
+            return roughnessFactor;
+
+        return defaultRoughnessFactor;
+    }
+
+    // todo: texture name might be key to embedded texture data
+    std::unordered_map<std::string, int32_t> getTextureNames(const aiScene& assimpScene)
+    {
+        std::unordered_map<std::string, int32_t> texNames;
+
+        int32_t index = 0;
+
+        auto addTexture = [&texNames, &index] (const std::optional<std::string>& texName) {
+            if (texNames.contains(*texName))
+            {
+                texNames.emplace(*texName, index);
+                ++index;
+            }
+        };
+
+        for (uint32_t i = 0; i < assimpScene.mNumMaterials; ++i)
+        {
+            const aiMaterial& material = *assimpScene.mMaterials[i];
+
+            addTexture(getTextureName(material, aiTextureType_BASE_COLOR));
+            addTexture(getTextureName(material, aiTextureType_NORMAL_CAMERA));
+            addTexture(getTextureName(material, aiTextureType_EMISSION_COLOR));
+            addTexture(getTextureName(material, aiTextureType_METALNESS));
+            addTexture(getTextureName(material, aiTextureType_DIFFUSE_ROUGHNESS));
+            addTexture(getTextureName(material, aiTextureType_AMBIENT_OCCLUSION));
+        }
+
+        return texNames;
+    }
+
+    std::optional<std::string> getTextureName(const aiMaterial& material, aiTextureType type)
+    {
+        if (material.GetTextureCount(type))
+        {
+            aiString filename;
+            material.GetTexture(type, 0, &filename);
+            return filename.C_Str();
+        }
+
+        return std::nullopt;
+    }
+
+    glm::mat4 assimpToGlmMat4(const aiMatrix4x4 &mat)
+    {
+        return {
+            mat.a1, mat.b1, mat.c1, mat.d1,
+            mat.a2, mat.b2, mat.c2, mat.d2,
+            mat.a3, mat.b3, mat.c3, mat.d3,
+            mat.a4, mat.b4, mat.c4, mat.d4
+        };
     }
 }

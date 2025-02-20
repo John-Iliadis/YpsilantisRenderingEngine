@@ -82,7 +82,7 @@ VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const Textu
     : VulkanTexture(renderDevice, specification)
 {
     transitionLayout(VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                     0, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                     VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                      0, VK_ACCESS_TRANSFER_WRITE_BIT);
     uploadImageData(data);
 }

@@ -17,6 +17,7 @@ VulkanDsLayout::VulkanDsLayout(const VulkanRenderDevice &renderDevice, const DsL
 {
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = specification.pNext,
         .flags = specification.flags,
         .bindingCount = static_cast<uint32_t>(specification.bindings.size()),
         .pBindings = specification.bindings.data()

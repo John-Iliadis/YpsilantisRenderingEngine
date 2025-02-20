@@ -115,7 +115,7 @@ void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
         .dstSet = mMaterialsDS,
         .dstBinding = 1,
         .dstArrayElement = 0,
-        .descriptorCount = static_cast<uint32_t >(imageInfos.size()),
+        .descriptorCount = static_cast<uint32_t>(imageInfos.size()),
         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         .pImageInfo = imageInfos.data()
     };

@@ -12,6 +12,7 @@
 struct DsLayoutSpecification
 {
     VkDescriptorSetLayoutCreateFlagBits flags;
+    const void* pNext;
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     std::optional<std::string> debugName;
 };

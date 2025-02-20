@@ -12,19 +12,18 @@
 #include "../vk/vulkan_descriptor.hpp"
 #include "instanced_mesh.hpp"
 
-constexpr uint32_t PerModelMaxMaterialCount = 16;
-constexpr uint32_t PerModelMaxTextureCount = 63;
+constexpr uint32_t PerModelMaxTextureCount = 512;
 
 struct Material
 {
     alignas(4) int32_t baseColorTexIndex;
-    alignas(4) int32_t metallicRoughnessTexIndex;
+    alignas(4) int32_t metallicTexIndex;
+    alignas(4) int32_t roughnessTexIndex;
     alignas(4) int32_t normalTexIndex;
     alignas(4) int32_t aoTexIndex;
     alignas(4) int32_t emissionTexIndex;
     alignas(4) float metallicFactor;
     alignas(4) float roughnessFactor;
-    alignas(4) float occlusionFactor;
     alignas(16) glm::vec4 baseColorFactor;
     alignas(16) glm::vec4 emissionFactor;
     alignas(8) glm::vec2 tiling;
@@ -35,7 +34,7 @@ struct SceneNode
 {
     std::string name;
     glm::mat4 transformation;
-    int32_t meshIndex;
+    std::vector<uint32_t> meshIndices;
     std::vector<SceneNode> children;
 };
 
@@ -61,7 +60,7 @@ public:
     std::string name;
     std::filesystem::path path;
 
-    std::vector<SceneNode> scenes;
+    SceneNode root;
     std::vector<Texture> textures;
     std::vector<Material> materials;
     std::vector<std::string> materialNames;

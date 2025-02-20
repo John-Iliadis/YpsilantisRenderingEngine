@@ -1,13 +1,13 @@
 struct Material
 {
     int baseColorTexIndex;
-    int metallicRoughnessTexIndex;
+    int metallicTexIndex;
+    int roughnessTexIndex;
     int normalTexIndex;
     int aoTexIndex;
     int emissionTexIndex;
     float metallicFactor;
     float roughnessFactor;
-    float occlusionFactor;
     vec4 baseColorFactor;
     vec4 emissionFactor;
     vec2 tiling;

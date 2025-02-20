@@ -5,7 +5,11 @@
 #ifndef VULKANRENDERINGENGINE_MODEL_IMPORTER_HPP
 #define VULKANRENDERINGENGINE_MODEL_IMPORTER_HPP
 
-#include <tiny_gltf/tiny_gltf.h>
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+#include <assimp/material.h>
+#include <assimp/texture.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
  #include "../utils/loaded_image.hpp"
@@ -42,35 +46,33 @@ namespace ModelImporter
 {
     std::future<std::shared_ptr<Model>> loadModel(const std::filesystem::path& path, const VulkanRenderDevice* renderDevice, EnqueueCallback callback);
 
-    std::shared_ptr<tinygltf::Model> loadGltfScene(const std::filesystem::path& path);
+    std::shared_ptr<aiScene> loadScene(const std::filesystem::path& path);
 
-    std::vector<SceneNode> loadScenes(const tinygltf::Model& gltfModel);
-    SceneNode createRootSceneNode(const tinygltf::Model& gltfModel, const tinygltf::Scene& gltfScene);
-    SceneNode createRootSceneNode(const tinygltf::Model& gltfModel, const tinygltf::Node& gltfNode);
-
-    glm::mat4 getNodeTransformation(const tinygltf::Node& gltfNode);
+    SceneNode createRootSceneNode(const aiNode& assimpNode);
 
     Mesh createMesh(const VulkanRenderDevice* renderDevice, const MeshData& meshData);
 
-    std::future<MeshData> createMeshData(const tinygltf::Model& model, const tinygltf::Mesh& gltfMesh);
+    std::future<MeshData> loadMeshData(const aiMesh& assimpMesh);
 
-    std::vector<Vertex> loadMeshVertices(const tinygltf::Model& model, const tinygltf::Mesh& mesh);
+    std::vector<Vertex> loadMeshVertices(const aiMesh& assimpMesh);
 
-    const float* getBufferVertexData(const tinygltf::Model& model, const tinygltf::Primitive& primitive, const std::string& attribute);
+    std::vector<uint32_t> loadMeshIndices(const aiMesh& assimpMesh);
 
-    uint32_t getVertexCount(const tinygltf::Model& model, const tinygltf::Primitive& primitive);
+    std::future<std::shared_ptr<ImageData>> loadImageData(const std::filesystem::path& directory, const std::string& filename);
 
-    std::vector<uint32_t> loadMeshIndices(const tinygltf::Model& model, const tinygltf::Mesh& mesh);
+    Texture createTexture(const VulkanRenderDevice* renderDevice, std::shared_ptr<ImageData> imageData);
 
-    MaterialData loadMaterials(const tinygltf::Model& gltfModel);
+    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::string, int32_t>& texNames);
+    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::string, int32_t>& texNames);
+    glm::vec4 getBaseColorFactor(const aiMaterial& assimpMaterial);
+    glm::vec4 getEmissionFactor(const aiMaterial& assimpMaterial);
+    float getMetallicFactor(const aiMaterial& assimpMaterial);
+    float getRoughnessFactor(const aiMaterial& assimpMaterial);
 
-    std::future<std::shared_ptr<ImageData>> loadImageData(const tinygltf::Model& gltfModel, const tinygltf::Texture& texture, const std::filesystem::path& directory);
+    std::unordered_map<std::string, int32_t> getTextureNames(const aiScene& assimpScene);
+    std::optional<std::string> getTextureName(const aiMaterial& material, aiTextureType type);
 
-    TextureWrap getWrapMode(int wrapMode);
-    TextureMagFilter getMagFilter(int filterMode);
-    TextureMinFilter getMipFilter(int filterMode);
-
-    Texture createTexture(const VulkanRenderDevice* renderDevice, const std::shared_ptr<ImageData> imageData);
+    glm::mat4 assimpToGlmMat4(const aiMatrix4x4 &mat);
 }
 
 #endif //VULKANRENDERINGENGINE_MODEL_IMPORTER_HPP

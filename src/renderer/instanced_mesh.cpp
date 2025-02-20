@@ -42,6 +42,7 @@ void InstancedMesh::addInstance(uuid32_t id)
     mInstanceBuffer.update(instanceIndex * sInstanceSize, sInstanceSize, &placeholderData);
 }
 
+// todo: fix out of range exception
 void InstancedMesh::updateInstance(uuid32_t id, const glm::mat4& transformation)
 {
     uint32_t instanceIndex = mInstanceIdToIndexMap.at(id);
