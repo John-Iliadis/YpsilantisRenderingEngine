@@ -104,8 +104,10 @@ void VulkanTexture::uploadImageData(const void *data, uint32_t layerIndex)
     copyBuffer(stagingBuffer, layerIndex);
 }
 
-void VulkanTexture::generateMipMaps(VkCommandBuffer commandBuffer)
+void VulkanTexture::generateMipMaps()
 {
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
+
     int32_t mipWidth = width;
     int32_t mipHeight = height;
 
@@ -180,6 +182,8 @@ void VulkanTexture::generateMipMaps(VkCommandBuffer commandBuffer)
                              0, 0, nullptr, 0, nullptr,
                              1, &imageMemoryBarrier);
     }
+
+    endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 
 void VulkanTexture::setDebugName(const std::string &debugName)

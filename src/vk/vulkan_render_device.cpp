@@ -91,6 +91,7 @@ void VulkanRenderDevice::createLogicalDevice()
         .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
         .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
         .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
+        .descriptorBindingPartiallyBound = VK_TRUE,
         .descriptorBindingVariableDescriptorCount = VK_TRUE,
         .runtimeDescriptorArray = VK_TRUE
     };

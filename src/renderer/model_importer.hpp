@@ -12,8 +12,9 @@
 #include <assimp/texture.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
- #include "../utils/loaded_image.hpp"
+#include "../utils/loaded_image.hpp"
 #include "../utils/utils.hpp"
+#include "../utils/timer.hpp"
 #include "vertex.hpp"
 #include "model.hpp"
 
@@ -58,18 +59,18 @@ namespace ModelImporter
 
     std::vector<uint32_t> loadMeshIndices(const aiMesh& assimpMesh);
 
-    std::future<std::shared_ptr<ImageData>> loadImageData(const std::filesystem::path& directory, const std::string& filename);
+    std::future<std::shared_ptr<ImageData>> loadImageData(const std::filesystem::path& path);
 
     Texture createTexture(const VulkanRenderDevice* renderDevice, std::shared_ptr<ImageData> imageData);
 
-    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::string, int32_t>& texNames);
-    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::string, int32_t>& texNames);
+    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::filesystem::path, int32_t>& texIndices, const std::filesystem::path& dir);
+    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::filesystem::path, int32_t>& texIndices, const std::filesystem::path& dir);
     glm::vec4 getBaseColorFactor(const aiMaterial& assimpMaterial);
     glm::vec4 getEmissionFactor(const aiMaterial& assimpMaterial);
     float getMetallicFactor(const aiMaterial& assimpMaterial);
     float getRoughnessFactor(const aiMaterial& assimpMaterial);
 
-    std::unordered_map<std::string, int32_t> getTextureNames(const aiScene& assimpScene);
+    std::unordered_set<std::string> getTextureNames(const aiScene& assimpScene);
     std::optional<std::string> getTextureName(const aiMaterial& material, aiTextureType type);
 
     glm::mat4 assimpToGlmMat4(const aiMatrix4x4 &mat);

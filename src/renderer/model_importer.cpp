@@ -4,14 +4,15 @@
 
 #include "model_importer.hpp"
 
+// todo: handle texture loading fails
 // todo: handle embedded image data
 // todo: error handling
-// todo: handle texture loading fails
 // todo: load lights
 // todo: check if a mesh has materials
 // todo: check if mesh has indices
 // todo: support specular glossiness
 // todo: load sampler data
+// todo: handle color vertices. Including alpha channel.
 
 static constexpr uint32_t sImportFlags
 {
@@ -68,34 +69,42 @@ namespace ModelImporter
                 });
             }
 
-            // load materials
-            auto texNames = getTextureNames(*assimpScene);
-
-            MaterialData materialData = loadMaterials(*assimpScene, texNames);
-
-            model->materials = std::move(materialData.materials);
-            model->materialNames = std::move(materialData.materialNames);
-            model->textures.resize(texNames.size());
-
             // load texture data
-            std::filesystem::path directory = path.parent_path();
+            std::unordered_set<std::string> texNames = getTextureNames(*assimpScene);
+            std::filesystem::path dir = path.parent_path();
             std::vector<std::future<std::shared_ptr<ImageData>>> loadedImageFutures;
-            for (const auto [texFilename, texIndex] : texNames)
+
+            for (const auto& texFilename : texNames)
             {
-                loadedImageFutures.push_back(loadImageData(directory, texFilename));
+                loadedImageFutures.push_back(loadImageData(dir / texFilename));
             }
 
             // upload texture data to vulkan
-            for (auto& loadedImageFuture : loadedImageFutures)
+            std::unordered_map<std::filesystem::path, int32_t> texIndices;
+            for (uint32_t i = 0, insertIndex = 0; i < loadedImageFutures.size(); ++i)
             {
-                auto loadedImage = loadedImageFuture.get();
+                auto loadedImageData = loadedImageFutures.at(i).get();
 
-                int32_t textureIndex = texNames.at(loadedImage->loadedImage.path().filename().string());
+                std::filesystem::path texPath = loadedImageData->loadedImage.path();
 
-                callback([renderDevice, model, textureIndex, loadedImage] () {
-                    model->textures.at(textureIndex) = createTexture(renderDevice, loadedImage);
-                });
+                if (loadedImageData->loadedImage.success())
+                {
+                    callback([renderDevice, model, loadedImageData] () {
+                        model->textures.push_back(createTexture(renderDevice, loadedImageData));
+                    });
+
+                    texIndices.emplace(texPath, insertIndex++);
+                    continue;
+                }
+
+                texIndices.emplace(texPath, -1);
             }
+
+            // load materials
+            MaterialData materialData = loadMaterials(*assimpScene, texIndices, dir);
+
+            model->materials = std::move(materialData.materials);
+            model->materialNames = std::move(materialData.materialNames);
 
             return model;
         });
@@ -227,16 +236,14 @@ namespace ModelImporter
         return indices;
     }
 
-    std::future<std::shared_ptr<ImageData>> loadImageData(const std::filesystem::path& directory, const std::string& filename)
+    std::future<std::shared_ptr<ImageData>> loadImageData(const std::filesystem::path& path)
     {
-        std::filesystem::path imagePath = directory / filename;
+        debugLog("Loading texture: " + path.string());
 
-        debugLog("Loading texture: " + imagePath.string());
-
-        return std::async(std::launch::async, [imagePath] {
+        return std::async(std::launch::async, [path] {
             std::shared_ptr<ImageData> imageData = std::make_shared<ImageData>();
 
-            imageData->loadedImage = LoadedImage(imagePath);
+            imageData->loadedImage = LoadedImage(path);
             imageData->magFilter = TextureMagFilter::Linear;
             imageData->minFilter = TextureMinFilter::Linear;
             imageData->wrapModeS = TextureWrap::Repeat;
@@ -274,26 +281,20 @@ namespace ModelImporter
 
         VulkanTexture vkTexture(*renderDevice, textureSpecification, imageData->loadedImage.data());
 
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(*renderDevice);
-
-        vkTexture.transitionLayout(commandBuffer,
-                                   VK_IMAGE_LAYOUT_UNDEFINED,
+        vkTexture.transitionLayout(VK_IMAGE_LAYOUT_UNDEFINED,
                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
                                    0, VK_ACCESS_TRANSFER_WRITE_BIT);
 
-        vkTexture.generateMipMaps(commandBuffer);
+        vkTexture.generateMipMaps();
 
-        vkTexture.transitionLayout(commandBuffer,
-                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        vkTexture.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
                                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                                    VK_ACCESS_TRANSFER_WRITE_BIT,
                                    VK_ACCESS_SHADER_READ_BIT);
-
-        endSingleTimeCommands(*renderDevice, commandBuffer);
 
         vkTexture.setDebugName(texture.name);
 
@@ -302,7 +303,7 @@ namespace ModelImporter
         return texture;
     }
 
-    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::string, int32_t>& texNames)
+    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::filesystem::path, int32_t>& texIndices, const std::filesystem::path& dir)
     {
         MaterialData materialData;
 
@@ -310,18 +311,18 @@ namespace ModelImporter
         {
             const aiMaterial& assimpMaterial = *assimpScene.mMaterials[i];
 
-            materialData.materials.push_back(loadMaterial(assimpMaterial, texNames));
+            materialData.materials.push_back(loadMaterial(assimpMaterial, texIndices, dir));
             materialData.materialNames.emplace_back(assimpMaterial.GetName().C_Str());
         }
 
         return materialData;
     }
 
-    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::string, int32_t>& texNames)
+    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::filesystem::path, int32_t>& texIndices, const std::filesystem::path& dir)
     {
-        auto getTexIndex = [&assimpMaterial, &texNames] (aiTextureType type) {
+        auto getTexIndex = [&assimpMaterial, &texIndices, &dir] (aiTextureType type) {
             if (auto texName = getTextureName(assimpMaterial, type))
-                return texNames.at(*texName);
+                return texIndices.at(dir / *texName);
             return -1;
         };
 
@@ -399,18 +400,13 @@ namespace ModelImporter
     }
 
     // todo: texture name might be key to embedded texture data
-    std::unordered_map<std::string, int32_t> getTextureNames(const aiScene& assimpScene)
+    std::unordered_set<std::string> getTextureNames(const aiScene& assimpScene)
     {
-        std::unordered_map<std::string, int32_t> texNames;
+        std::unordered_set<std::string> texNames;
 
-        int32_t index = 0;
-
-        auto addTexture = [&texNames, &index] (const std::optional<std::string>& texName) {
+        auto addTexture = [&texNames] (const std::optional<std::string>& texName) {
             if (texName.has_value() && !texNames.contains(*texName))
-            {
-                texNames.emplace(*texName, index);
-                ++index;
-            }
+                texNames.insert(*texName);
         };
 
         for (uint32_t i = 0; i < assimpScene.mNumMaterials; ++i)

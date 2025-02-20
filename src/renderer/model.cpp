@@ -86,46 +86,49 @@ void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
     VkResult result = vkAllocateDescriptorSets(mRenderDevice->device, &descriptorSetAllocateInfo, &mMaterialsDS);
     vulkanCheck(result, "Failed to create mMaterialsDS.");
 
-    VkDescriptorBufferInfo materialBufferInfo {
-        .buffer = mMaterialsSSBO.getBuffer(),
-        .offset = 0,
-        .range = VK_WHOLE_SIZE
-    };
-
-    std::vector<VkDescriptorImageInfo> imageInfos(textures.size());
-    for (uint32_t i = 0; i < imageInfos.size(); ++i)
+    if (!materials.empty())
     {
-        imageInfos.at(i).sampler = textures.at(i).vulkanTexture.vulkanSampler.sampler;
-        imageInfos.at(i).imageView = textures.at(i).vulkanTexture.imageView;
-        imageInfos.at(i).imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkDescriptorBufferInfo materialBufferInfo {
+            .buffer = mMaterialsSSBO.getBuffer(),
+            .offset = 0,
+            .range = VK_WHOLE_SIZE
+        };
+
+        VkWriteDescriptorSet materialsDsWrite {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mMaterialsDS,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pBufferInfo = &materialBufferInfo
+        };
+
+        vkUpdateDescriptorSets(mRenderDevice->device, 1, &materialsDsWrite, 0, nullptr);
     }
 
-    VkWriteDescriptorSet materialsDsWrite {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mMaterialsDS,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .pBufferInfo = &materialBufferInfo
-    };
+    if (!textures.empty())
+    {
+        std::vector<VkDescriptorImageInfo> imageInfos(textures.size());
+        for (uint32_t i = 0; i < imageInfos.size(); ++i)
+        {
+            imageInfos.at(i).sampler = textures.at(i).vulkanTexture.vulkanSampler.sampler;
+            imageInfos.at(i).imageView = textures.at(i).vulkanTexture.imageView;
+            imageInfos.at(i).imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
 
-    VkWriteDescriptorSet imagesDsWrite {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mMaterialsDS,
-        .dstBinding = 1,
-        .dstArrayElement = 0,
-        .descriptorCount = static_cast<uint32_t>(imageInfos.size()),
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = imageInfos.data()
-    };
+        VkWriteDescriptorSet imagesDsWrite {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mMaterialsDS,
+            .dstBinding = 1,
+            .dstArrayElement = 0,
+            .descriptorCount = static_cast<uint32_t>(imageInfos.size()),
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = imageInfos.data()
+        };
 
-    std::array<VkWriteDescriptorSet, 2> descriptorWrites {
-        materialsDsWrite,
-        imagesDsWrite
-    };
-
-    vkUpdateDescriptorSets(mRenderDevice->device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+        vkUpdateDescriptorSets(mRenderDevice->device, 1, &imagesDsWrite, 0, nullptr);
+    }
 }
 
 void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex) const

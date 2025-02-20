@@ -570,12 +570,10 @@ void Renderer::createCameraRenderDataDsLayout()
 
 void Renderer::createMaterialsDsLayout()
 {
-    // WHAT THE FUCK IS THE POINT OF THIS EXTENSION IF I STILL HAVE TO SPECIFY THE SIZE OF THE DESCRIPTOR ARRAY
-    // STUPID FUCKING API
-
     std::array<VkDescriptorBindingFlagsEXT, 2> descriptorBindingFlags {
-        0,
-        VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+        VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT |
+            VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
     };
 
     VkDescriptorSetLayoutBindingFlagsCreateInfoEXT dsLayoutBindingFlagsCI {
