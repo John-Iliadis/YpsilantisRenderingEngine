@@ -4,12 +4,7 @@
 
 #include "model_importer.hpp"
 
-// todo: load sampler data
-// todo: handle color vertices. Including alpha channel.
 // todo: support specular glossiness
-// todo: test gltf mesh that has more than 1 material
-// todo: check no indices mesh
-// todo: test embedded image
 
 static constexpr uint32_t sImportFlags
 {
@@ -29,8 +24,7 @@ static constexpr int sRemoveComponents
     aiComponent_BONEWEIGHTS |
     aiComponent_ANIMATIONS |
     aiComponent_LIGHTS |
-    aiComponent_CAMERAS |
-    aiComponent_COLORS
+    aiComponent_CAMERAS
 };
 
 static constexpr int sRemovePrimitives
@@ -233,6 +227,8 @@ VulkanBuffer ModelLoader::loadVertexData(const aiMesh &aiMesh)
         {
             vertices.at(i).texCoords = *reinterpret_cast<glm::vec2*>(&aiMesh.mTextureCoords[0][i]);
         }
+
+        vertices.at(i).color = aiMesh.HasVertexColors(0)? *reinterpret_cast<glm::vec4*>(&aiMesh.mColors[0][i]) : glm::vec4(1.f);
     }
 
     return {mRenderDevice, vertices.size() * sizeof(Vertex), BufferType::Staging, MemoryType::Host, vertices.data()};
@@ -297,7 +293,7 @@ std::optional<ImageData> ModelLoader::loadEmbeddedImageData(const std::string &t
     debugLog("Loading embedded image: " + texName);
 
     ImageData imageData {
-        .name = aiTexture.mFilename.length? "Embedded Texture" : aiTexture.mFilename.data,
+        .name = aiTexture.mFilename.length? aiTexture.mFilename.data : "Embedded Texture",
         .magFilter = TextureMagFilter::Linear,
         .minFilter = TextureMinFilter::Linear,
         .wrapModeS = TextureWrap::Repeat,
