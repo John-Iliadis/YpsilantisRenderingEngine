@@ -118,7 +118,11 @@ VulkanBuffer::VulkanBuffer(const VulkanRenderDevice &renderDevice,
         VkBuffer stagingBuffer = createBuffer(BufferType::Staging);
         VkDeviceMemory stagingBufferMemory = allocateBufferMemory(MemoryType::CPU, stagingBuffer);
         ::mapBufferMemory(mRenderDevice, stagingBufferMemory, 0, size, bufferData);
-        ::copyBuffer(mRenderDevice, stagingBuffer, mBuffer, 0, 0, size);
+
+        VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice);
+        ::copyBuffer(mRenderDevice, commandBuffer, stagingBuffer, mBuffer, 0, 0, size);
+        endSingleTimeCommands(renderDevice, commandBuffer);
+
         vkDestroyBuffer(mRenderDevice->device, stagingBuffer, nullptr);
         vkFreeMemory(mRenderDevice->device, stagingBufferMemory, nullptr);
     }

@@ -43,7 +43,7 @@ struct Mesh
     uuid32_t meshID;
     std::string name;
     InstancedMesh mesh;
-    int32_t materialIndex;
+    uint32_t materialIndex;
 };
 
 struct Texture
@@ -67,7 +67,7 @@ public:
     std::vector<Mesh> meshes;
 
 public:
-    Model(const VulkanRenderDevice* renderDevice);
+    Model(const VulkanRenderDevice& renderDevice);
     ~Model();
 
     void updateMaterial(index_t matIndex);
@@ -83,7 +83,7 @@ public:
     Mesh* getMesh(uuid32_t meshID);
 
 private:
-    const VulkanRenderDevice* mRenderDevice;
+    const VulkanRenderDevice& mRenderDevice;
     VkDescriptorSet mMaterialsDS;
     VulkanBuffer mMaterialsSSBO;
 };

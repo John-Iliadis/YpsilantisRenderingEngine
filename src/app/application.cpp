@@ -16,6 +16,7 @@ Application::Application()
     , mVulkanImGui(mWindow, mInstance, mRenderDevice, mSwapchain)
     , mRenderer(mRenderDevice, mSaveData)
     , mEditor(mRenderer, mSaveData)
+    , mModelImporter(mRenderDevice)
 {
 }
 
@@ -62,6 +63,7 @@ void Application::update(float dt)
 {
     mVulkanImGui.begin();
 
+    mModelImporter.update();
     mRenderer.processMainThreadTasks();
     mEditor.update(dt);
 

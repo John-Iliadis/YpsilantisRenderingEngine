@@ -41,46 +41,14 @@ static constexpr int sRemovePrimitives
 
 Texture createTexture(const VulkanRenderDevice* renderDevice, std::shared_ptr<ImageData> imageData)
     {
-        TextureSpecification textureSpecification {
-            .format = VK_FORMAT_R8G8B8A8_UNORM,
-            .width = static_cast<uint32_t>(imageData->width),
-            .height = static_cast<uint32_t>(imageData->height),
-            .layerCount = 1,
-            .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
-            .imageUsage =
-                VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                VK_IMAGE_USAGE_SAMPLED_BIT,
-            .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .magFilter = imageData->magFilter,
-            .minFilter = imageData->minFilter,
-            .wrapS = imageData->wrapModeS,
-            .wrapT = imageData->wrapModeT,
-            .wrapR = imageData->wrapModeT,
-            .generateMipMaps = true
-        };
+
 
         Texture texture {.name = imageData->name};
 
-        VulkanTexture vkTexture(*renderDevice, textureSpecification, imageData->data.get());
+//        VulkanTexture vkTexture(*renderDevice, textureSpecification, imageData->data.get());
+        VulkanTexture vkTexture;
 
-        vkTexture.transitionLayout(VK_IMAGE_LAYOUT_UNDEFINED,
-                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                   VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                   VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                   0, VK_ACCESS_TRANSFER_WRITE_BIT);
 
-        vkTexture.generateMipMaps();
-
-        vkTexture.transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                   VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                   VK_ACCESS_TRANSFER_WRITE_BIT,
-                                   VK_ACCESS_SHADER_READ_BIT);
-
-        vkTexture.setDebugName(texture.name);
 
         texture.vulkanTexture = std::move(vkTexture);
 
@@ -478,4 +446,176 @@ float ModelLoader::getRoughnessFactor(const aiMaterial &aiMaterial)
         return roughnessFactor;
 
     return defaultRoughnessFactor;
+}
+
+ModelImporter::ModelImporter(const VulkanRenderDevice &renderDevice)
+    : SubscriberSNS({Topic::Type::Renderer})
+    , mRenderDevice(renderDevice)
+{
+}
+
+void ModelImporter::update()
+{
+    for (auto itr = mModelData.begin(); itr != mModelData.end();)
+    {
+        if (itr->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+        {
+            std::unique_ptr<ModelLoader> modelData = itr->second.get();
+
+            if (modelData->success())
+                addModel(*modelData);
+
+            itr = mModelData.erase(itr);
+        }
+        else
+            ++itr;
+    }
+
+    for (auto itr = mFences.begin(); itr != mFences.end();)
+    {
+        if (vkGetFenceStatus(mRenderDevice.device, itr->second) == VK_SUCCESS)
+        {
+            auto model = mModels.at(itr->first);
+            SNS::publishMessage(Topic::Type::Resource, Message::modelLoaded(model));
+
+            mModels.erase(itr->first);
+            itr = mFences.erase(itr);
+        }
+        else
+            ++itr;
+    }
+}
+
+void ModelImporter::notify(const Message &message)
+{
+    if (const auto m = message.getIf<Message::LoadModel>())
+    {
+        auto future = std::async(std::launch::async, [this, path = m->path] () {
+            return std::make_unique<ModelLoader>(mRenderDevice, path);
+        });
+
+        mModelData.emplace(m->path, std::move(future));
+    }
+}
+
+void ModelImporter::addModel(const ModelLoader &modelData)
+{
+    auto model = std::make_shared<Model>(mRenderDevice);
+
+    model->id = UUIDRegistry::generateModelID();
+    model->name = modelData.path.filename().string();
+    model->path = modelData.path;
+    model->root = std::move(modelData.root);
+    model->materials = std::move(modelData.materials);
+    model->materialNames = std::move(modelData.materialNames);
+
+    VkCommandBuffer commandBuffer;
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = mRenderDevice.commandPool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1
+    };
+
+    VkResult result = vkAllocateCommandBuffers(mRenderDevice.device, &commandBufferAllocateInfo, &commandBuffer);
+    vulkanCheck(result, "Failed to allocate command buffer.");
+
+    VkCommandBufferBeginInfo commandBufferBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+    };
+
+    vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+    addMeshes(commandBuffer, *model, modelData);
+    addTextures(commandBuffer, *model, modelData);
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &commandBuffer
+    };
+
+    VkFence fence = createFence(mRenderDevice);
+
+    result = vkQueueSubmit(mRenderDevice.graphicsQueue, 1, &submitInfo, fence);
+    vulkanCheck(result, "Failed queue submission.");
+
+    mFences.emplace(model->path, fence);
+}
+
+void ModelImporter::addMeshes(VkCommandBuffer commandBuffer, Model &model, const ModelLoader &modelData)
+{
+    for (const auto& meshData : modelData.meshes)
+    {
+        VulkanBuffer vertexBuffer(mRenderDevice, meshData.vertexStagingBuffer.getSize(), BufferType::Vertex, MemoryType::GPU);
+        VulkanBuffer indexBuffer(mRenderDevice, meshData.indexStagingBuffer.getSize(), BufferType::Index, MemoryType::GPU);
+
+        vertexBuffer.copyBuffer(meshData.vertexStagingBuffer, 0, 0, vertexBuffer.getSize());
+        indexBuffer.copyBuffer(meshData.indexStagingBuffer, 0, 0, indexBuffer.getSize());
+
+        Mesh mesh {
+            .meshID = UUIDRegistry::generateMeshID(),
+            .name = meshData.name,
+            .mesh {mRenderDevice, std::move(vertexBuffer), std::move(indexBuffer)},
+            .materialIndex = meshData.materialIndex
+        };
+
+        model.meshes.push_back(std::move(mesh));
+    }
+}
+
+void ModelImporter::addTextures(VkCommandBuffer commandBuffer, Model &model, const ModelLoader &modelData)
+{
+    for (const auto& imageData : modelData.images)
+    {
+        TextureSpecification textureSpecification {
+            .format = VK_FORMAT_R8G8B8A8_UNORM,
+            .width = static_cast<uint32_t>(imageData.width),
+            .height = static_cast<uint32_t>(imageData.height),
+            .layerCount = 1,
+            .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+            .imageUsage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_SAMPLED_BIT,
+            .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .magFilter = imageData.magFilter,
+            .minFilter = imageData.minFilter,
+            .wrapS = imageData.wrapModeS,
+            .wrapT = imageData.wrapModeT,
+            .wrapR = imageData.wrapModeT,
+            .generateMipMaps = true
+        };
+
+        VulkanTexture texture(mRenderDevice, textureSpecification);
+
+        texture.copyBuffer(commandBuffer, imageData.stagingBuffer);
+
+        texture.transitionLayout(commandBuffer,
+                                 VK_IMAGE_LAYOUT_UNDEFINED,
+                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 0, VK_ACCESS_TRANSFER_WRITE_BIT);
+
+        texture.generateMipMaps(commandBuffer);
+
+        texture.transitionLayout(commandBuffer,
+                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                 VK_ACCESS_TRANSFER_WRITE_BIT,
+                                 VK_ACCESS_SHADER_READ_BIT);
+
+        texture.setDebugName(imageData.name);
+
+        Texture tex {
+            .name = imageData.name,
+            .vulkanTexture = std::move(texture)
+        };
+
+        model.textures.push_back(std::move(tex));
+    }
 }

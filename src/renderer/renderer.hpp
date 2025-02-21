@@ -17,7 +17,7 @@
 constexpr uint32_t InitialViewportWidth = 1000;
 constexpr uint32_t InitialViewportHeight = 700;
 
-class Renderer
+class Renderer : public SubscriberSNS
 {
 public:
     Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData);
@@ -27,10 +27,8 @@ public:
 
     void importModel(const std::filesystem::path& path);
     void deleteModel(uuid32_t id);
-
     void resize(uint32_t width, uint32_t height);
-
-    void processMainThreadTasks();
+    void notify(const Message &message) override;
 
 private:
     void executeClearRenderpass(VkCommandBuffer commandBuffer);
@@ -141,10 +139,7 @@ private:
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
 
-    // async loading
-    std::vector<std::future<std::shared_ptr<Model>>> mLoadedModelFutures;
-    MainThreadTaskQueue mTaskQueue;
-
+    // grid data
     struct GridData
     {
         alignas(16) glm::vec4 thinLineColor = glm::vec4(0.5, 0.5, 0.5, 1.f);

@@ -4,7 +4,7 @@
 
 #include "model.hpp"
 
-Model::Model(const VulkanRenderDevice* renderDevice)
+Model::Model(const VulkanRenderDevice& renderDevice)
     : SubscriberSNS({Topic::Type::SceneGraph})
     , mRenderDevice(renderDevice)
     , mMaterialsDS()
@@ -13,18 +13,18 @@ Model::Model(const VulkanRenderDevice* renderDevice)
 
 Model::~Model()
 {
-    vkFreeDescriptorSets(mRenderDevice->device, mRenderDevice->descriptorPool, 1, &mMaterialsDS);
+    vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, 1, &mMaterialsDS);
     for (auto& texture : textures)
     {
-        vkFreeDescriptorSets(mRenderDevice->device,
-                             mRenderDevice->descriptorPool,
+        vkFreeDescriptorSets(mRenderDevice.device,
+                             mRenderDevice.descriptorPool,
                              1, &texture.descriptorSet);
     }
 }
 
 void Model::createMaterialsSSBO()
 {
-    mMaterialsSSBO = VulkanBuffer(*mRenderDevice,
+    mMaterialsSSBO = VulkanBuffer(mRenderDevice,
                                  sizeof(Material) * materials.size(),
                                   BufferType::Storage,
                                   MemoryType::GPU);
@@ -35,14 +35,14 @@ void Model::createTextureDescriptorSets(VkDescriptorSetLayout dsLayout)
 {
     VkDescriptorSetAllocateInfo dsAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice->descriptorPool,
+        .descriptorPool = mRenderDevice.descriptorPool,
         .descriptorSetCount = 1,
         .pSetLayouts = &dsLayout
     };
 
     for (auto& texture : textures)
     {
-        VkResult result = vkAllocateDescriptorSets(mRenderDevice->device, &dsAllocateInfo, &texture.descriptorSet);
+        VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &dsAllocateInfo, &texture.descriptorSet);
         vulkanCheck(result, "Failed to allocate texture descriptor set.");
 
         VkDescriptorImageInfo imageInfo {
@@ -61,7 +61,7 @@ void Model::createTextureDescriptorSets(VkDescriptorSetLayout dsLayout)
             .pImageInfo = &imageInfo
         };
 
-        vkUpdateDescriptorSets(mRenderDevice->device, 1, &dsWrite, 0, nullptr);
+        vkUpdateDescriptorSets(mRenderDevice.device, 1, &dsWrite, 0, nullptr);
     }
 }
 
@@ -78,12 +78,12 @@ void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext = &variableDescriptorCountAllocInfo,
-        .descriptorPool = mRenderDevice->descriptorPool,
+        .descriptorPool = mRenderDevice.descriptorPool,
         .descriptorSetCount = 1,
         .pSetLayouts = &dsLayout
     };
 
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice->device, &descriptorSetAllocateInfo, &mMaterialsDS);
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mMaterialsDS);
     vulkanCheck(result, "Failed to create mMaterialsDS.");
 
     if (!materials.empty())
@@ -104,7 +104,7 @@ void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
             .pBufferInfo = &materialBufferInfo
         };
 
-        vkUpdateDescriptorSets(mRenderDevice->device, 1, &materialsDsWrite, 0, nullptr);
+        vkUpdateDescriptorSets(mRenderDevice.device, 1, &materialsDsWrite, 0, nullptr);
     }
 
     if (!textures.empty())
@@ -127,7 +127,7 @@ void Model::createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout)
             .pImageInfo = imageInfos.data()
         };
 
-        vkUpdateDescriptorSets(mRenderDevice->device, 1, &imagesDsWrite, 0, nullptr);
+        vkUpdateDescriptorSets(mRenderDevice.device, 1, &imagesDsWrite, 0, nullptr);
     }
 }
 

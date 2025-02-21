@@ -8,6 +8,9 @@
 #include <glm/glm.hpp>
 #include "types.hpp"
 
+class Model;
+class SubscriberSNS;
+
 class Message
 {
 public:
@@ -29,9 +32,23 @@ public:
         uuid32_t objectID;
     };
 
+    struct LoadModel
+    {
+        std::filesystem::path path;
+        // options
+    };
+
+    struct ModelLoaded
+    {
+        std::shared_ptr<Model> model;
+        // status
+    };
+
     std::variant<ModelDeleted,
         MeshInstanceUpdate,
-        RemoveMeshInstance> message;
+        RemoveMeshInstance,
+        LoadModel,
+        ModelLoaded> message;
 
     template<typename T>
     Message(const T& message) : message(message) {}
@@ -51,9 +68,10 @@ public:
     static Message modelDeleted(uuid32_t modelID);
     static Message meshInstanceUpdate(uuid32_t meshID, uuid32_t objectID, glm::mat4 transformation);
     static Message removeMeshInstance(uuid32_t meshID, uuid32_t objectID);
+    static Message loadModel(const std::filesystem::path& path);
+    static Message modelLoaded(std::shared_ptr<Model> model);
 };
 
-class SubscriberSNS;
 class Topic
 {
 public:
@@ -63,6 +81,7 @@ public:
         Editor,
         SceneGraph,
         Renderer,
+        Resource,
         Count
     };
 

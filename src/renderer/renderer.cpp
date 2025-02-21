@@ -5,7 +5,8 @@
 #include "renderer.hpp"
 
 Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
-    : mRenderDevice(renderDevice)
+    : SubscriberSNS({Topic::Type::Resource})
+    , mRenderDevice(renderDevice)
     , mSaveData(saveData)
     , mWidth(InitialViewportWidth)
     , mHeight(InitialViewportHeight)
@@ -108,8 +109,7 @@ void Renderer::importModel(const std::filesystem::path &path)
         return;
     }
 
-    EnqueueCallback callback = [this] (Task&& t) { mTaskQueue.push(std::move(t)); };
-    mLoadedModelFutures.push_back(ModelImporter::loadModel(path, &mRenderDevice, callback));
+    SNS::publishMessage(Topic::Type::Renderer, Message::loadModel(path));
 }
 
 void Renderer::deleteModel(uuid32_t id)
@@ -151,30 +151,17 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createDepthNormalDs();
 }
 
-void Renderer::processMainThreadTasks()
+void Renderer::notify(const Message &message)
 {
-    while (auto task = mTaskQueue.pop())
-        (*task)();
-
-    for (auto itr = mLoadedModelFutures.begin(); itr != mLoadedModelFutures.end();)
+    if (const auto m = message.getIf<Message::ModelLoaded>())
     {
-        if (itr->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-        {
-            auto model = itr->get();
+        auto model = m->model;
 
-            uuid32_t modelID = UUIDRegistry::generateModelID();
+        mModels.emplace(model->id, model);
 
-            mModels.emplace(modelID, model);
-
-            model->id = modelID;
-            model->createMaterialsSSBO();
-            model->createTextureDescriptorSets(mSingleImageDsLayout);
-            model->createMaterialsDescriptorSet(mMaterialsDsLayout);
-
-            itr = mLoadedModelFutures.erase(itr);
-        }
-        else
-            ++itr;
+        model->createMaterialsSSBO();
+        model->createTextureDescriptorSets(mSingleImageDsLayout);
+        model->createMaterialsDescriptorSet(mMaterialsDsLayout);
     }
 }
 

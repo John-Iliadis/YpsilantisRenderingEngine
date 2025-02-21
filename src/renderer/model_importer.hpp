@@ -40,12 +40,6 @@ struct ImageData
     TextureWrap wrapModeT;
 };
 
-struct MaterialData
-{
-    std::vector<Material> materials;
-    std::vector<std::string> materialNames;
-};
-
 class ModelLoader
 {
 public:
@@ -58,6 +52,7 @@ public:
 
 public:
     ModelLoader(const VulkanRenderDevice& renderDevice, const std::filesystem::path& path);
+    ~ModelLoader() = default;
 
     ModelLoader(const ModelLoader& other) = delete;
     ModelLoader& operator=(const ModelLoader& other) = delete;
@@ -100,5 +95,26 @@ private:
     bool mSuccess;
 };
 
+class ModelImporter : public SubscriberSNS
+{
+public:
+    ModelImporter(const VulkanRenderDevice& renderDevice);
+    ~ModelImporter() = default;
+
+    void update();
+    void notify(const Message &message) override;
+
+private:
+    void addModel(const ModelLoader& modelData);
+    void addMeshes(VkCommandBuffer commandBuffer, Model& model, const ModelLoader& modelData);
+    void addTextures(VkCommandBuffer commandBuffer, Model& model, const ModelLoader& modelData);
+
+public:
+    const VulkanRenderDevice& mRenderDevice;
+
+    std::unordered_map<std::filesystem::path, std::future<std::unique_ptr<ModelLoader>>> mModelData;
+    std::unordered_map<std::filesystem::path, std::shared_ptr<Model>> mModels;
+    std::unordered_map<std::filesystem::path, VkFence> mFences;
+};
 
 #endif //VULKANRENDERINGENGINE_MODEL_IMPORTER_HPP

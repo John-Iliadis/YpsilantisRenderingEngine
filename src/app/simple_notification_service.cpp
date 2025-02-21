@@ -3,6 +3,7 @@
 //
 
 #include "simple_notification_service.hpp"
+#include "../renderer/model.hpp"
 
 Message Message::modelDeleted(uuid32_t modelID)
 {
@@ -17,6 +18,16 @@ Message Message::meshInstanceUpdate(uuid32_t meshID, uuid32_t objectID, glm::mat
 Message Message::removeMeshInstance(uuid32_t meshID, uuid32_t objectID)
 {
     return Message(std::in_place_type_t<Message::RemoveMeshInstance>(), meshID, objectID);
+}
+
+Message Message::loadModel(const std::filesystem::path &path)
+{
+    return Message(std::in_place_type_t<Message::LoadModel>(), path);
+}
+
+Message Message::modelLoaded(std::shared_ptr<Model> model)
+{
+    return Message(std::in_place_type_t<Message::ModelLoaded>(), model);
 }
 
 void Topic::addSubscriber(SubscriberSNS *subscriber)
