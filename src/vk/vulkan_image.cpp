@@ -172,7 +172,18 @@ void VulkanImage::transitionLayout(VkImageLayout oldLayout, VkImageLayout newLay
 void VulkanImage::copyBuffer(const VulkanBuffer &buffer, uint32_t layerIndex)
 {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
+    copyBuffer(commandBuffer, buffer, layerIndex);
+    endSingleTimeCommands(*mRenderDevice, commandBuffer);
+}
 
+void VulkanImage::setDebugName(const std::string &debugName)
+{
+    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_IMAGE, debugName, image);
+    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_IMAGE_VIEW, debugName, imageView);
+}
+
+void VulkanImage::copyBuffer(VkCommandBuffer commandBuffer, const VulkanBuffer &buffer, uint32_t layerIndex)
+{
     VkBufferImageCopy copyRegion {
         .bufferOffset = 0,
         .bufferRowLength = width,
@@ -196,50 +207,6 @@ void VulkanImage::copyBuffer(const VulkanBuffer &buffer, uint32_t layerIndex)
                            image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                            1, &copyRegion);
-
-    endSingleTimeCommands(*mRenderDevice, commandBuffer);
-}
-
-void VulkanImage::resolveImage(const VulkanImage &multisampledImage)
-{
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
-
-    VkImageResolve resolve {
-        .srcSubresource {
-            .aspectMask = multisampledImage.imageAspect,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1
-        },
-        .srcOffset {.x = 0, .y = 0, .z = 0},
-        .dstSubresource {
-            .aspectMask = imageAspect,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1
-        },
-        .dstOffset {.x = 0, .y = 0, .z = 0},
-        .extent {
-            .width = width,
-            .height = height,
-            .depth = 1
-        }
-    };
-
-    vkCmdResolveImage(commandBuffer,
-                      multisampledImage.image,
-                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                      image,
-                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                      1, &resolve);
-
-    endSingleTimeCommands(*mRenderDevice, commandBuffer);
-}
-
-void VulkanImage::setDebugName(const std::string &debugName)
-{
-    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_IMAGE, debugName, image);
-    setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_IMAGE_VIEW, debugName, imageView);
 }
 
 VkImageView createImageView(const VulkanRenderDevice& renderDevice,

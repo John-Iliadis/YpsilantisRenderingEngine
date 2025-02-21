@@ -51,8 +51,8 @@ public:
     void transitionLayout(VkImageLayout oldLayout, VkImageLayout newLayout,
                           VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
                           VkAccessFlags srcAccess, VkAccessFlags dstAccess);
+    void copyBuffer(VkCommandBuffer commandBuffer, const VulkanBuffer& buffer, uint32_t layerIndex = 0);
     void copyBuffer(const VulkanBuffer& buffer, uint32_t layerIndex = 0);
-    void resolveImage(const VulkanImage& multisampledImage);
     void swap(VulkanImage& other) noexcept;
     virtual void setDebugName(const std::string& debugName);
 

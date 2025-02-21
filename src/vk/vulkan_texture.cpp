@@ -85,19 +85,24 @@ VulkanTexture::~VulkanTexture()
     }
 }
 
-void VulkanTexture::uploadImageData(const void *data, uint32_t layerIndex)
+void VulkanTexture::uploadImageData(VkCommandBuffer commandBuffer, const void *data, uint32_t layerIndex)
 {
     VkDeviceSize size = width * height * formatSize(format);
 
     VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
 
-    copyBuffer(stagingBuffer, layerIndex);
+    copyBuffer(commandBuffer, stagingBuffer, layerIndex);
 }
 
-void VulkanTexture::generateMipMaps()
+void VulkanTexture::uploadImageData(const void *data, uint32_t layerIndex)
 {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
+    uploadImageData(commandBuffer, data, layerIndex);
+    endSingleTimeCommands(*mRenderDevice, commandBuffer);
+}
 
+void VulkanTexture::generateMipMaps(VkCommandBuffer commandBuffer)
+{
     int32_t mipWidth = width;
     int32_t mipHeight = height;
 
@@ -173,6 +178,12 @@ void VulkanTexture::generateMipMaps()
                              1, &imageMemoryBarrier);
     }
 
+}
+
+void VulkanTexture::generateMipMaps()
+{
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
+    generateMipMaps(commandBuffer);
     endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 

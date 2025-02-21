@@ -17,14 +17,13 @@ static void mapBufferMemory(const VulkanRenderDevice* renderDevice,
 }
 
 static void copyBuffer(const VulkanRenderDevice* renderDevice,
+                       VkCommandBuffer commandBuffer,
                        VkBuffer srcBuffer,
                        VkBuffer dstBuffer,
                        VkDeviceSize srcOffset,
                        VkDeviceSize dstOffset,
                        VkDeviceSize size)
 {
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*renderDevice);
-
     VkBufferCopy copyRegion {
         .srcOffset = srcOffset,
         .dstOffset = dstOffset,
@@ -32,8 +31,6 @@ static void copyBuffer(const VulkanRenderDevice* renderDevice,
     };
 
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-    endSingleTimeCommands(*renderDevice, commandBuffer);
 }
 
 VkBufferUsageFlags toVkFlags(BufferType bufferType)
@@ -156,15 +153,29 @@ void VulkanBuffer::mapBufferMemory(VkDeviceSize offset, VkDeviceSize size, const
     ::mapBufferMemory(mRenderDevice, mMemory, offset, size, data);
 }
 
-void VulkanBuffer::update(VkDeviceSize offset, VkDeviceSize size, const void *data)
+void VulkanBuffer::update(VkCommandBuffer commandBuffer, VkDeviceSize offset, VkDeviceSize size, const void *data)
 {
     VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
-    copyBuffer(stagingBuffer, 0, offset, size);
+    copyBuffer(commandBuffer, stagingBuffer, 0, offset, size);
+}
+
+void VulkanBuffer::update(VkDeviceSize offset, VkDeviceSize size, const void *data)
+{
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
+    update(commandBuffer, offset, size, data);
+    endSingleTimeCommands(*mRenderDevice, commandBuffer);
+}
+
+void VulkanBuffer::copyBuffer(VkCommandBuffer commandBuffer, const VulkanBuffer &other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size)
+{
+    ::copyBuffer(mRenderDevice, commandBuffer, other.mBuffer, mBuffer, srcOffset, dstOffset, size);
 }
 
 void VulkanBuffer::copyBuffer(const VulkanBuffer &other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size)
 {
-    ::copyBuffer(mRenderDevice, other.mBuffer, mBuffer, srcOffset, dstOffset, size);
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
+    copyBuffer(commandBuffer, other, srcOffset, dstOffset, size);
+    endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 
 void VulkanBuffer::swap(VulkanBuffer &other) noexcept
