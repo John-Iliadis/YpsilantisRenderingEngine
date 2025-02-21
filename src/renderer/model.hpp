@@ -11,24 +11,9 @@
 #include "../vk/vulkan_texture.hpp"
 #include "../vk/vulkan_descriptor.hpp"
 #include "instanced_mesh.hpp"
+#include "material.hpp"
 
 constexpr uint32_t PerModelMaxTextureCount = 512;
-
-struct Material
-{
-    alignas(4) int32_t baseColorTexIndex;
-    alignas(4) int32_t metallicTexIndex;
-    alignas(4) int32_t roughnessTexIndex;
-    alignas(4) int32_t normalTexIndex;
-    alignas(4) int32_t aoTexIndex;
-    alignas(4) int32_t emissionTexIndex;
-    alignas(4) float metallicFactor;
-    alignas(4) float roughnessFactor;
-    alignas(16) glm::vec4 baseColorFactor;
-    alignas(16) glm::vec4 emissionFactor;
-    alignas(8) glm::vec2 tiling;
-    alignas(8) glm::vec2 offset;
-};
 
 struct SceneNode
 {

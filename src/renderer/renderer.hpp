@@ -23,6 +23,7 @@ public:
     Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData);
     ~Renderer();
 
+    void update();
     void render(VkCommandBuffer commandBuffer);
 
     void importModel(const std::filesystem::path& path);

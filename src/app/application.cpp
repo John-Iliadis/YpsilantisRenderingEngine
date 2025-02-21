@@ -63,9 +63,9 @@ void Application::update(float dt)
 {
     mVulkanImGui.begin();
 
-    mModelImporter.update();
-    mRenderer.processMainThreadTasks();
     mEditor.update(dt);
+    mModelImporter.update();
+    mRenderer.update();
 
     mVulkanImGui.end();
 }

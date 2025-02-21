@@ -10,7 +10,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     , mSaveData(saveData)
     , mWidth(InitialViewportWidth)
     , mHeight(InitialViewportHeight)
-    , mCameraUBO(renderDevice, sizeof(CameraRenderData), BufferType::Uniform, MemoryType::GPU)
+    , mCameraUBO(renderDevice, sizeof(CameraRenderData), BufferType::Uniform, MemoryType::CPU)
 {
     if (saveData.contains("viewport"))
     {
@@ -74,11 +74,15 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
 }
 
-void Renderer::render(VkCommandBuffer commandBuffer)
+void Renderer::update()
 {
     updateCameraUBO();
+}
 
+void Renderer::render(VkCommandBuffer commandBuffer)
+{
     setViewport(commandBuffer);
+
     executeClearRenderpass(commandBuffer);
     executePrepass(commandBuffer);
     executeSkyboxRenderpass(commandBuffer);
@@ -401,7 +405,7 @@ void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipe
 void Renderer::updateCameraUBO()
 {
     CameraRenderData renderData(mCamera.renderData());
-    mCameraUBO.update(0, sizeof(CameraRenderData), &renderData);
+    mCameraUBO.mapBufferMemory(0, sizeof(CameraRenderData), &renderData);
 }
 
 void Renderer::createColorTexture()

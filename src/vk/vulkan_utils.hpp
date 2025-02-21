@@ -37,4 +37,22 @@ VkDeviceSize formatSize(VkFormat format);
 
 VkDeviceSize imageMemoryDeviceSize(uint32_t width, uint32_t height, VkFormat format);
 
+template<typename T>
+std::vector<T> readBufferToVector(VkDevice device, VkDeviceMemory bufferMemory, VkDeviceSize bufferSize)
+{
+    assert(bufferSize % sizeof(T) != 0);
+
+    void* data;
+    VkResult result = vkMapMemory(device, bufferMemory, 0, bufferSize, 0, &data);
+    vulkanCheck(result, "Failed to map Vulkan buffer memory.");
+
+    size_t elementCount = bufferSize / sizeof(T);
+    std::vector<T> output(elementCount);
+    memcpy(output.data(), data, static_cast<size_t>(bufferSize));
+
+    vkUnmapMemory(device, bufferMemory);
+
+    return output;
+}
+
 #endif //VULKANRENDERINGENGINE_VULKAN_UTILS_HPP

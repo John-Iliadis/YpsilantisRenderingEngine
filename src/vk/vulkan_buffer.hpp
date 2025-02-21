@@ -47,7 +47,6 @@ public:
     VulkanBuffer& operator=(VulkanBuffer&& other) noexcept;
 
     void mapBufferMemory(VkDeviceSize offset, VkDeviceSize size, const void* data);
-    void update(VkCommandBuffer commandBuffer, VkDeviceSize offset, VkDeviceSize size, const void* data);
     void update(VkDeviceSize offset, VkDeviceSize size, const void* data);
     void copyBuffer(VkCommandBuffer commandBuffer, const VulkanBuffer& other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size);
     void copyBuffer(const VulkanBuffer& other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size);

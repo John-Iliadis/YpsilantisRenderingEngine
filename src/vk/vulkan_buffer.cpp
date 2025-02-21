@@ -16,8 +16,7 @@ static void mapBufferMemory(const VulkanRenderDevice* renderDevice,
     vkUnmapMemory(renderDevice->device, memory);
 }
 
-static void copyBuffer(const VulkanRenderDevice* renderDevice,
-                       VkCommandBuffer commandBuffer,
+static void copyBuffer(VkCommandBuffer commandBuffer,
                        VkBuffer srcBuffer,
                        VkBuffer dstBuffer,
                        VkDeviceSize srcOffset,
@@ -120,7 +119,7 @@ VulkanBuffer::VulkanBuffer(const VulkanRenderDevice &renderDevice,
         ::mapBufferMemory(mRenderDevice, stagingBufferMemory, 0, size, bufferData);
 
         VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice);
-        ::copyBuffer(mRenderDevice, commandBuffer, stagingBuffer, mBuffer, 0, 0, size);
+        ::copyBuffer(commandBuffer, stagingBuffer, mBuffer, 0, 0, size);
         endSingleTimeCommands(renderDevice, commandBuffer);
 
         vkDestroyBuffer(mRenderDevice->device, stagingBuffer, nullptr);
@@ -157,22 +156,17 @@ void VulkanBuffer::mapBufferMemory(VkDeviceSize offset, VkDeviceSize size, const
     ::mapBufferMemory(mRenderDevice, mMemory, offset, size, data);
 }
 
-void VulkanBuffer::update(VkCommandBuffer commandBuffer, VkDeviceSize offset, VkDeviceSize size, const void *data)
-{
-    VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
-    copyBuffer(commandBuffer, stagingBuffer, 0, offset, size);
-}
-
 void VulkanBuffer::update(VkDeviceSize offset, VkDeviceSize size, const void *data)
 {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
-    update(commandBuffer, offset, size, data);
+    VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
+    copyBuffer(commandBuffer, stagingBuffer, 0, offset, size);
     endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 
 void VulkanBuffer::copyBuffer(VkCommandBuffer commandBuffer, const VulkanBuffer &other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size)
 {
-    ::copyBuffer(mRenderDevice, commandBuffer, other.mBuffer, mBuffer, srcOffset, dstOffset, size);
+    ::copyBuffer(commandBuffer, other.mBuffer, mBuffer, srcOffset, dstOffset, size);
 }
 
 void VulkanBuffer::copyBuffer(const VulkanBuffer &other, VkDeviceSize srcOffset, VkDeviceSize dstOffset, VkDeviceSize size)

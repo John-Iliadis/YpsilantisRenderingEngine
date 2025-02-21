@@ -4,12 +4,12 @@
 
 #include "model_importer.hpp"
 
+// todo: handle color vertices. Including alpha channel.
 // todo: support specular glossiness
 // todo: load sampler data
-// todo: handle multiple texture coordinates
-// todo: handle color vertices. Including alpha channel
 // todo: test gltf mesh that has more than 1 material
 // todo: check no indices mesh
+// todo: test embedded image
 
 static constexpr uint32_t sImportFlags
 {
@@ -21,7 +21,8 @@ static constexpr uint32_t sImportFlags
     aiProcess_RemoveRedundantMaterials |
     aiProcess_SortByPType |
     aiProcess_GenUVCoords |
-    aiProcess_ValidateDataStructure
+    aiProcess_ValidateDataStructure |
+    aiProcess_PreTransformVertices
 };
 
 static constexpr int sRemoveComponents
@@ -38,22 +39,6 @@ static constexpr int sRemovePrimitives
     aiPrimitiveType_POINT |
     aiPrimitiveType_LINE
 };
-
-Texture createTexture(const VulkanRenderDevice* renderDevice, std::shared_ptr<ImageData> imageData)
-    {
-
-
-        Texture texture {.name = imageData->name};
-
-//        VulkanTexture vkTexture(*renderDevice, textureSpecification, imageData->data.get());
-        VulkanTexture vkTexture;
-
-
-
-        texture.vulkanTexture = std::move(vkTexture);
-
-        return texture;
-    }
 
 ModelLoader::ModelLoader(const VulkanRenderDevice &renderDevice, const std::filesystem::path &path)
     : path(path)
@@ -252,7 +237,7 @@ VulkanBuffer ModelLoader::loadVertexData(const aiMesh &aiMesh)
         }
     }
 
-    return VulkanBuffer(mRenderDevice, vertices.size() * sizeof(Vertex), BufferType::Staging, MemoryType::CPU);
+    return {mRenderDevice, vertices.size() * sizeof(Vertex), BufferType::Staging, MemoryType::CPU, vertices.data()};
 }
 
 VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
@@ -273,7 +258,7 @@ VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
         }
     }
 
-    return VulkanBuffer(mRenderDevice, indices.size() * sizeof(uint32_t), BufferType::Staging, MemoryType::CPU);
+    return {mRenderDevice, indices.size() * sizeof(uint32_t), BufferType::Staging, MemoryType::CPU, indices.data()};
 }
 
 std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
@@ -299,7 +284,7 @@ std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
         .width = loadedImage.width(),
         .height = loadedImage.height(),
         .name = texPath.filename().string(),
-        .stagingBuffer {mRenderDevice, deviceSize, BufferType::Staging, MemoryType::CPU},
+        .stagingBuffer {mRenderDevice, deviceSize, BufferType::Staging, MemoryType::CPU, loadedImage.data()},
         .magFilter = TextureMagFilter::Linear,
         .minFilter = TextureMinFilter::Linear,
         .wrapModeS = TextureWrap::Repeat,
@@ -456,16 +441,16 @@ ModelImporter::ModelImporter(const VulkanRenderDevice &renderDevice)
 
 void ModelImporter::update()
 {
-    for (auto itr = mModelData.begin(); itr != mModelData.end();)
+    for (auto itr = mModelDataFutures.begin(); itr != mModelDataFutures.end();)
     {
         if (itr->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
         {
             std::unique_ptr<ModelLoader> modelData = itr->second.get();
 
             if (modelData->success())
-                addModel(*modelData);
+                addModel(modelData);
 
-            itr = mModelData.erase(itr);
+            itr = mModelDataFutures.erase(itr);
         }
         else
             ++itr;
@@ -478,7 +463,11 @@ void ModelImporter::update()
             auto model = mModels.at(itr->first);
             SNS::publishMessage(Topic::Type::Resource, Message::modelLoaded(model));
 
+            mModelData.erase(itr->first);
             mModels.erase(itr->first);
+
+            vkDestroyFence(mRenderDevice.device, itr->second, nullptr);
+
             itr = mFences.erase(itr);
         }
         else
@@ -494,20 +483,20 @@ void ModelImporter::notify(const Message &message)
             return std::make_unique<ModelLoader>(mRenderDevice, path);
         });
 
-        mModelData.emplace(m->path, std::move(future));
+        mModelDataFutures.emplace(m->path, std::move(future));
     }
 }
 
-void ModelImporter::addModel(const ModelLoader &modelData)
+void ModelImporter::addModel(std::unique_ptr<ModelLoader>& modelData)
 {
     auto model = std::make_shared<Model>(mRenderDevice);
 
     model->id = UUIDRegistry::generateModelID();
-    model->name = modelData.path.filename().string();
-    model->path = modelData.path;
-    model->root = std::move(modelData.root);
-    model->materials = std::move(modelData.materials);
-    model->materialNames = std::move(modelData.materialNames);
+    model->name = modelData->path.filename().string();
+    model->path = modelData->path;
+    model->root = std::move(modelData->root);
+    model->materials = std::move(modelData->materials);
+    model->materialNames = std::move(modelData->materialNames);
 
     VkCommandBuffer commandBuffer;
     VkCommandBufferAllocateInfo commandBufferAllocateInfo {
@@ -526,8 +515,8 @@ void ModelImporter::addModel(const ModelLoader &modelData)
     };
 
     vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
-    addMeshes(commandBuffer, *model, modelData);
-    addTextures(commandBuffer, *model, modelData);
+    addMeshes(commandBuffer, *model, *modelData);
+    addTextures(commandBuffer, *model, *modelData);
     vkEndCommandBuffer(commandBuffer);
 
     VkSubmitInfo submitInfo {
@@ -541,6 +530,8 @@ void ModelImporter::addModel(const ModelLoader &modelData)
     result = vkQueueSubmit(mRenderDevice.graphicsQueue, 1, &submitInfo, fence);
     vulkanCheck(result, "Failed queue submission.");
 
+    mModelData.emplace(model->path, std::move(modelData));
+    mModels.emplace(model->path, model);
     mFences.emplace(model->path, fence);
 }
 
@@ -551,8 +542,8 @@ void ModelImporter::addMeshes(VkCommandBuffer commandBuffer, Model &model, const
         VulkanBuffer vertexBuffer(mRenderDevice, meshData.vertexStagingBuffer.getSize(), BufferType::Vertex, MemoryType::GPU);
         VulkanBuffer indexBuffer(mRenderDevice, meshData.indexStagingBuffer.getSize(), BufferType::Index, MemoryType::GPU);
 
-        vertexBuffer.copyBuffer(meshData.vertexStagingBuffer, 0, 0, vertexBuffer.getSize());
-        indexBuffer.copyBuffer(meshData.indexStagingBuffer, 0, 0, indexBuffer.getSize());
+        vertexBuffer.copyBuffer(commandBuffer, meshData.vertexStagingBuffer, 0, 0, vertexBuffer.getSize());
+        indexBuffer.copyBuffer(commandBuffer, meshData.indexStagingBuffer, 0, 0, indexBuffer.getSize());
 
         Mesh mesh {
             .meshID = UUIDRegistry::generateMeshID(),
@@ -590,14 +581,22 @@ void ModelImporter::addTextures(VkCommandBuffer commandBuffer, Model &model, con
 
         VulkanTexture texture(mRenderDevice, textureSpecification);
 
+        texture.transitionLayout(commandBuffer,
+                                 VK_IMAGE_LAYOUT_UNDEFINED,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 0,
+                                 VK_ACCESS_TRANSFER_WRITE_BIT);
+
         texture.copyBuffer(commandBuffer, imageData.stagingBuffer);
 
         texture.transitionLayout(commandBuffer,
-                                 VK_IMAGE_LAYOUT_UNDEFINED,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                                  VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 0, VK_ACCESS_TRANSFER_WRITE_BIT);
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
 
         texture.generateMipMaps(commandBuffer);
 

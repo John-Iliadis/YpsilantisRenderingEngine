@@ -18,8 +18,6 @@
 #include "vertex.hpp"
 #include "model.hpp"
 
-using EnqueueCallback = std::function<void(std::function<void()>&&)>;
-
 struct MeshData
 {
     std::string name;
@@ -105,14 +103,15 @@ public:
     void notify(const Message &message) override;
 
 private:
-    void addModel(const ModelLoader& modelData);
+    void addModel(std::unique_ptr<ModelLoader>& modelData);
     void addMeshes(VkCommandBuffer commandBuffer, Model& model, const ModelLoader& modelData);
     void addTextures(VkCommandBuffer commandBuffer, Model& model, const ModelLoader& modelData);
 
 public:
     const VulkanRenderDevice& mRenderDevice;
 
-    std::unordered_map<std::filesystem::path, std::future<std::unique_ptr<ModelLoader>>> mModelData;
+    std::unordered_map<std::filesystem::path, std::future<std::unique_ptr<ModelLoader>>> mModelDataFutures;
+    std::unordered_map<std::filesystem::path, std::unique_ptr<ModelLoader>> mModelData;
     std::unordered_map<std::filesystem::path, std::shared_ptr<Model>> mModels;
     std::unordered_map<std::filesystem::path, VkFence> mFences;
 };

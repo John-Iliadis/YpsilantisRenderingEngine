@@ -212,17 +212,20 @@ void Editor::modelInspector(uuid32_t modelID)
                 ImGui::EndCombo();
             }
 
-            ImGui::SeparatorText("Material Textures");
 
             Material& mat = model.materials.at(sSelectedMatIndex.at(modelID));
             bool matNeedsUpdate = false;
 
-            if (mat.baseColorTexIndex != -1) matTexInspector("Base Color", model.textures.at(mat.baseColorTexIndex));
-            if (mat.metallicTexIndex != -1) matTexInspector("Metallic", model.textures.at(mat.metallicTexIndex));
-            if (mat.roughnessTexIndex != -1) matTexInspector("Roughness", model.textures.at(mat.roughnessTexIndex));
-            if (mat.normalTexIndex != -1) matTexInspector("Normal", model.textures.at(mat.normalTexIndex));
-            if (mat.aoTexIndex != -1) matTexInspector("AO", model.textures.at(mat.aoTexIndex));
-            if (mat.emissionTexIndex != -1) matTexInspector("Emission", model.textures.at(mat.emissionTexIndex));
+            if (hasTextures(mat))
+            {
+                ImGui::SeparatorText("Material Textures");
+                if (mat.baseColorTexIndex != -1) matTexInspector("Base Color", model.textures.at(mat.baseColorTexIndex));
+                if (mat.metallicTexIndex != -1) matTexInspector("Metallic", model.textures.at(mat.metallicTexIndex));
+                if (mat.roughnessTexIndex != -1) matTexInspector("Roughness", model.textures.at(mat.roughnessTexIndex));
+                if (mat.normalTexIndex != -1) matTexInspector("Normal", model.textures.at(mat.normalTexIndex));
+                if (mat.aoTexIndex != -1) matTexInspector("AO", model.textures.at(mat.aoTexIndex));
+                if (mat.emissionTexIndex != -1) matTexInspector("Emission", model.textures.at(mat.emissionTexIndex));
+            }
 
             ImGui::SeparatorText("Material Factors");
 
