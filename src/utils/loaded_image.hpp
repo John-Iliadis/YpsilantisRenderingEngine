@@ -30,6 +30,7 @@ public:
     int32_t components() const;
     VkFormat format() const;
     void* data() const;
+    void* getOrphanedData();
 
 private:
     std::filesystem::path mPath;

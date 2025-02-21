@@ -30,7 +30,12 @@ struct MeshData
 
 struct ImageData
 {
-    LoadedImage loadedImage;
+    bool loaded;
+    int32_t width;
+    int32_t height;
+    std::string name;
+    std::filesystem::path path;
+    std::shared_ptr<uint8_t> data;
     TextureMagFilter magFilter;
     TextureMinFilter minFilter;
     TextureWrap wrapModeS;
@@ -60,11 +65,12 @@ namespace ModelImporter
     std::vector<uint32_t> loadMeshIndices(const aiMesh& assimpMesh);
 
     std::future<std::shared_ptr<ImageData>> loadImageData(const std::filesystem::path& path);
+    std::future<std::shared_ptr<ImageData>> loadEmbeddedImageData(aiTexture& assimpTexture);
 
     Texture createTexture(const VulkanRenderDevice* renderDevice, std::shared_ptr<ImageData> imageData);
 
-    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::filesystem::path, int32_t>& texIndices, const std::filesystem::path& dir);
-    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::filesystem::path, int32_t>& texIndices, const std::filesystem::path& dir);
+    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::string, int32_t>& texIndices);
+    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::string, int32_t>& texIndices);
     glm::vec4 getBaseColorFactor(const aiMaterial& assimpMaterial);
     glm::vec4 getEmissionFactor(const aiMaterial& assimpMaterial);
     float getMetallicFactor(const aiMaterial& assimpMaterial);

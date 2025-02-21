@@ -108,3 +108,10 @@ void *LoadedImage::data() const
 {
     return mData;
 }
+
+void *LoadedImage::getOrphanedData()
+{
+    void* d = mData;
+    mData = nullptr;
+    return d;
+}

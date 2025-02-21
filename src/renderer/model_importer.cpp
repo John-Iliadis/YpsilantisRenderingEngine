@@ -238,11 +238,74 @@ namespace ModelImporter
         return std::async(std::launch::async, [path] {
             std::shared_ptr<ImageData> imageData = std::make_shared<ImageData>();
 
-            imageData->loadedImage = LoadedImage(path);
+            LoadedImage loadedImage(path);
+
+            imageData->loaded = loadedImage.success();
+            imageData->width = loadedImage.width();
+            imageData->height = loadedImage.height();
+            imageData->name = path.filename().string();
+            imageData->path = path;
             imageData->magFilter = TextureMagFilter::Linear;
             imageData->minFilter = TextureMinFilter::Linear;
             imageData->wrapModeS = TextureWrap::Repeat;
             imageData->wrapModeT = TextureWrap::Repeat;
+
+            imageData->data = std::shared_ptr<uint8_t>(
+                reinterpret_cast<uint8_t*>(loadedImage.getOrphanedData()),
+                [] (uint8_t* data) { stbi_image_free(data);}
+            );
+
+            return imageData;
+        });
+    }
+
+    std::future<std::shared_ptr<ImageData>> loadEmbeddedImageData(aiTexture& assimpTexture)
+    {
+        debugLog(std::format("Loading embedded texture: {}", assimpTexture.mFilename.C_Str()));
+
+        return std::async(std::launch::async, [&assimpTexture] () {
+            auto imageData = std::make_shared<ImageData>();
+
+            imageData->name = assimpTexture.mFilename.length == 0? "Embedded Texture" : assimpTexture.mFilename.C_Str();
+            imageData->magFilter = TextureMagFilter::Linear;
+            imageData->minFilter = TextureMinFilter::Linear;
+            imageData->wrapModeS = TextureWrap::Repeat;
+            imageData->wrapModeT = TextureWrap::Repeat;
+
+            if (assimpTexture.mHeight == 0)
+            {
+                uint8_t* data = stbi_load_from_memory(
+                    reinterpret_cast<uint8_t*>(assimpTexture.pcData),
+                    assimpTexture.mWidth,
+                    &imageData->width,
+                    &imageData->height,
+                    nullptr, 4);
+
+                if (data)
+                {
+                    imageData->loaded = true;
+                    imageData->data = std::shared_ptr<uint8_t>(data, [] (uint8_t* data) {
+                        stbi_image_free(data);
+                    });
+                }
+            }
+            else
+            {
+                imageData->width = assimpTexture.mWidth;
+                imageData->height = assimpTexture.mHeight;
+
+                aiTexel* data = assimpTexture.pcData;
+
+                assimpTexture.pcData = nullptr;
+
+                if (data)
+                {
+                    imageData->loaded = true;
+                    imageData->data = std::shared_ptr<uint8_t>(reinterpret_cast<uint8_t*>(data), [] (uint8_t* data) {
+                        delete[] reinterpret_cast<aiTexel*>(data);
+                    });
+                }
+            }
 
             return imageData;
         });
@@ -250,12 +313,10 @@ namespace ModelImporter
 
     Texture createTexture(const VulkanRenderDevice* renderDevice, std::shared_ptr<ImageData> imageData)
     {
-        const LoadedImage& loadedImage = imageData->loadedImage;
-
         TextureSpecification textureSpecification {
-            .format = loadedImage.format(),
-            .width = static_cast<uint32_t>(loadedImage.width()),
-            .height = static_cast<uint32_t>(loadedImage.height()),
+            .format = VK_FORMAT_R8G8B8A8_UNORM,
+            .width = static_cast<uint32_t>(imageData->width),
+            .height = static_cast<uint32_t>(imageData->height),
             .layerCount = 1,
             .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
             .imageUsage =
@@ -272,9 +333,9 @@ namespace ModelImporter
             .generateMipMaps = true
         };
 
-        Texture texture {.name = imageData->loadedImage.path().filename().string()};
+        Texture texture {.name = imageData->name};
 
-        VulkanTexture vkTexture(*renderDevice, textureSpecification, imageData->loadedImage.data());
+        VulkanTexture vkTexture(*renderDevice, textureSpecification, imageData->data.get());
 
         vkTexture.transitionLayout(VK_IMAGE_LAYOUT_UNDEFINED,
                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -298,7 +359,7 @@ namespace ModelImporter
         return texture;
     }
 
-    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::filesystem::path, int32_t>& texIndices, const std::filesystem::path& dir)
+    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::string, int32_t>& texIndices)
     {
         MaterialData materialData;
 
@@ -306,24 +367,19 @@ namespace ModelImporter
         {
             const aiMaterial& assimpMaterial = *assimpScene.mMaterials[i];
 
-            materialData.materials.push_back(loadMaterial(assimpMaterial, texIndices, dir));
+            materialData.materials.push_back(loadMaterial(assimpMaterial, texIndices));
             materialData.materialNames.emplace_back(assimpMaterial.GetName().C_Str());
         }
 
         return materialData;
     }
 
-    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::filesystem::path, int32_t>& texIndices, const std::filesystem::path& dir)
+    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::string, int32_t>& texIndices)
     {
-        auto getTexIndex = [&assimpMaterial, &texIndices, &dir] (aiTextureType type) {
+        auto getTexIndex = [&assimpMaterial, &texIndices] (aiTextureType type) {
             if (auto texName = getTextureName(assimpMaterial, type))
-            {
-                std::filesystem::path path = dir / *texName;
-
-                if (texIndices.contains(path))
-                    return texIndices.at(path);
-            }
-
+                if (texIndices.contains(*texName))
+                    return texIndices.at(*texName);
             return -1;
         };
 
@@ -400,7 +456,6 @@ namespace ModelImporter
         return defaultRoughnessFactor;
     }
 
-    // todo: texture name might be key to embedded texture data
     std::unordered_set<std::string> getTextureNames(const aiScene& assimpScene)
     {
         std::unordered_set<std::string> texNames;
