@@ -4,11 +4,12 @@
 
 #include "model_importer.hpp"
 
-// todo: handle embedded image data
 // todo: support specular glossiness
 // todo: load sampler data
 // todo: handle multiple texture coordinates
 // todo: handle color vertices. Including alpha channel
+// todo: test gltf mesh that has more than 1 material
+// todo: check no indices mesh
 
 static constexpr uint32_t sImportFlags
 {
@@ -19,7 +20,8 @@ static constexpr uint32_t sImportFlags
     aiProcess_ImproveCacheLocality |
     aiProcess_RemoveRedundantMaterials |
     aiProcess_SortByPType |
-    aiProcess_GenUVCoords
+    aiProcess_GenUVCoords |
+    aiProcess_ValidateDataStructure
 };
 
 static constexpr int sRemoveComponents
@@ -37,281 +39,7 @@ static constexpr int sRemovePrimitives
     aiPrimitiveType_LINE
 };
 
-namespace ModelImporter
-{
-    std::future<std::shared_ptr<Model>> loadModel(const std::filesystem::path& path, const VulkanRenderDevice* renderDevice, EnqueueCallback callback)
-    {
-        return std::async(std::launch::async, [path, renderDevice, callback] () {
-            std::shared_ptr<aiScene> assimpScene = loadScene(path);
-            std::shared_ptr<Model> model = std::make_shared<Model>(renderDevice);
-
-            model->name = path.filename().string();
-            model->path = path;
-            model->root = createRootSceneNode(*assimpScene->mRootNode);
-
-            // load mesh data
-            std::vector<std::future<MeshData>> meshDataFutures;
-            for (uint32_t i = 0; i < assimpScene->mNumMeshes; ++i)
-            {
-                const aiMesh& assimpMesh = *assimpScene->mMeshes[i];
-                meshDataFutures.push_back(loadMeshData(assimpMesh));
-            }
-
-            // upload mesh data to vulkan
-            for (auto& meshDataFuture : meshDataFutures)
-            {
-                callback([renderDevice, model, meshData = meshDataFuture.get()] () {
-                    model->meshes.push_back(createMesh(renderDevice, meshData));
-                });
-            }
-
-            // load texture data
-            std::unordered_set<std::string> texNames = getTextureNames(*assimpScene);
-            std::filesystem::path dir = path.parent_path();
-            std::vector<std::future<std::shared_ptr<ImageData>>> loadedImageFutures;
-
-            for (const auto& texFilename : texNames)
-            {
-                loadedImageFutures.push_back(loadImageData(dir / texFilename));
-            }
-
-            // upload texture data to vulkan
-            std::unordered_map<std::filesystem::path, int32_t> texIndices;
-            for (uint32_t i = 0, insertIndex = 0; i < loadedImageFutures.size(); ++i)
-            {
-                auto loadedImageData = loadedImageFutures.at(i).get();
-
-                std::filesystem::path texPath = loadedImageData->loadedImage.path();
-
-                if (loadedImageData->loadedImage.success())
-                {
-                    callback([renderDevice, model, loadedImageData] () {
-                        model->textures.push_back(createTexture(renderDevice, loadedImageData));
-                    });
-
-                    texIndices.emplace(texPath, insertIndex++);
-                    continue;
-                }
-
-                texIndices.emplace(texPath, -1);
-            }
-
-            // load materials
-            MaterialData materialData = loadMaterials(*assimpScene, texIndices, dir);
-
-            model->materials = std::move(materialData.materials);
-            model->materialNames = std::move(materialData.materialNames);
-
-            return model;
-        });
-    }
-
-    std::shared_ptr<aiScene> loadScene(const std::filesystem::path& path)
-    {
-        Assimp::Importer importer;
-
-        importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, sRemoveComponents);
-        importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, sRemovePrimitives);
-        importer.SetPropertyBool(AI_CONFIG_PP_PTV_NORMALIZE, true);
-
-        importer.ReadFile(path.string(), sImportFlags);
-
-        std::shared_ptr<aiScene> scene(importer.GetOrphanedScene());
-
-        if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)
-        {
-            debugLog("Failed to load Assimp scene.");
-            return nullptr;
-        }
-
-        return scene;
-    }
-
-    SceneNode createRootSceneNode(const aiNode& assimpNode)
-    {
-        SceneNode sceneNode {
-            .name = assimpNode.mName.length? assimpNode.mName.C_Str() : "Unnamed",
-            .transformation = assimpToGlmMat4(assimpNode.mTransformation)
-        };
-
-        if (uint32_t meshCount = assimpNode.mNumMeshes)
-        {
-            sceneNode.meshIndices.insert(sceneNode.meshIndices.begin(),
-                                         assimpNode.mMeshes,
-                                         assimpNode.mMeshes + meshCount);
-        }
-
-        for (uint32_t i = 0; i < assimpNode.mNumChildren; ++i)
-        {
-            const aiNode& child = *assimpNode.mChildren[i];
-            sceneNode.children.push_back(createRootSceneNode(child));
-        }
-
-        return sceneNode;
-    }
-
-    Mesh createMesh(const VulkanRenderDevice* renderDevice, const MeshData &meshData)
-    {
-        Mesh mesh {
-            .meshID = UUIDRegistry::generateMeshID(),
-            .name = meshData.name.empty()? "Unnamed" : meshData.name,
-            .mesh = InstancedMesh(*renderDevice, meshData.vertices, meshData.indices),
-            .materialIndex = meshData.materialIndex
-        };
-
-        return mesh;
-    }
-
-    std::future<MeshData> loadMeshData(const aiMesh& assimpMesh)
-    {
-        debugLog(std::format("Loading mesh: {}", assimpMesh.mName.C_Str()));
-
-        return std::async(std::launch::async, [&assimpMesh] () {
-
-            MeshData meshData {
-                .name = assimpMesh.mName.C_Str(),
-                .vertices = loadMeshVertices(assimpMesh),
-                .indices = loadMeshIndices(assimpMesh),
-                .materialIndex = static_cast<int32_t>(assimpMesh.mMaterialIndex)
-            };
-
-            return meshData;
-        });
-    }
-
-    std::vector<Vertex> loadMeshVertices(const aiMesh& assimpMesh)
-    {
-        std::vector<Vertex> vertices(assimpMesh.mNumVertices);
-        
-        for (size_t i = 0; i < assimpMesh.mNumVertices; ++i)
-        {
-            if (assimpMesh.HasPositions())
-            {
-                vertices.at(i).position = *reinterpret_cast<glm::vec3*>(&assimpMesh.mVertices[i]);
-            }
-
-            if (assimpMesh.HasNormals())
-            {
-                vertices.at(i).normal = *reinterpret_cast<glm::vec3*>(&assimpMesh.mNormals[i]);
-            }
-
-            if (assimpMesh.HasTangentsAndBitangents())
-            {
-                vertices.at(i).tangent = *reinterpret_cast<glm::vec3*>(&assimpMesh.mTangents[i]);
-                vertices.at(i).bitangent = *reinterpret_cast<glm::vec3*>(&assimpMesh.mBitangents[i]);
-            }
-
-            if (assimpMesh.HasTextureCoords(0))
-            {
-                vertices.at(i).texCoords = *reinterpret_cast<glm::vec2*>(&assimpMesh.mTextureCoords[0][i]);
-            }
-        }
-
-        return vertices;
-    }
-
-    std::vector<uint32_t> loadMeshIndices(const aiMesh& assimpMesh)
-    {
-        std::vector<uint32_t> indices;
-
-        if (assimpMesh.HasFaces())
-        {
-            indices.reserve(assimpMesh.mNumFaces * 3);
-
-            for (uint32_t i = 0; i < assimpMesh.mNumFaces; ++i)
-            {
-                const aiFace& face = assimpMesh.mFaces[i];
-
-                indices.push_back(face.mIndices[0]);
-                indices.push_back(face.mIndices[1]);
-                indices.push_back(face.mIndices[2]);
-            }
-        }
-
-        return indices;
-    }
-
-    std::future<std::shared_ptr<ImageData>> loadImageData(const std::filesystem::path& path)
-    {
-        debugLog("Loading texture: " + path.string());
-
-        return std::async(std::launch::async, [path] {
-            std::shared_ptr<ImageData> imageData = std::make_shared<ImageData>();
-
-            LoadedImage loadedImage(path);
-
-            imageData->loaded = loadedImage.success();
-            imageData->width = loadedImage.width();
-            imageData->height = loadedImage.height();
-            imageData->name = path.filename().string();
-            imageData->path = path;
-            imageData->magFilter = TextureMagFilter::Linear;
-            imageData->minFilter = TextureMinFilter::Linear;
-            imageData->wrapModeS = TextureWrap::Repeat;
-            imageData->wrapModeT = TextureWrap::Repeat;
-
-            imageData->data = std::shared_ptr<uint8_t>(
-                reinterpret_cast<uint8_t*>(loadedImage.getOrphanedData()),
-                [] (uint8_t* data) { stbi_image_free(data);}
-            );
-
-            return imageData;
-        });
-    }
-
-    std::future<std::shared_ptr<ImageData>> loadEmbeddedImageData(aiTexture& assimpTexture)
-    {
-        debugLog(std::format("Loading embedded texture: {}", assimpTexture.mFilename.C_Str()));
-
-        return std::async(std::launch::async, [&assimpTexture] () {
-            auto imageData = std::make_shared<ImageData>();
-
-            imageData->name = assimpTexture.mFilename.length == 0? "Embedded Texture" : assimpTexture.mFilename.C_Str();
-            imageData->magFilter = TextureMagFilter::Linear;
-            imageData->minFilter = TextureMinFilter::Linear;
-            imageData->wrapModeS = TextureWrap::Repeat;
-            imageData->wrapModeT = TextureWrap::Repeat;
-
-            if (assimpTexture.mHeight == 0)
-            {
-                uint8_t* data = stbi_load_from_memory(
-                    reinterpret_cast<uint8_t*>(assimpTexture.pcData),
-                    assimpTexture.mWidth,
-                    &imageData->width,
-                    &imageData->height,
-                    nullptr, 4);
-
-                if (data)
-                {
-                    imageData->loaded = true;
-                    imageData->data = std::shared_ptr<uint8_t>(data, [] (uint8_t* data) {
-                        stbi_image_free(data);
-                    });
-                }
-            }
-            else
-            {
-                imageData->width = assimpTexture.mWidth;
-                imageData->height = assimpTexture.mHeight;
-
-                aiTexel* data = assimpTexture.pcData;
-
-                assimpTexture.pcData = nullptr;
-
-                if (data)
-                {
-                    imageData->loaded = true;
-                    imageData->data = std::shared_ptr<uint8_t>(reinterpret_cast<uint8_t*>(data), [] (uint8_t* data) {
-                        delete[] reinterpret_cast<aiTexel*>(data);
-                    });
-                }
-            }
-
-            return imageData;
-        });
-    }
-
-    Texture createTexture(const VulkanRenderDevice* renderDevice, std::shared_ptr<ImageData> imageData)
+Texture createTexture(const VulkanRenderDevice* renderDevice, std::shared_ptr<ImageData> imageData)
     {
         TextureSpecification textureSpecification {
             .format = VK_FORMAT_R8G8B8A8_UNORM,
@@ -359,146 +87,395 @@ namespace ModelImporter
         return texture;
     }
 
-    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::string, int32_t>& texIndices)
+ModelLoader::ModelLoader(const VulkanRenderDevice &renderDevice, const std::filesystem::path &path)
+    : path(path)
+    , root()
+    , mRenderDevice(renderDevice)
+    , mSuccess()
+{
+    debugLog("Loading model: " + path.string());
+
+    mImporter.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, sRemoveComponents);
+    mImporter.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, sRemovePrimitives);
+    mImporter.SetPropertyBool(AI_CONFIG_PP_PTV_NORMALIZE, true);
+
+    mImporter.ReadFile(path.string(), sImportFlags);
+
+    auto scene = mImporter.GetScene();
+
+    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)
     {
-        MaterialData materialData;
-
-        for (uint32_t i = 0; i < assimpScene.mNumMaterials; ++i)
-        {
-            const aiMaterial& assimpMaterial = *assimpScene.mMaterials[i];
-
-            materialData.materials.push_back(loadMaterial(assimpMaterial, texIndices));
-            materialData.materialNames.emplace_back(assimpMaterial.GetName().C_Str());
-        }
-
-        return materialData;
+        debugLog("Failed to load model: " + path.string());
+        debugLog("Importer error: " + std::string(mImporter.GetErrorString()));
+        return;
     }
 
-    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::string, int32_t>& texIndices)
+    try
     {
-        auto getTexIndex = [&assimpMaterial, &texIndices] (aiTextureType type) {
-            if (auto texName = getTextureName(assimpMaterial, type))
-                if (texIndices.contains(*texName))
-                    return texIndices.at(*texName);
-            return -1;
+        createHierarchy();
+        loadMeshes();
+
+        getTextureNames();
+
+        loadTextures();
+        loadMaterials();
+
+        mSuccess = true;
+    }
+    catch (const std::exception& e)
+    {
+        debugLog("Failed to load model: " + path.string());
+        debugLog("Exception caught: " + std::string(e.what()));
+    }
+}
+
+bool ModelLoader::success() const
+{
+    return mSuccess;
+}
+
+void ModelLoader::createHierarchy()
+{
+    const aiNode& aiRoot = *mImporter.GetScene()->mRootNode;
+    root = createRootSceneNode(aiRoot);
+}
+
+void ModelLoader::loadMeshes()
+{
+    const aiScene& scene = *mImporter.GetScene();
+
+    for (uint32_t i = 0; i < scene.mNumMeshes; ++i)
+    {
+        const aiMesh& aiMesh = *scene.mMeshes[i];
+
+        debugLog(std::format("Loading mesh: {}", aiMesh.mName.data));
+
+        MeshData meshData {
+            .name = aiMesh.mName.data,
+            .vertexStagingBuffer = loadVertexData(aiMesh),
+            .indexStagingBuffer = loadIndexData(aiMesh),
+            .materialIndex = aiMesh.mMaterialIndex
         };
 
-        Material material {
-            .baseColorTexIndex = getTexIndex(aiTextureType_BASE_COLOR),
-            .metallicTexIndex = getTexIndex(aiTextureType_METALNESS),
-            .roughnessTexIndex = getTexIndex(aiTextureType_DIFFUSE_ROUGHNESS),
-            .normalTexIndex = getTexIndex(aiTextureType_NORMALS),
-            .aoTexIndex = getTexIndex(aiTextureType_AMBIENT_OCCLUSION),
-            .emissionTexIndex = getTexIndex(aiTextureType_EMISSIVE),
-            .metallicFactor = getMetallicFactor(assimpMaterial),
-            .roughnessFactor = getRoughnessFactor(assimpMaterial),
-            .baseColorFactor = getBaseColorFactor(assimpMaterial),
-            .emissionFactor = getEmissionFactor(assimpMaterial),
-            .tiling = glm::vec4(1.f),
-            .offset = glm::vec3(0.f)
-        };
-
-        return material;
+        meshes.push_back(std::move(meshData));
     }
+}
 
-    glm::vec4 getBaseColorFactor(const aiMaterial& assimpMaterial)
+void ModelLoader::loadTextures()
+{
+    const aiScene& aiScene = *mImporter.GetScene();
+
+    for (const std::string& texName : mTextureNames)
     {
-        static constexpr glm::vec4 defaultBaseColorFactor(1.f, 1.f, 1.f, 1.f);
-
-        aiColor4D aiBaseColor;
-
-        if (assimpMaterial.Get(AI_MATKEY_BASE_COLOR, aiBaseColor) == aiReturn_SUCCESS)
-            return *reinterpret_cast<glm::vec4*>(&aiBaseColor);
-
-        return defaultBaseColorFactor;
-    }
-
-    glm::vec4 getEmissionFactor(const aiMaterial& assimpMaterial)
-    {
-        static constexpr glm::vec4 defaultEmissionFactor(0.f, 0.f, 0.f, 0.f);
-
-        aiColor3D aiEmissionColor;
-
-        if (assimpMaterial.Get(AI_MATKEY_COLOR_EMISSIVE, aiEmissionColor) == aiReturn_SUCCESS)
+        if (aiScene.GetEmbeddedTexture(texName.c_str()))
         {
-            return {
-                aiEmissionColor.r,
-                aiEmissionColor.g,
-                aiEmissionColor.b,
-                0.f
-            };
+            if (auto imageData = loadEmbeddedImageData(texName))
+            {
+                mInsertedTexIndex.emplace(texName, images.size());
+                images.push_back(std::move(*imageData));
+            }
+        }
+        else
+        {
+            if (auto imageData = loadImageData(texName))
+            {
+                mInsertedTexIndex.emplace(texName, images.size());
+                images.push_back(std::move(*imageData));
+            }
+        }
+    }
+}
+
+void ModelLoader::loadMaterials()
+{
+    const aiScene& aiScene = *mImporter.GetScene();
+
+    for (uint32_t i = 0; i < aiScene.mNumMaterials; ++i)
+    {
+        const aiMaterial& aiMaterial = *aiScene.mMaterials[i];
+
+        materials.push_back(loadMaterial(aiMaterial));
+        materialNames.push_back(aiMaterial.GetName().data);
+    }
+}
+
+void ModelLoader::getTextureNames()
+{
+    const aiScene& aiScene = *mImporter.GetScene();
+
+    for (uint32_t i = 0; i < aiScene.mNumMaterials; ++i)
+    {
+        const aiMaterial& material = *aiScene.mMaterials[i];
+
+        auto baseColTexName = getTextureName(material, aiTextureType_BASE_COLOR);
+        auto normalTexName = getTextureName(material, aiTextureType_NORMALS);
+        auto emissionTexName = getTextureName(material, aiTextureType_EMISSION_COLOR);
+        auto metallicTexName = getTextureName(material, aiTextureType_METALNESS);
+        auto roughnessTexName = getTextureName(material, aiTextureType_DIFFUSE_ROUGHNESS);
+        auto aoTexName = getTextureName(material, aiTextureType_AMBIENT_OCCLUSION);
+
+        if (baseColTexName) mTextureNames.insert(*baseColTexName);
+        if (normalTexName) mTextureNames.insert(*normalTexName);
+        if (emissionTexName) mTextureNames.insert(*emissionTexName);
+        if (metallicTexName) mTextureNames.insert(*metallicTexName);
+        if (roughnessTexName) mTextureNames.insert(*roughnessTexName);
+        if (aoTexName) mTextureNames.insert(*aoTexName);
+    }
+}
+
+SceneNode ModelLoader::createRootSceneNode(const aiNode &aiNode)
+{
+    SceneNode sceneNode {
+        .name = aiNode.mName.length ? aiNode.mName.C_Str() : "Unnamed",
+        .transformation = assimpToGlmMat4(aiNode.mTransformation)
+    };
+
+    if (uint32_t meshCount = aiNode.mNumMeshes)
+    {
+        sceneNode.meshIndices.insert(sceneNode.meshIndices.begin(),
+                                     aiNode.mMeshes,
+                                     aiNode.mMeshes + meshCount);
+    }
+
+    for (uint32_t i = 0; i < aiNode.mNumChildren; ++i)
+    {
+        const struct aiNode& aiChild = *aiNode.mChildren[i];
+        sceneNode.children.push_back(createRootSceneNode(aiChild));
+    }
+
+    return sceneNode;
+}
+
+glm::mat4 ModelLoader::assimpToGlmMat4(const aiMatrix4x4 &mat)
+{
+    return {
+        mat.a1, mat.b1, mat.c1, mat.d1,
+        mat.a2, mat.b2, mat.c2, mat.d2,
+        mat.a3, mat.b3, mat.c3, mat.d3,
+        mat.a4, mat.b4, mat.c4, mat.d4
+    };
+}
+
+VulkanBuffer ModelLoader::loadVertexData(const aiMesh &aiMesh)
+{
+    std::vector<Vertex> vertices(aiMesh.mNumVertices);
+
+    for (size_t i = 0; i < aiMesh.mNumVertices; ++i)
+    {
+        if (aiMesh.HasPositions())
+        {
+            vertices.at(i).position = *reinterpret_cast<glm::vec3*>(&aiMesh.mVertices[i]);
         }
 
-        return defaultEmissionFactor;
-    }
-
-    float getMetallicFactor(const aiMaterial& assimpMaterial)
-    {
-        static constexpr float defaultMetallicFactor = 1.f;
-
-        ai_real metallicFactor;
-
-        if (assimpMaterial.Get(AI_MATKEY_METALLIC_FACTOR, metallicFactor) == aiReturn_SUCCESS)
-            return metallicFactor;
-
-        return defaultMetallicFactor;
-    }
-
-    float getRoughnessFactor(const aiMaterial& assimpMaterial)
-    {
-        static constexpr float defaultRoughnessFactor = 1.f;
-
-        ai_real roughnessFactor;
-
-        if (assimpMaterial.Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessFactor) == aiReturn_SUCCESS)
-            return roughnessFactor;
-
-        return defaultRoughnessFactor;
-    }
-
-    std::unordered_set<std::string> getTextureNames(const aiScene& assimpScene)
-    {
-        std::unordered_set<std::string> texNames;
-
-        auto addTexture = [&texNames] (const std::optional<std::string>& texName) {
-            if (texName.has_value() && !texNames.contains(*texName))
-                texNames.insert(*texName);
-        };
-
-        for (uint32_t i = 0; i < assimpScene.mNumMaterials; ++i)
+        if (aiMesh.HasNormals())
         {
-            const aiMaterial& material = *assimpScene.mMaterials[i];
-
-            addTexture(getTextureName(material, aiTextureType_BASE_COLOR));
-            addTexture(getTextureName(material, aiTextureType_NORMALS));
-            addTexture(getTextureName(material, aiTextureType_EMISSION_COLOR));
-            addTexture(getTextureName(material, aiTextureType_METALNESS));
-            addTexture(getTextureName(material, aiTextureType_DIFFUSE_ROUGHNESS));
-            addTexture(getTextureName(material, aiTextureType_AMBIENT_OCCLUSION));
+            vertices.at(i).normal = *reinterpret_cast<glm::vec3*>(&aiMesh.mNormals[i]);
         }
 
-        return texNames;
-    }
-
-    std::optional<std::string> getTextureName(const aiMaterial& material, aiTextureType type)
-    {
-        if (material.GetTextureCount(type))
+        if (aiMesh.HasTangentsAndBitangents())
         {
-            aiString filename;
-            material.GetTexture(type, 0, &filename);
-            return filename.C_Str();
+            vertices.at(i).tangent = *reinterpret_cast<glm::vec3*>(&aiMesh.mTangents[i]);
+            vertices.at(i).bitangent = *reinterpret_cast<glm::vec3*>(&aiMesh.mBitangents[i]);
         }
 
+        if (aiMesh.HasTextureCoords(0))
+        {
+            vertices.at(i).texCoords = *reinterpret_cast<glm::vec2*>(&aiMesh.mTextureCoords[0][i]);
+        }
+    }
+
+    return VulkanBuffer(mRenderDevice, vertices.size() * sizeof(Vertex), BufferType::Staging, MemoryType::CPU);
+}
+
+VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
+{
+    std::vector<uint32_t> indices;
+
+    if (aiMesh.HasFaces())
+    {
+        indices.reserve(aiMesh.mNumFaces * 3);
+
+        for (uint32_t i = 0; i < aiMesh.mNumFaces; ++i)
+        {
+            const aiFace& face = aiMesh.mFaces[i];
+
+            indices.push_back(face.mIndices[0]);
+            indices.push_back(face.mIndices[1]);
+            indices.push_back(face.mIndices[2]);
+        }
+    }
+
+    return VulkanBuffer(mRenderDevice, indices.size() * sizeof(uint32_t), BufferType::Staging, MemoryType::CPU);
+}
+
+std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
+{
+    std::filesystem::path texPath = path.parent_path() / texName;
+
+    debugLog("Loading image: " + texPath.string());
+
+    LoadedImage loadedImage(texPath);
+
+    if (!loadedImage.success())
+    {
+        debugLog("Failed to load image: " + texPath.string());
         return std::nullopt;
     }
 
-    glm::mat4 assimpToGlmMat4(const aiMatrix4x4 &mat)
+    int32_t texWidth = loadedImage.width();
+    int32_t texHeight = loadedImage.height();
+
+    VkDeviceSize deviceSize = texWidth * texHeight * formatSize(loadedImage.format());
+
+    return ImageData {
+        .width = loadedImage.width(),
+        .height = loadedImage.height(),
+        .name = texPath.filename().string(),
+        .stagingBuffer {mRenderDevice, deviceSize, BufferType::Staging, MemoryType::CPU},
+        .magFilter = TextureMagFilter::Linear,
+        .minFilter = TextureMinFilter::Linear,
+        .wrapModeS = TextureWrap::Repeat,
+        .wrapModeT = TextureWrap::Repeat
+    };
+}
+
+std::optional<ImageData> ModelLoader::loadEmbeddedImageData(const std::string &texName)
+{
+    const aiTexture& aiTexture = *mImporter.GetScene()->GetEmbeddedTexture(texName.data());
+
+    debugLog("Loading embedded image: " + texName);
+
+    ImageData imageData {
+        .name = aiTexture.mFilename.length? "Embedded Texture" : aiTexture.mFilename.data,
+        .magFilter = TextureMagFilter::Linear,
+        .minFilter = TextureMinFilter::Linear,
+        .wrapModeS = TextureWrap::Repeat,
+        .wrapModeT = TextureWrap::Repeat,
+    };
+
+    const void* data = nullptr;
+    if (aiTexture.mHeight == 0)
+    {
+        data = stbi_load_from_memory(
+            reinterpret_cast<uint8_t*>(aiTexture.pcData),
+            aiTexture.mWidth,
+            &imageData.width,
+            &imageData.height,
+            nullptr, 4);
+    }
+    else
+    {
+        imageData.width = aiTexture.mWidth;
+        imageData.height = aiTexture.mHeight;
+
+        data = aiTexture.pcData;
+    }
+
+    if (!data)
+    {
+        debugLog("Failed to load embedded image: " + texName);
+        return std::nullopt;
+    }
+
+    VkDeviceSize deviceSize = imageMemoryDeviceSize(imageData.width, imageData.height, VK_FORMAT_R8G8B8A8_UNORM);
+
+    imageData.stagingBuffer = VulkanBuffer(mRenderDevice, deviceSize, BufferType::Staging, MemoryType::CPU, data);
+
+    return imageData;
+}
+
+std::optional<std::string> ModelLoader::getTextureName(const aiMaterial &aiMaterial, aiTextureType type)
+{
+    if (aiMaterial.GetTextureCount(type))
+    {
+        aiString filename;
+
+        aiMaterial.GetTexture(type, 0, &filename);
+
+        return filename.data;
+    }
+
+    return std::nullopt;
+}
+
+Material ModelLoader::loadMaterial(const aiMaterial &aiMaterial)
+{
+    auto getTexIndex = [this, &aiMaterial] (aiTextureType type) {
+        if (auto texName = getTextureName(aiMaterial, type))
+            if (mInsertedTexIndex.contains(*texName))
+                return mInsertedTexIndex.at(*texName);
+        return -1;
+    };
+
+    Material material {
+        .baseColorTexIndex = getTexIndex(aiTextureType_BASE_COLOR),
+        .metallicTexIndex = getTexIndex(aiTextureType_METALNESS),
+        .roughnessTexIndex = getTexIndex(aiTextureType_DIFFUSE_ROUGHNESS),
+        .normalTexIndex = getTexIndex(aiTextureType_NORMALS),
+        .aoTexIndex = getTexIndex(aiTextureType_AMBIENT_OCCLUSION),
+        .emissionTexIndex = getTexIndex(aiTextureType_EMISSIVE),
+        .metallicFactor = getMetallicFactor(aiMaterial),
+        .roughnessFactor = getRoughnessFactor(aiMaterial),
+        .baseColorFactor = getBaseColorFactor(aiMaterial),
+        .emissionFactor = getEmissionFactor(aiMaterial),
+        .tiling = glm::vec4(1.f),
+        .offset = glm::vec3(0.f)
+    };
+
+    return material;
+}
+
+glm::vec4 ModelLoader::getBaseColorFactor(const aiMaterial &aiMaterial)
+{
+    static constexpr glm::vec4 defaultBaseColorFactor(1.f, 1.f, 1.f, 1.f);
+
+    aiColor4D aiBaseColor;
+
+    if (aiMaterial.Get(AI_MATKEY_BASE_COLOR, aiBaseColor) == aiReturn_SUCCESS)
+        return *reinterpret_cast<glm::vec4*>(&aiBaseColor);
+
+    return defaultBaseColorFactor;
+}
+
+glm::vec4 ModelLoader::getEmissionFactor(const aiMaterial &aiMaterial)
+{
+    static constexpr glm::vec4 defaultEmissionFactor(0.f, 0.f, 0.f, 0.f);
+
+    aiColor3D aiEmissionColor;
+
+    if (aiMaterial.Get(AI_MATKEY_COLOR_EMISSIVE, aiEmissionColor) == aiReturn_SUCCESS)
     {
         return {
-            mat.a1, mat.b1, mat.c1, mat.d1,
-            mat.a2, mat.b2, mat.c2, mat.d2,
-            mat.a3, mat.b3, mat.c3, mat.d3,
-            mat.a4, mat.b4, mat.c4, mat.d4
+            aiEmissionColor.r,
+            aiEmissionColor.g,
+            aiEmissionColor.b,
+            0.f
         };
     }
+
+    return defaultEmissionFactor;
+}
+
+float ModelLoader::getMetallicFactor(const aiMaterial &aiMaterial)
+{
+    static constexpr float defaultMetallicFactor = 1.f;
+
+    ai_real metallicFactor;
+
+    if (aiMaterial.Get(AI_MATKEY_METALLIC_FACTOR, metallicFactor) == aiReturn_SUCCESS)
+        return metallicFactor;
+
+    return defaultMetallicFactor;
+}
+
+float ModelLoader::getRoughnessFactor(const aiMaterial &aiMaterial)
+{
+    static constexpr float defaultRoughnessFactor = 1.f;
+
+    ai_real roughnessFactor;
+
+    if (aiMaterial.Get(AI_MATKEY_ROUGHNESS_FACTOR, roughnessFactor) == aiReturn_SUCCESS)
+        return roughnessFactor;
+
+    return defaultRoughnessFactor;
 }

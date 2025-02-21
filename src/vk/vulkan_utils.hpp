@@ -33,4 +33,8 @@ VkSampleCountFlagBits getMaxSampleCount(const VulkanRenderDevice& renderDevice);
 void setRenderpassDebugName(const VulkanRenderDevice& renderDevice, VkRenderPass renderPass, const std::string& name);
 void setFramebufferDebugName(const VulkanRenderDevice& renderDevice, VkFramebuffer framebuffer, const std::string& name);
 
+VkDeviceSize formatSize(VkFormat format);
+
+VkDeviceSize imageMemoryDeviceSize(uint32_t width, uint32_t height, VkFormat format);
+
 #endif //VULKANRENDERINGENGINE_VULKAN_UTILS_HPP

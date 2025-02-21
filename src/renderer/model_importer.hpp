@@ -23,19 +23,17 @@ using EnqueueCallback = std::function<void(std::function<void()>&&)>;
 struct MeshData
 {
     std::string name;
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-    int32_t materialIndex;
+    VulkanBuffer vertexStagingBuffer;
+    VulkanBuffer indexStagingBuffer;
+    uint32_t materialIndex;
 };
 
 struct ImageData
 {
-    bool loaded;
     int32_t width;
     int32_t height;
     std::string name;
-    std::filesystem::path path;
-    std::shared_ptr<uint8_t> data;
+    VulkanBuffer stagingBuffer;
     TextureMagFilter magFilter;
     TextureMinFilter minFilter;
     TextureWrap wrapModeS;
@@ -48,38 +46,59 @@ struct MaterialData
     std::vector<std::string> materialNames;
 };
 
-namespace ModelImporter
+class ModelLoader
 {
-    std::future<std::shared_ptr<Model>> loadModel(const std::filesystem::path& path, const VulkanRenderDevice* renderDevice, EnqueueCallback callback);
+public:
+    std::filesystem::path path;
+    SceneNode root;
+    std::vector<MeshData> meshes;
+    std::vector<ImageData> images;
+    std::vector<Material> materials;
+    std::vector<std::string> materialNames;
 
-    std::shared_ptr<aiScene> loadScene(const std::filesystem::path& path);
+public:
+    ModelLoader(const VulkanRenderDevice& renderDevice, const std::filesystem::path& path);
 
-    SceneNode createRootSceneNode(const aiNode& assimpNode);
+    ModelLoader(const ModelLoader& other) = delete;
+    ModelLoader& operator=(const ModelLoader& other) = delete;
 
-    Mesh createMesh(const VulkanRenderDevice* renderDevice, const MeshData& meshData);
+    ModelLoader(ModelLoader&& other) noexcept = delete;
+    ModelLoader& operator=(ModelLoader&& other) noexcept = delete;
 
-    std::future<MeshData> loadMeshData(const aiMesh& assimpMesh);
+    bool success() const;
 
-    std::vector<Vertex> loadMeshVertices(const aiMesh& assimpMesh);
+private:
+    void createHierarchy();
+    void loadMeshes();
+    void loadTextures();
+    void loadMaterials();
+    void getTextureNames();
 
-    std::vector<uint32_t> loadMeshIndices(const aiMesh& assimpMesh);
+    SceneNode createRootSceneNode(const aiNode& aiNode);
 
-    std::future<std::shared_ptr<ImageData>> loadImageData(const std::filesystem::path& path);
-    std::future<std::shared_ptr<ImageData>> loadEmbeddedImageData(aiTexture& assimpTexture);
+    VulkanBuffer loadVertexData(const aiMesh& aiMesh);
+    VulkanBuffer loadIndexData(const aiMesh& aiMesh);
 
-    Texture createTexture(const VulkanRenderDevice* renderDevice, std::shared_ptr<ImageData> imageData);
+    std::optional<ImageData> loadImageData(const std::string& texName);
+    std::optional<ImageData> loadEmbeddedImageData(const std::string& texName);
 
-    MaterialData loadMaterials(const aiScene& assimpScene, const std::unordered_map<std::string, int32_t>& texIndices);
-    Material loadMaterial(const aiMaterial& assimpMaterial, const std::unordered_map<std::string, int32_t>& texIndices);
-    glm::vec4 getBaseColorFactor(const aiMaterial& assimpMaterial);
-    glm::vec4 getEmissionFactor(const aiMaterial& assimpMaterial);
-    float getMetallicFactor(const aiMaterial& assimpMaterial);
-    float getRoughnessFactor(const aiMaterial& assimpMaterial);
+    std::optional<std::string> getTextureName(const aiMaterial& aiMaterial, aiTextureType type);
 
-    std::unordered_set<std::string> getTextureNames(const aiScene& assimpScene);
-    std::optional<std::string> getTextureName(const aiMaterial& material, aiTextureType type);
+    Material loadMaterial(const aiMaterial& aiMaterial);
+    glm::vec4 getBaseColorFactor(const aiMaterial& aiMaterial);
+    glm::vec4 getEmissionFactor(const aiMaterial& aiMaterial);
+    float getMetallicFactor(const aiMaterial& aiMaterial);
+    float getRoughnessFactor(const aiMaterial& aiMaterial);
 
     glm::mat4 assimpToGlmMat4(const aiMatrix4x4 &mat);
-}
+
+private:
+    const VulkanRenderDevice& mRenderDevice;
+    Assimp::Importer mImporter;
+    std::unordered_set<std::string> mTextureNames;
+    std::unordered_map<std::string, int32_t> mInsertedTexIndex;
+    bool mSuccess;
+};
+
 
 #endif //VULKANRENDERINGENGINE_MODEL_IMPORTER_HPP

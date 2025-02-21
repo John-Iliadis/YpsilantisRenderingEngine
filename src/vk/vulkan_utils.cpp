@@ -195,3 +195,18 @@ void setFramebufferDebugName(const VulkanRenderDevice& renderDevice, VkFramebuff
 {
     setVulkanObjectDebugName(renderDevice, VK_OBJECT_TYPE_FRAMEBUFFER, name, framebuffer);
 }
+
+VkDeviceSize formatSize(VkFormat format)
+{
+    switch (format)
+    {
+        case VK_FORMAT_R8G8B8A8_UNORM: return 4;
+        case VK_FORMAT_R32G32B32A32_SFLOAT: return 16;
+        default: assert(false);
+    }
+}
+
+VkDeviceSize imageMemoryDeviceSize(uint32_t width, uint32_t height, VkFormat format)
+{
+    return width * height * formatSize(format);
+}

@@ -5,16 +5,6 @@
 #include "vulkan_texture.hpp"
 #include "vulkan_buffer.hpp"
 
-static VkDeviceSize formatSize(VkFormat format)
-{
-    switch (format)
-    {
-        case VK_FORMAT_R8G8B8A8_UNORM: return 4;
-        case VK_FORMAT_R32G32B32A32_SFLOAT: return 16;
-        default: assert(false);
-    }
-}
-
 const char* toStr(TextureWrap wrapMode)
 {
     switch (wrapMode)

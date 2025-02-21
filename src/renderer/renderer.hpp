@@ -94,7 +94,7 @@ private:
     Camera mCamera;
     VulkanBuffer mCameraUBO;
 
-    // textures
+    // render targets
     VulkanTexture mColorTexture;
     VulkanTexture mDepthTexture;
     VulkanTexture mNormalTexture;
