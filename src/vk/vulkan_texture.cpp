@@ -89,7 +89,7 @@ void VulkanTexture::uploadImageData(VkCommandBuffer commandBuffer, const void *d
 {
     VkDeviceSize size = width * height * formatSize(format);
 
-    VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
+    VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::Host, data);
 
     copyBuffer(commandBuffer, stagingBuffer, layerIndex);
 }

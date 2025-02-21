@@ -18,8 +18,9 @@ enum class BufferType
 
 enum class MemoryType
 {
-    CPU,
-    GPU
+    Host,
+    HostCoherent,
+    Device
 };
 
 VkBufferUsageFlags toVkFlags(BufferType bufferType);

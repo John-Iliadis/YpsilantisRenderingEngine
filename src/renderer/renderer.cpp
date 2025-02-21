@@ -10,7 +10,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     , mSaveData(saveData)
     , mWidth(InitialViewportWidth)
     , mHeight(InitialViewportHeight)
-    , mCameraUBO(renderDevice, sizeof(CameraRenderData), BufferType::Uniform, MemoryType::CPU)
+    , mCameraUBO(renderDevice, sizeof(CameraRenderData), BufferType::Uniform, MemoryType::HostCoherent)
 {
     if (saveData.contains("viewport"))
     {

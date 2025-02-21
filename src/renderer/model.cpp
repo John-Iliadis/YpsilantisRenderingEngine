@@ -27,7 +27,7 @@ void Model::createMaterialsSSBO()
     mMaterialsSSBO = VulkanBuffer(mRenderDevice,
                                  sizeof(Material) * materials.size(),
                                   BufferType::Storage,
-                                  MemoryType::GPU);
+                                  MemoryType::Device);
     mMaterialsSSBO.setDebugName(name + " Material SSBO");
 }
 

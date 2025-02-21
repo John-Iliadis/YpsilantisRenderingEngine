@@ -4,9 +4,9 @@
 
 #include "model_importer.hpp"
 
+// todo: load sampler data
 // todo: handle color vertices. Including alpha channel.
 // todo: support specular glossiness
-// todo: load sampler data
 // todo: test gltf mesh that has more than 1 material
 // todo: check no indices mesh
 // todo: test embedded image
@@ -21,8 +21,7 @@ static constexpr uint32_t sImportFlags
     aiProcess_RemoveRedundantMaterials |
     aiProcess_SortByPType |
     aiProcess_GenUVCoords |
-    aiProcess_ValidateDataStructure |
-    aiProcess_PreTransformVertices
+    aiProcess_ValidateDataStructure
 };
 
 static constexpr int sRemoveComponents
@@ -50,7 +49,6 @@ ModelLoader::ModelLoader(const VulkanRenderDevice &renderDevice, const std::file
 
     mImporter.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, sRemoveComponents);
     mImporter.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, sRemovePrimitives);
-    mImporter.SetPropertyBool(AI_CONFIG_PP_PTV_NORMALIZE, true);
 
     mImporter.ReadFile(path.string(), sImportFlags);
 
@@ -237,7 +235,7 @@ VulkanBuffer ModelLoader::loadVertexData(const aiMesh &aiMesh)
         }
     }
 
-    return {mRenderDevice, vertices.size() * sizeof(Vertex), BufferType::Staging, MemoryType::CPU, vertices.data()};
+    return {mRenderDevice, vertices.size() * sizeof(Vertex), BufferType::Staging, MemoryType::Host, vertices.data()};
 }
 
 VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
@@ -258,7 +256,7 @@ VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
         }
     }
 
-    return {mRenderDevice, indices.size() * sizeof(uint32_t), BufferType::Staging, MemoryType::CPU, indices.data()};
+    return {mRenderDevice, indices.size() * sizeof(uint32_t), BufferType::Staging, MemoryType::Host, indices.data()};
 }
 
 std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
@@ -284,7 +282,7 @@ std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
         .width = loadedImage.width(),
         .height = loadedImage.height(),
         .name = texPath.filename().string(),
-        .stagingBuffer {mRenderDevice, deviceSize, BufferType::Staging, MemoryType::CPU, loadedImage.data()},
+        .stagingBuffer {mRenderDevice, deviceSize, BufferType::Staging, MemoryType::Host, loadedImage.data()},
         .magFilter = TextureMagFilter::Linear,
         .minFilter = TextureMinFilter::Linear,
         .wrapModeS = TextureWrap::Repeat,
@@ -332,7 +330,7 @@ std::optional<ImageData> ModelLoader::loadEmbeddedImageData(const std::string &t
 
     VkDeviceSize deviceSize = imageMemoryDeviceSize(imageData.width, imageData.height, VK_FORMAT_R8G8B8A8_UNORM);
 
-    imageData.stagingBuffer = VulkanBuffer(mRenderDevice, deviceSize, BufferType::Staging, MemoryType::CPU, data);
+    imageData.stagingBuffer = VulkanBuffer(mRenderDevice, deviceSize, BufferType::Staging, MemoryType::Host, data);
 
     return imageData;
 }
@@ -539,8 +537,8 @@ void ModelImporter::addMeshes(VkCommandBuffer commandBuffer, Model &model, const
 {
     for (const auto& meshData : modelData.meshes)
     {
-        VulkanBuffer vertexBuffer(mRenderDevice, meshData.vertexStagingBuffer.getSize(), BufferType::Vertex, MemoryType::GPU);
-        VulkanBuffer indexBuffer(mRenderDevice, meshData.indexStagingBuffer.getSize(), BufferType::Index, MemoryType::GPU);
+        VulkanBuffer vertexBuffer(mRenderDevice, meshData.vertexStagingBuffer.getSize(), BufferType::Vertex, MemoryType::Device);
+        VulkanBuffer indexBuffer(mRenderDevice, meshData.indexStagingBuffer.getSize(), BufferType::Index, MemoryType::Device);
 
         vertexBuffer.copyBuffer(commandBuffer, meshData.vertexStagingBuffer, 0, 0, vertexBuffer.getSize());
         indexBuffer.copyBuffer(commandBuffer, meshData.indexStagingBuffer, 0, 0, indexBuffer.getSize());

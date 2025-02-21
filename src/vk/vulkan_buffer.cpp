@@ -63,8 +63,9 @@ VkMemoryPropertyFlags toVkFlags(MemoryType memoryType)
 {
     switch (memoryType)
     {
-        case MemoryType::CPU: return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-        case MemoryType::GPU: return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        case MemoryType::Host: return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        case MemoryType::HostCoherent: return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        case MemoryType::Device: return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         default: assert(false);
     }
 }
@@ -108,14 +109,14 @@ VulkanBuffer::VulkanBuffer(const VulkanRenderDevice &renderDevice,
     , mType(bufferType)
     , mMemoryType(memoryType)
 {
-    if (memoryType == MemoryType::CPU)
+    if (memoryType == MemoryType::Host || memoryType == MemoryType::HostCoherent)
     {
         mapBufferMemory(0, size, bufferData);
     }
     else
     {
         VkBuffer stagingBuffer = createBuffer(BufferType::Staging);
-        VkDeviceMemory stagingBufferMemory = allocateBufferMemory(MemoryType::CPU, stagingBuffer);
+        VkDeviceMemory stagingBufferMemory = allocateBufferMemory(MemoryType::Host, stagingBuffer);
         ::mapBufferMemory(mRenderDevice, stagingBufferMemory, 0, size, bufferData);
 
         VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice);
@@ -159,7 +160,7 @@ void VulkanBuffer::mapBufferMemory(VkDeviceSize offset, VkDeviceSize size, const
 void VulkanBuffer::update(VkDeviceSize offset, VkDeviceSize size, const void *data)
 {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
-    VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::CPU, data);
+    VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::Host, data);
     copyBuffer(commandBuffer, stagingBuffer, 0, offset, size);
     endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }

@@ -19,9 +19,9 @@ InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice,
                              const std::vector<Vertex> &vertices,
                              const std::vector<uint32_t> &indices)
     : mRenderDevice(&renderDevice)
-    , mVertexBuffer(renderDevice, vertices.size() * sVertexSize, BufferType::Vertex, MemoryType::GPU, vertices.data())
-    , mIndexBuffer(renderDevice, indices.size() * sizeof(uint32_t), BufferType::Index, MemoryType::GPU, indices.data())
-    , mInstanceBuffer(renderDevice, sInitialInstanceBufferCapacity * sInstanceSize, BufferType::Vertex, MemoryType::GPU)
+    , mVertexBuffer(renderDevice, vertices.size() * sVertexSize, BufferType::Vertex, MemoryType::Device, vertices.data())
+    , mIndexBuffer(renderDevice, indices.size() * sizeof(uint32_t), BufferType::Index, MemoryType::Device, indices.data())
+    , mInstanceBuffer(renderDevice, sInitialInstanceBufferCapacity * sInstanceSize, BufferType::Vertex, MemoryType::Device)
     , mInstanceCount()
     , mInstanceBufferCapacity(sInitialInstanceBufferCapacity)
 {
@@ -33,7 +33,7 @@ InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice,
     : mRenderDevice(&renderDevice)
     , mVertexBuffer(std::move(vertexBuffer))
     , mIndexBuffer(std::move(indexBuffer))
-    , mInstanceBuffer(renderDevice, sInitialInstanceBufferCapacity * sInstanceSize, BufferType::Vertex, MemoryType::GPU)
+    , mInstanceBuffer(renderDevice, sInitialInstanceBufferCapacity * sInstanceSize, BufferType::Vertex, MemoryType::Device)
     , mInstanceCount()
     , mInstanceBufferCapacity(sInitialInstanceBufferCapacity)
 {
@@ -171,7 +171,7 @@ void InstancedMesh::checkResize()
 
     uint32_t newCapacity = mInstanceCount * 2;
 
-    VulkanBuffer newInstanceBuffer(*mRenderDevice, newCapacity * sInstanceSize, BufferType::Vertex, MemoryType::GPU);
+    VulkanBuffer newInstanceBuffer(*mRenderDevice, newCapacity * sInstanceSize, BufferType::Vertex, MemoryType::Device);
     newInstanceBuffer.copyBuffer(mInstanceBuffer, 0, 0, mInstanceBufferCapacity * sInstanceSize);
     newInstanceBuffer.swap(mInstanceBuffer);
 
