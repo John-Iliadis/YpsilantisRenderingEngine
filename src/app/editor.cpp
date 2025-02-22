@@ -60,6 +60,8 @@ void Editor::update(float dt)
 
     if (mShowDebugPanel)
         debugPanel();
+
+    popups();
 }
 
 void Editor::imguiEvents()
@@ -74,8 +76,8 @@ void Editor::mainMenuBar()
     {
         if (ImGui::BeginMenu("File"))
         {
-            if (ImGui::MenuItem("Import glTF"))
-                importModel("gltf");
+            if (ImGui::MenuItem("Import Model"))
+                mModelImportPopup = true;
 
             if (ImGui::MenuItem("Import glb"))
                 importModel("glb");
@@ -575,9 +577,7 @@ void Editor::rendererPanel()
         ImGui::Separator();
 
         if (ImGui::Button("Import Faces"))
-        {
-            ImGui::OpenPopup("Import Skybox Textures");
-        }
+            mSkyboxImportPopup = true;
 
         ImGui::SameLine();
 
@@ -596,7 +596,8 @@ void Editor::sceneGraphPanel()
 {
     ImGui::Begin("Scene Graph", &mShowSceneGraph);
 
-    sceneGraphPopup();
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        mSceneGraphPopup = true;
 
     for (auto child : mSceneGraph.mRoot.children())
         sceneNodeRecursive(child);
@@ -608,98 +609,6 @@ void Editor::sceneGraphPanel()
     ImGui::End();
 
     mSceneGraph.updateTransforms();
-}
-
-void Editor::sceneGraphPopup()
-{
-    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        ImGui::OpenPopup("sceneGraphPopup");
-
-    if (ImGui::BeginPopup("sceneGraphPopup"))
-    {
-        bool nodeSelected = isNodeSelected();
-
-        if (ImGui::MenuItem("Cut##sceneGraph", nullptr, false, nodeSelected))
-            cutNode(mSelectedObjectID);
-
-        if (ImGui::MenuItem("Copy##sceneGraph", nullptr, false, nodeSelected))
-            copyNode(mSelectedObjectID);
-
-        if (ImGui::MenuItem("Paste##sceneGraph", nullptr, false, mCopyFlag != CopyFlags::None))
-            pasteNode(&mSceneGraph.mRoot);
-
-        bool enablePasteAsChild = (mCopyFlag != CopyFlags::None) && nodeSelected && (mSelectedObjectID != mCopiedNodeID);
-        if (ImGui::MenuItem("Paste as Child##sceneGraph", nullptr, false, enablePasteAsChild))
-            pasteNode(mSceneGraph.searchNode(mSelectedObjectID));
-
-        ImGui::Separator();
-
-        ImGui::MenuItem("Rename##sceneGraph", nullptr, false, nodeSelected);
-        if (ImGui::IsItemClicked())
-        {
-            ImGui::OpenPopup("RenameDialog##sceneGraph");
-            resetBuffer();
-        }
-
-        if (ImGui::MenuItem("Duplicate##sceneGraph", nullptr, false, nodeSelected))
-            duplicateNode(mSceneGraph.searchNode(mSelectedObjectID));
-
-        if (ImGui::MenuItem("Delete##sceneGraph", nullptr, false, nodeSelected))
-            deleteSelectedNode();
-
-        ImGui::Separator();
-
-        if (ImGui::MenuItem("Create Empty##sceneGraph"))
-            mSceneGraph.addNode(createEmptyNode(nullptr, "Empty Node"));
-
-        ImGui::MenuItem("Create from Model##sceneGraph", nullptr, false, !mRenderer.mModels.empty());
-        if (ImGui::IsItemClicked())
-            ImGui::OpenPopup("SelectModel##sceneGraph");
-
-        if (ImGui::BeginMenu("Create Light"))
-        {
-            if (ImGui::MenuItem("Directional Light##sceneGraph"))
-                nullptr;
-
-            if (ImGui::MenuItem("Point Light##sceneGraph"))
-                nullptr;
-
-            if (ImGui::MenuItem("Spot Light##sceneGraph"))
-                nullptr;
-
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginPopup("RenameDialog##sceneGraph"))
-        {
-            std::optional<std::string> newName = renameDialog();
-
-            ImGui::EndPopup();
-
-            if (newName)
-            {
-                GraphNode& node = *mSceneGraph.searchNode(mSelectedObjectID);
-                node.setName(newName.value());
-                ImGui::CloseCurrentPopup();
-            }
-        }
-
-        if (ImGui::BeginPopup("SelectModel##sceneGraph"))
-        {
-            std::optional<uuid32_t> modelID = selectModel();
-
-            ImGui::EndPopup();
-
-            if (modelID.has_value())
-            {
-                auto& model = *mRenderer.mModels.at(*modelID);
-                createModelGraph(model);
-                ImGui::CloseCurrentPopup();
-            }
-        }
-
-        ImGui::EndPopup();
-    }
 }
 
 void Editor::sceneNodeRecursive(GraphNode *node)
@@ -828,7 +737,8 @@ void Editor::assetPanel()
 {
     ImGui::Begin("Assets", &mShowAssetPanel);
 
-    assetPanelPopup();
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        mAssetPanelPopup = true;
 
     for (const auto& [modelID, model] : mRenderer.mModels)
     {
@@ -838,51 +748,6 @@ void Editor::assetPanel()
     }
 
     ImGui::End();
-}
-
-void Editor::assetPanelPopup()
-{
-    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        ImGui::OpenPopup("assetPanelPopup");
-
-    if (ImGui::BeginPopup("assetPanelPopup"))
-    {
-        if (ImGui::MenuItem("Import glTF##assetPanel"))
-            importModel("gltf");
-
-        if (ImGui::MenuItem("Import glb##assetPanel"))
-            importModel("glb");
-
-        ImGui::Separator();
-
-        bool modelSelected = isModelSelected();
-
-        if (ImGui::MenuItem("Delete##assetPanel", nullptr, false, modelSelected))
-            deleteSelectedModel();
-
-        ImGui::MenuItem("Rename##assetPanel", nullptr, false, modelSelected);
-        if (ImGui::IsItemClicked())
-        {
-            ImGui::OpenPopup("RenameDialog##assetPanel");
-            resetBuffer();
-        }
-
-        if (ImGui::BeginPopup("RenameDialog##assetPanel"))
-        {
-            std::optional<std::string> newName = renameDialog();
-
-            ImGui::EndPopup();
-
-            if (newName)
-            {
-                Model& model = *mRenderer.mModels.at(mSelectedObjectID);
-                model.name = newName.value();
-                ImGui::CloseCurrentPopup();
-            }
-        }
-
-        ImGui::EndPopup();
-    }
 }
 
 void Editor::sceneNodeDragDropSource(GraphNode *node)
@@ -981,6 +846,158 @@ void Editor::modelDragDropTargetWholeWindow()
     }
 }
 
+void Editor::popups()
+{
+    static auto openPopup = [] (bool& open, const char* func) {
+        if (open)
+        {
+            ImGui::OpenPopup(func);
+            open = false;
+        }
+    };
+
+    openPopup(mAssetPanelPopup, "assetPanelPopup");
+    openPopup(mSceneGraphPopup, "sceneGraphPopup");
+    openPopup(mSkyboxImportPopup, "skyboxImportPopup");
+    openPopup(mModelImportPopup, "modelImportPopup");
+
+    assetPanelPopup();
+    sceneGraphPopup();
+    skyboxImportPopup();
+    modelImportPopup();
+}
+
+void Editor::assetPanelPopup()
+{
+    if (ImGui::BeginPopup("assetPanelPopup"))
+    {
+        if (ImGui::MenuItem("Import glTF##assetPanel"))
+            importModel("gltf");
+
+        if (ImGui::MenuItem("Import glb##assetPanel"))
+            importModel("glb");
+
+        ImGui::Separator();
+
+        bool modelSelected = isModelSelected();
+
+        if (ImGui::MenuItem("Delete##assetPanel", nullptr, false, modelSelected))
+            deleteSelectedModel();
+
+        ImGui::MenuItem("Rename##assetPanel", nullptr, false, modelSelected);
+        if (ImGui::IsItemClicked())
+        {
+            ImGui::OpenPopup("RenameDialog##assetPanel");
+            resetBuffer();
+        }
+
+        if (ImGui::BeginPopup("RenameDialog##assetPanel"))
+        {
+            std::optional<std::string> newName = renameDialog();
+
+            ImGui::EndPopup();
+
+            if (newName)
+            {
+                Model& model = *mRenderer.mModels.at(mSelectedObjectID);
+                model.name = newName.value();
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+void Editor::sceneGraphPopup()
+{
+    if (ImGui::BeginPopup("sceneGraphPopup"))
+    {
+        bool nodeSelected = isNodeSelected();
+
+        if (ImGui::MenuItem("Cut##sceneGraph", nullptr, false, nodeSelected))
+            cutNode(mSelectedObjectID);
+
+        if (ImGui::MenuItem("Copy##sceneGraph", nullptr, false, nodeSelected))
+            copyNode(mSelectedObjectID);
+
+        if (ImGui::MenuItem("Paste##sceneGraph", nullptr, false, mCopyFlag != CopyFlags::None))
+            pasteNode(&mSceneGraph.mRoot);
+
+        bool enablePasteAsChild = (mCopyFlag != CopyFlags::None) && nodeSelected && (mSelectedObjectID != mCopiedNodeID);
+        if (ImGui::MenuItem("Paste as Child##sceneGraph", nullptr, false, enablePasteAsChild))
+            pasteNode(mSceneGraph.searchNode(mSelectedObjectID));
+
+        ImGui::Separator();
+
+        ImGui::MenuItem("Rename##sceneGraph", nullptr, false, nodeSelected);
+        if (ImGui::IsItemClicked())
+        {
+            ImGui::OpenPopup("RenameDialog##sceneGraph");
+            resetBuffer();
+        }
+
+        if (ImGui::MenuItem("Duplicate##sceneGraph", nullptr, false, nodeSelected))
+            duplicateNode(mSceneGraph.searchNode(mSelectedObjectID));
+
+        if (ImGui::MenuItem("Delete##sceneGraph", nullptr, false, nodeSelected))
+            deleteSelectedNode();
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Create Empty##sceneGraph"))
+            mSceneGraph.addNode(createEmptyNode(nullptr, "Empty Node"));
+
+        ImGui::MenuItem("Create from Model##sceneGraph", nullptr, false, !mRenderer.mModels.empty());
+        if (ImGui::IsItemClicked())
+            ImGui::OpenPopup("SelectModel##sceneGraph");
+
+        if (ImGui::BeginMenu("Create Light"))
+        {
+            if (ImGui::MenuItem("Directional Light##sceneGraph"))
+                nullptr;
+
+            if (ImGui::MenuItem("Point Light##sceneGraph"))
+                nullptr;
+
+            if (ImGui::MenuItem("Spot Light##sceneGraph"))
+                nullptr;
+
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginPopup("RenameDialog##sceneGraph"))
+        {
+            std::optional<std::string> newName = renameDialog();
+
+            ImGui::EndPopup();
+
+            if (newName)
+            {
+                GraphNode& node = *mSceneGraph.searchNode(mSelectedObjectID);
+                node.setName(newName.value());
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        if (ImGui::BeginPopup("SelectModel##sceneGraph"))
+        {
+            std::optional<uuid32_t> modelID = selectModel();
+
+            ImGui::EndPopup();
+
+            if (modelID.has_value())
+            {
+                auto& model = *mRenderer.mModels.at(*modelID);
+                createModelGraph(model);
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
 void Editor::skyboxImportPopup()
 {
     static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
@@ -994,7 +1011,7 @@ void Editor::skyboxImportPopup()
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Appearing);
 
-    if (ImGui::BeginPopupModal("Import Skybox Textures", nullptr, windowFlags))
+    if (ImGui::BeginPopupModal("skyboxImportPopup", nullptr, windowFlags))
     {
         ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign, ImVec2(0.5f, 0.5f));
         ImGui::SeparatorText("Import Skybox Textures");
@@ -1069,7 +1086,52 @@ void Editor::skyboxImportPopup()
 
 void Editor::modelImportPopup()
 {
+    static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
+                                          ImGuiWindowFlags_NoSavedSettings |
+                                          ImGuiWindowFlags_NoScrollbar |
+                                          ImGuiWindowFlags_NoResize;
 
+
+    static std::string path = "...";
+    static bool normalize = false;
+    static bool flipUVs = false;
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+
+    ImGui::SetNextWindowBgAlpha(1.0f);
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal("modelImportPopup", nullptr, windowFlags))
+    {
+        ImGui::Button("Select");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##Model-path", const_cast<char *>(path.c_str()), 3);
+        ImGui::EndDisabled();
+        ImGui::Separator();
+
+        float padding = 10.0f;
+        float buttonWidth = 80.0f;
+        float spacing = 10.0f;
+        float totalWidth = (buttonWidth * 2) + spacing;
+
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - totalWidth - padding);
+        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - padding);
+
+        if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::SameLine();
+
+        ImGui::BeginDisabled(path != "...");
+        if (ImGui::Button("OK", ImVec2(buttonWidth, 0)))
+        {
+        }
+        ImGui::EndDisabled();
+
+        ImGui::EndPopup();
+    }
 }
 
 void Editor::importModel(const char* type)

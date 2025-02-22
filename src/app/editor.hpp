@@ -40,7 +40,6 @@ private:
     void rendererPanel();
 
     void sceneGraphPanel();
-    void sceneGraphPopup();
     void sceneNodeRecursive(GraphNode* node);
     void createModelGraph(Model& model);
     GraphNode* createModelGraphRecursive(Model& model, const SceneNode& sceneNode, GraphNode* parent);
@@ -52,7 +51,6 @@ private:
     void duplicateNode(GraphNode* node);
 
     void assetPanel();
-    void assetPanelPopup();
 
     void inspectorPanel();
     void modelInspector(uuid32_t modelID);
@@ -74,6 +72,9 @@ private:
     void modelDragDropSource(uuid32_t modelID);
     void modelDragDropTargetWholeWindow();
 
+    void popups();
+    void assetPanelPopup();
+    void sceneGraphPopup();
     void skyboxImportPopup();
     void modelImportPopup();
 
@@ -102,6 +103,11 @@ private:
     bool mShowInspectorPanel;
     bool mShowRendererPanel;
     bool mShowDebugPanel;
+
+    bool mAssetPanelPopup = false;
+    bool mSceneGraphPopup = false;
+    bool mSkyboxImportPopup = false;
+    bool mModelImportPopup = false;
 
     ImVec2 mViewportSize;
     uuid32_t mSelectedObjectID;
