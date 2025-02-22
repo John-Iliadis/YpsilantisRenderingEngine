@@ -35,7 +35,8 @@ public:
     struct LoadModel
     {
         std::filesystem::path path;
-        // options
+        bool normalize;
+        bool flipUVs;
     };
 
     struct ModelLoaded
@@ -68,7 +69,7 @@ public:
     static Message modelDeleted(uuid32_t modelID);
     static Message meshInstanceUpdate(uuid32_t meshID, uuid32_t objectID, glm::mat4 transformation);
     static Message removeMeshInstance(uuid32_t meshID, uuid32_t objectID);
-    static Message loadModel(const std::filesystem::path& path);
+    static Message loadModel(const std::filesystem::path& path, bool normalize, bool flipUVs);
     static Message modelLoaded(std::shared_ptr<Model> model);
 };
 

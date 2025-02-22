@@ -33,13 +33,13 @@ private:
     void imguiEvents();
     void mainMenuBar();
     void cameraPanel();
-
-    void debugPanel();
-    void plotPerformanceGraphs();
-
-    void rendererPanel();
-
+    void assetPanel();
     void sceneGraphPanel();
+    void rendererPanel();
+    void inspectorPanel();
+    void viewPort();
+    void debugPanel();
+
     void sceneNodeRecursive(GraphNode* node);
     void createModelGraph(Model& model);
     GraphNode* createModelGraphRecursive(Model& model, const SceneNode& sceneNode, GraphNode* parent);
@@ -50,17 +50,12 @@ private:
     void pasteNode(GraphNode* parent);
     void duplicateNode(GraphNode* node);
 
-    void assetPanel();
-
-    void inspectorPanel();
     void modelInspector(uuid32_t modelID);
     void matTexInspector(const char* label, const Texture& texture);
     void sceneNodeInspector(GraphNode* node);
     void emptyNodeInspector(GraphNode* node);
     void meshNodeInspector(GraphNode* node);
     void nodeTransform(GraphNode* node);
-
-    void viewPort();
 
     void deleteSelectedObject();
     void deleteSelectedNode();
@@ -78,7 +73,8 @@ private:
     void skyboxImportPopup();
     void modelImportPopup();
 
-    void importModel(const char* type);
+    void importModel(const ModelImportData& importData);
+    std::filesystem::path selectModelFileDialog();
     void checkPayloadType(const char* type);
     void resetBuffer();
     void helpMarker(const char* desc);
@@ -90,6 +86,7 @@ private:
     bool isModelSelected();
     void countFPS();
     void updateFrametimeStats();
+    void plotPerformanceGraphs();
 
 private:
     Renderer& mRenderer;

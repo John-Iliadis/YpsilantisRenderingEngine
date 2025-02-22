@@ -18,6 +18,13 @@
 #include "vertex.hpp"
 #include "model.hpp"
 
+struct ModelImportData
+{
+    std::string path;
+    bool normalize;
+    bool flipUVs;
+};
+
 struct MeshData
 {
     std::string name;
@@ -49,7 +56,7 @@ public:
     std::vector<std::string> materialNames;
 
 public:
-    ModelLoader(const VulkanRenderDevice& renderDevice, const std::filesystem::path& path);
+    ModelLoader(const VulkanRenderDevice& renderDevice, const ModelImportData& importData);
     ~ModelLoader() = default;
 
     ModelLoader(const ModelLoader& other) = delete;

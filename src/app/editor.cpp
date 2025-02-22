@@ -79,9 +79,6 @@ void Editor::mainMenuBar()
             if (ImGui::MenuItem("Import Model"))
                 mModelImportPopup = true;
 
-            if (ImGui::MenuItem("Import glb"))
-                importModel("glb");
-
             ImGui::EndMenu();
         }
 
@@ -222,6 +219,8 @@ void Editor::modelInspector(uuid32_t modelID)
             ImGui::EndCombo();
         }
     }
+
+    ImGui::Spacing();
 
     if (!model.materials.empty())
     {
@@ -871,11 +870,8 @@ void Editor::assetPanelPopup()
 {
     if (ImGui::BeginPopup("assetPanelPopup"))
     {
-        if (ImGui::MenuItem("Import glTF##assetPanel"))
-            importModel("gltf");
-
-        if (ImGui::MenuItem("Import glb##assetPanel"))
-            importModel("glb");
+        if (ImGui::MenuItem("Import Model##assetPanel"))
+            mModelImportPopup = true;
 
         ImGui::Separator();
 
@@ -1088,27 +1084,56 @@ void Editor::modelImportPopup()
 {
     static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
                                           ImGuiWindowFlags_NoSavedSettings |
-                                          ImGuiWindowFlags_NoScrollbar |
-                                          ImGuiWindowFlags_NoResize;
+                                          ImGuiWindowFlags_NoScrollbar;
 
-
-    static std::string path = "...";
-    static bool normalize = false;
-    static bool flipUVs = false;
+    static const char* preview = "...";
+    static ModelImportData importData {
+        .normalize = false,
+        .flipUVs = false,
+    };
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 
     ImGui::SetNextWindowBgAlpha(1.0f);
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(250, 180), ImVec2(FLT_MAX, FLT_MAX));
 
     if (ImGui::BeginPopupModal("modelImportPopup", nullptr, windowFlags))
     {
-        ImGui::Button("Select");
+        ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign, ImVec2(0.5f, 0.5f));
+        ImGui::SeparatorText("Import Settings");
+        ImGui::PopStyleVar();
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Select"))
+        {
+            auto path = selectModelFileDialog();
+            if (!path.empty()) importData.path = path.string();
+        }
+
         ImGui::SameLine();
         ImGui::BeginDisabled();
-        ImGui::InputText("##Model-path", const_cast<char *>(path.c_str()), 3);
+
+        ImGui::PushItemWidth(importData.path.empty()? ImGui::GetContentRegionAvail().x
+                                                             : ImGui::CalcTextSize(importData.path.data()).x + 8);
+
+        if (importData.path.empty()) ImGui::InputText("##Model-path", const_cast<char*>(preview), 3);
+        else ImGui::InputText("##Model-path", importData.path.data(), importData.path.size());
+
+        ImGui::PopItemWidth();
         ImGui::EndDisabled();
+
+        ImGui::Separator();
+        ImGui::Checkbox("Normalize to unit scale", &importData.normalize);
+        ImGui::SameLine();
+        helpMarker("Scales the model so its coordinates fit within unit space.");
+
+        ImGui::Checkbox("Flip texture coordinates", &importData.flipUVs);
+        ImGui::SameLine();
+        helpMarker("Flips Y texture coordinate.");
+
         ImGui::Separator();
 
         float padding = 10.0f;
@@ -1120,33 +1145,35 @@ void Editor::modelImportPopup()
         ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - padding);
 
         if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
+        {
+            importData = {};
             ImGui::CloseCurrentPopup();
+        }
 
         ImGui::SameLine();
 
-        ImGui::BeginDisabled(path != "...");
+        ImGui::BeginDisabled(importData.path.empty());
         if (ImGui::Button("OK", ImVec2(buttonWidth, 0)))
         {
+            importModel(importData);
+            importData = {};
+            ImGui::CloseCurrentPopup();
         }
+
         ImGui::EndDisabled();
 
         ImGui::EndPopup();
     }
 }
 
-void Editor::importModel(const char* type)
+void Editor::importModel(const ModelImportData &importData)
 {
-    std::filesystem::path path;
+    mRenderer.importModel(importData);
+}
 
-    if (!strcmp(type, "gltf"))
-        path = fileDialog("Select glTF Model", "glTF Files *.gltf\0*.gltf\0\0");
-    else
-        path = fileDialog("Select glb Model", "glb Files *.glb\0*.glb\0\0");
-
-    if (!path.empty())
-    {
-        mRenderer.importModel(path);
-    }
+std::filesystem::path Editor::selectModelFileDialog()
+{
+    return fileDialog("Select glTF Model", "glTF Files *.gltf *.glb\0*.gltf\0.*glb\0\0");
 }
 
 void Editor::checkPayloadType(const char *type)

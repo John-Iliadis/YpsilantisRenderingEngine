@@ -104,10 +104,10 @@ void Renderer::render(VkCommandBuffer commandBuffer)
     executePostProcessingRenderpass(commandBuffer);
 }
 
-void Renderer::importModel(const std::filesystem::path &path)
+void Renderer::importModel(const ModelImportData& importData)
 {
-    bool loaded = std::find_if(mModels.begin(), mModels.end(), [&path] (const auto& pair) {
-        return path == pair.second->path;
+    bool loaded = std::find_if(mModels.begin(), mModels.end(), [&importData] (const auto& pair) {
+        return importData.path == pair.second->path;
     }) != mModels.end();
 
     if (loaded)
@@ -116,7 +116,10 @@ void Renderer::importModel(const std::filesystem::path &path)
         return;
     }
 
-    SNS::publishMessage(Topic::Type::Renderer, Message::loadModel(path));
+    SNS::publishMessage(Topic::Type::Renderer,
+                        Message::loadModel(importData.path,
+                                           importData.normalize,
+                                           importData.flipUVs));
 }
 
 void Renderer::deleteModel(uuid32_t id)

@@ -26,7 +26,7 @@ public:
     void update();
     void render(VkCommandBuffer commandBuffer);
 
-    void importModel(const std::filesystem::path& path);
+    void importModel(const ModelImportData& importData);
     void deleteModel(uuid32_t id);
     void resize(uint32_t width, uint32_t height);
     void notify(const Message &message) override;

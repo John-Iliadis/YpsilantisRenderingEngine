@@ -20,14 +20,14 @@ Message Message::removeMeshInstance(uuid32_t meshID, uuid32_t objectID)
     return Message(std::in_place_type_t<Message::RemoveMeshInstance>(), meshID, objectID);
 }
 
-Message Message::loadModel(const std::filesystem::path &path)
-{
-    return Message(std::in_place_type_t<Message::LoadModel>(), path);
-}
-
 Message Message::modelLoaded(std::shared_ptr<Model> model)
 {
     return Message(std::in_place_type_t<Message::ModelLoaded>(), model);
+}
+
+Message Message::loadModel(const std::filesystem::path &path, bool normalize, bool flipUVs)
+{
+    return Message(std::in_place_type_t<Message::LoadModel>(), path, normalize, flipUVs);
 }
 
 void Topic::addSubscriber(SubscriberSNS *subscriber)

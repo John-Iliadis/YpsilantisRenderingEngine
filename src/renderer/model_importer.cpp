@@ -16,7 +16,8 @@ static constexpr uint32_t sImportFlags
     aiProcess_RemoveRedundantMaterials |
     aiProcess_SortByPType |
     aiProcess_GenUVCoords |
-    aiProcess_ValidateDataStructure
+    aiProcess_ValidateDataStructure |
+    aiProcess_PreTransformVertices
 };
 
 static constexpr int sRemoveComponents
@@ -33,8 +34,8 @@ static constexpr int sRemovePrimitives
     aiPrimitiveType_LINE
 };
 
-ModelLoader::ModelLoader(const VulkanRenderDevice &renderDevice, const std::filesystem::path &path)
-    : path(path)
+ModelLoader::ModelLoader(const VulkanRenderDevice& renderDevice, const ModelImportData& importData)
+    : path(importData.path)
     , root()
     , mRenderDevice(renderDevice)
     , mSuccess()
@@ -43,8 +44,11 @@ ModelLoader::ModelLoader(const VulkanRenderDevice &renderDevice, const std::file
 
     mImporter.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, sRemoveComponents);
     mImporter.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, sRemovePrimitives);
+    mImporter.SetPropertyBool(AI_CONFIG_PP_PTV_NORMALIZE, importData.normalize);
 
     mImporter.ReadFile(path.string(), sImportFlags);
+
+    if (importData.flipUVs) stbi_set_flip_vertically_on_load(true);
 
     auto scene = mImporter.GetScene();
 
@@ -72,6 +76,8 @@ ModelLoader::ModelLoader(const VulkanRenderDevice &renderDevice, const std::file
         debugLog("Failed to load model: " + path.string());
         debugLog("Exception caught: " + std::string(e.what()));
     }
+
+    stbi_set_flip_vertically_on_load(false);
 }
 
 bool ModelLoader::success() const
@@ -473,8 +479,14 @@ void ModelImporter::notify(const Message &message)
 {
     if (const auto m = message.getIf<Message::LoadModel>())
     {
-        auto future = std::async(std::launch::async, [this, path = m->path] () {
-            return std::make_unique<ModelLoader>(mRenderDevice, path);
+        ModelImportData importData {
+            .path = m->path.string(),
+            .normalize = m->normalize,
+            .flipUVs = m->flipUVs
+        };
+
+        auto future = std::async(std::launch::async, [this, importData] () {
+            return std::make_unique<ModelLoader>(mRenderDevice, importData);
         });
 
         mModelDataFutures.emplace(m->path, std::move(future));
