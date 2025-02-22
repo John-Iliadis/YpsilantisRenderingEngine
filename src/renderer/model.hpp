@@ -49,6 +49,9 @@ public:
     std::vector<std::string> materialNames;
     std::vector<Mesh> meshes;
 
+    VkCullModeFlags cullMode;
+    VkFrontFace frontFace;
+
 public:
     Model(const VulkanRenderDevice& renderDevice);
     ~Model();
@@ -72,5 +75,8 @@ private:
     const VulkanRenderDevice& mRenderDevice;
     VulkanBuffer mMaterialsUBO;
 };
+
+const char* toStr(VkCullModeFlags cullMode);
+const char* toStr(VkFrontFace frontFace);
 
 #endif //VULKANRENDERINGENGINE_MODEL_HPP

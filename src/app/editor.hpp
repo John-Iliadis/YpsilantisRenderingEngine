@@ -38,7 +38,6 @@ private:
     void plotPerformanceGraphs();
 
     void rendererPanel();
-    void skyboxImportPopup();
 
     void sceneGraphPanel();
     void sceneGraphPopup();
@@ -75,9 +74,13 @@ private:
     void modelDragDropSource(uuid32_t modelID);
     void modelDragDropTargetWholeWindow();
 
+    void skyboxImportPopup();
+    void modelImportPopup();
+
     void importModel(const char* type);
     void checkPayloadType(const char* type);
     void resetBuffer();
+    void helpMarker(const char* desc);
     GraphNode* copyGraphNode(GraphNode* node);
     std::optional<std::string> renameDialog();
     std::optional<uuid32_t> selectModel();

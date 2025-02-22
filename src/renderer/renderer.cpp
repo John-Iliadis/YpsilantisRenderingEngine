@@ -899,8 +899,6 @@ void Renderer::createPrepassPipeline()
         .rasterization = {
             .rasterizerDiscardPrimitives = false,
             .polygonMode = VK_POLYGON_MODE_FILL,
-            .cullMode = VK_CULL_MODE_BACK_BIT,
-            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
             .lineWidth = 1.f
         },
         .multisampling = {
@@ -916,7 +914,9 @@ void Renderer::createPrepassPipeline()
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_CULL_MODE_EXT,
+            VK_DYNAMIC_STATE_FRONT_FACE_EXT
         },
         .pipelineLayout = {
             .dsLayouts = {
@@ -1197,8 +1197,6 @@ void Renderer::createShadingPipeline()
         .rasterization = {
             .rasterizerDiscardPrimitives = false,
             .polygonMode = VK_POLYGON_MODE_FILL,
-            .cullMode = VK_CULL_MODE_BACK_BIT,
-            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
             .lineWidth = 1.f
         },
         .multisampling = {
@@ -1214,7 +1212,9 @@ void Renderer::createShadingPipeline()
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_CULL_MODE_EXT,
+            VK_DYNAMIC_STATE_FRONT_FACE_EXT
         },
         .pipelineLayout = {
             .dsLayouts = {

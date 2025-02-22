@@ -7,6 +7,8 @@
 Model::Model(const VulkanRenderDevice& renderDevice)
     : SubscriberSNS({Topic::Type::SceneGraph})
     , mRenderDevice(renderDevice)
+    , cullMode(VK_CULL_MODE_BACK_BIT)
+    , frontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
 {
 }
 
@@ -68,6 +70,9 @@ void Model::createTextureDescriptorSets(VkDescriptorSetLayout dsLayout)
 
 void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex) const
 {
+    pfnCmdSetCullModeEXT(commandBuffer, cullMode);
+    pfnCmdSetFrontFaceEXT(commandBuffer, frontFace);
+
     for (const auto& mesh : meshes)
     {
         uint32_t materialIndex = mesh.materialIndex;
@@ -214,4 +219,26 @@ void Model::bindTextures(VkCommandBuffer commandBuffer, VkPipelineLayout pipelin
                             matDsIndex,
                             descriptorWrites.size(),
                             descriptorWrites.data());
+}
+
+const char* toStr(VkCullModeFlags cullMode)
+{
+    switch (cullMode)
+    {
+        case VK_CULL_MODE_NONE: return "None";
+        case VK_CULL_MODE_BACK_BIT: return "Back";
+        case VK_CULL_MODE_FRONT_BIT: return "Front";
+        case VK_CULL_MODE_FRONT_AND_BACK: return "Front and Back";
+        default: return "Unknown";
+    }
+}
+
+const char* toStr(VkFrontFace frontFace)
+{
+    switch (frontFace)
+    {
+        case VK_FRONT_FACE_CLOCKWISE: return "Clockwise";
+        case VK_FRONT_FACE_COUNTER_CLOCKWISE: return "Counter Clockwise";
+        default: return "Unknown";
+    }
 }

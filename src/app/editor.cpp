@@ -189,6 +189,38 @@ void Editor::modelInspector(uuid32_t modelID)
         ImGui::Text("Texture Count: %zu", model.textures.size());
     }
 
+    if (ImGui::CollapsingHeader("Model Settings", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::SeparatorText("Face Culling");
+        if (ImGui::BeginCombo("Cull Mode", toStr(model.cullMode)))
+        {
+            if (ImGui::Selectable("None", !strcmp("None", toStr(model.cullMode))))
+                model.cullMode = VK_CULL_MODE_NONE;
+
+            if (ImGui::Selectable("Back", !strcmp("Back", toStr(model.cullMode))))
+                model.cullMode = VK_CULL_MODE_BACK_BIT;
+
+            if (ImGui::Selectable("Front", !strcmp("Front", toStr(model.cullMode))))
+                model.cullMode = VK_CULL_MODE_FRONT_BIT;
+
+            if (ImGui::Selectable("Front and Back", !strcmp("Front and Back", toStr(model.cullMode))))
+                model.cullMode = VK_CULL_MODE_FRONT_AND_BACK;
+
+            ImGui::EndCombo();
+        }
+
+        if (ImGui::BeginCombo("Front Face", toStr(model.frontFace)))
+        {
+            if (ImGui::Selectable("Clockwise", !strcmp("Clockwise", toStr(model.frontFace))))
+                model.frontFace = VK_FRONT_FACE_CLOCKWISE;
+
+            if (ImGui::Selectable("Counter Clockwise", !strcmp("Counter Clockwise", toStr(model.frontFace))))
+                model.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+            ImGui::EndCombo();
+        }
+    }
+
     if (!model.materials.empty())
     {
         static std::unordered_map<uuid32_t, uint32_t> sSelectedMatIndex;
@@ -211,7 +243,6 @@ void Editor::modelInspector(uuid32_t modelID)
 
                 ImGui::EndCombo();
             }
-
 
             Material& mat = model.materials.at(sSelectedMatIndex.at(modelID));
             bool matNeedsUpdate = false;
@@ -559,92 +590,6 @@ void Editor::rendererPanel()
     skyboxImportPopup();
 
     ImGui::End();
-}
-
-void Editor::skyboxImportPopup()
-{
-    static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
-                                          ImGuiWindowFlags_NoSavedSettings |
-                                          ImGuiWindowFlags_NoScrollbar |
-                                          ImGuiWindowFlags_NoResize;
-
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-
-    ImGui::SetNextWindowBgAlpha(1.0f);
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Appearing);
-
-    if (ImGui::BeginPopupModal("Import Skybox Textures", nullptr, windowFlags))
-    {
-        ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign, ImVec2(0.5f, 0.5f));
-        ImGui::SeparatorText("Import Skybox Textures");
-        ImGui::PopStyleVar();
-        ImGui::Separator();
-
-        char c[3];
-        c[0] = '.';
-        c[1] = '.';
-        c[2] = '.';
-
-        ImGui::Button("Add X+");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::PushItemWidth(-FLT_MIN);
-        ImGui::InputText("##X+input", c, 3);
-        ImGui::PopItemWidth();
-        ImGui::EndDisabled();
-
-        ImGui::Button("Add X-");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::InputText("##X-input", c, 3);
-        ImGui::EndDisabled();
-
-        ImGui::Button("Add Y+");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::InputText("##Y+input", c, 3);
-        ImGui::EndDisabled();
-
-        ImGui::Button("Add Y-");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::InputText("##Y-input", c, 3);
-        ImGui::EndDisabled();
-
-        ImGui::Button("Add Z+");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::InputText("##Z+input", c, 3);
-        ImGui::EndDisabled();
-
-        ImGui::Button("Add Z-");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::InputText("##Z-input", c, 3);
-        ImGui::EndDisabled();
-        ImGui::Separator();
-
-        float padding = 10.0f;  // Padding from the edge
-        float buttonWidth = 80.0f;
-        float spacing = 10.0f;  // Space between buttons
-        float totalWidth = (buttonWidth * 2) + spacing;
-
-        // Align to bottom-right
-        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - totalWidth - padding);
-        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - padding);
-
-        if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
-            ImGui::CloseCurrentPopup();
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("OK", ImVec2(buttonWidth, 0)))
-        {
-        }
-
-        ImGui::EndPopup();
-    }
 }
 
 void Editor::sceneGraphPanel()
@@ -1036,6 +981,97 @@ void Editor::modelDragDropTargetWholeWindow()
     }
 }
 
+void Editor::skyboxImportPopup()
+{
+    static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
+                                          ImGuiWindowFlags_NoSavedSettings |
+                                          ImGuiWindowFlags_NoScrollbar |
+                                          ImGuiWindowFlags_NoResize;
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+
+    ImGui::SetNextWindowBgAlpha(1.0f);
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal("Import Skybox Textures", nullptr, windowFlags))
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign, ImVec2(0.5f, 0.5f));
+        ImGui::SeparatorText("Import Skybox Textures");
+        ImGui::PopStyleVar();
+        ImGui::Separator();
+
+        char c[3];
+        c[0] = '.';
+        c[1] = '.';
+        c[2] = '.';
+
+        ImGui::Button("Add X+");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::PushItemWidth(-FLT_MIN);
+        ImGui::InputText("##X+input", c, 3);
+        ImGui::PopItemWidth();
+        ImGui::EndDisabled();
+
+        ImGui::Button("Add X-");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##X-input", c, 3);
+        ImGui::EndDisabled();
+
+        ImGui::Button("Add Y+");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##Y+input", c, 3);
+        ImGui::EndDisabled();
+
+        ImGui::Button("Add Y-");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##Y-input", c, 3);
+        ImGui::EndDisabled();
+
+        ImGui::Button("Add Z+");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##Z+input", c, 3);
+        ImGui::EndDisabled();
+
+        ImGui::Button("Add Z-");
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+        ImGui::InputText("##Z-input", c, 3);
+        ImGui::EndDisabled();
+        ImGui::Separator();
+
+        float padding = 10.0f;  // Padding from the edge
+        float buttonWidth = 80.0f;
+        float spacing = 10.0f;  // Space between buttons
+        float totalWidth = (buttonWidth * 2) + spacing;
+
+        // Align to bottom-right
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - totalWidth - padding);
+        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - padding);
+
+        if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("OK", ImVec2(buttonWidth, 0)))
+        {
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+void Editor::modelImportPopup()
+{
+
+}
+
 void Editor::importModel(const char* type)
 {
     std::filesystem::path path;
@@ -1189,5 +1225,17 @@ void Editor::updateFrametimeStats()
     {
         mFrametimeMs = mDt * 1000.f;
         accumulatedTime = 0.f;
+    }
+}
+
+void Editor::helpMarker(const char* desc)
+{
+    ImGui::TextDisabled("(?)");
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(desc);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
     }
 }
