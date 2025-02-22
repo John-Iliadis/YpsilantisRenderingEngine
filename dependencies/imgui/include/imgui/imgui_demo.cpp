@@ -3863,7 +3863,7 @@ static void ShowDemoWindowPopups()
     IMGUI_DEMO_MARKER("Popups/Modals");
     if (ImGui::TreeNode("Modals"))
     {
-        ImGui::TextWrapped("Modal windows are like popups but the user cannot close them by clicking outside.");
+        ImGui::TextWrapped("Modal windows are like sharedPopups but the user cannot close them by clicking outside.");
 
         if (ImGui::Button("Delete.."))
             ImGui::OpenPopup("Delete?");

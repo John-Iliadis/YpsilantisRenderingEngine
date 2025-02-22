@@ -54,7 +54,7 @@ void Editor::update(float dt)
     if (mShowDebugPanel)
         debugPanel();
 
-    popups();
+    sharedPopups();
 }
 
 void Editor::imguiEvents()
@@ -211,9 +211,9 @@ void Editor::modelInspector(uuid32_t modelID)
 
             ImGui::EndCombo();
         }
-    }
 
-    ImGui::Spacing();
+        ImGui::Spacing();
+    }
 
     if (!model.materials.empty())
     {
@@ -569,7 +569,7 @@ void Editor::rendererPanel()
         ImGui::Separator();
 
         if (ImGui::Button("Import Faces"))
-            mSkyboxImportPopup = true;
+            ImGui::OpenPopup("skyboxImportPopup");
 
         ImGui::SameLine();
 
@@ -589,7 +589,7 @@ void Editor::sceneGraphPanel()
     ImGui::Begin("Scene Graph", &mShowSceneGraph);
 
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        mSceneGraphPopup = true;
+        ImGui::OpenPopup("sceneGraphPopup");
 
     for (auto child : mSceneGraph.mRoot.children())
         sceneNodeRecursive(child);
@@ -597,6 +597,8 @@ void Editor::sceneGraphPanel()
     bool nodeHovered = ImGui::IsItemHovered();
     ImGui::Dummy(ImVec2(0, 50.f));
     sceneNodeDragDropTargetWholeWindow(&mSceneGraph.mRoot, nodeHovered);
+
+    sceneGraphPopup();
 
     ImGui::End();
 
@@ -651,7 +653,7 @@ GraphNode *Editor::createModelGraphRecursive(Model &model, const SceneNode &scen
     if (!sceneNode.meshIndices.empty())
         graphNode = createMeshNode(model, sceneNode, parent);
     else
-        graphNode = createEmptyNode(parent, sceneNode.name);
+        graphNode = new GraphNode(NodeType::Empty, sceneNode.name, sceneNode.transformation, parent, model.id);
 
     for (const auto& child : sceneNode.children)
         graphNode->addChild(createModelGraphRecursive(model, child, graphNode));
@@ -730,7 +732,7 @@ void Editor::assetPanel()
     ImGui::Begin("Assets", &mShowAssetPanel);
 
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        mAssetPanelPopup = true;
+        ImGui::OpenPopup("assetPanelPopup");
 
     for (const auto& [modelID, model] : mRenderer.mModels)
     {
@@ -738,6 +740,8 @@ void Editor::assetPanel()
         lastItemClicked(modelID);
         modelDragDropSource(modelID);
     }
+
+    assetPanelPopup();
 
     ImGui::End();
 }
@@ -838,7 +842,7 @@ void Editor::modelDragDropTargetWholeWindow()
     }
 }
 
-void Editor::popups()
+void Editor::sharedPopups()
 {
     static auto openPopup = [] (bool& open, const char* func) {
         if (open)
@@ -848,14 +852,8 @@ void Editor::popups()
         }
     };
 
-    openPopup(mAssetPanelPopup, "assetPanelPopup");
-    openPopup(mSceneGraphPopup, "sceneGraphPopup");
-    openPopup(mSkyboxImportPopup, "skyboxImportPopup");
     openPopup(mModelImportPopup, "modelImportPopup");
 
-    assetPanelPopup();
-    sceneGraphPopup();
-    skyboxImportPopup();
     modelImportPopup();
 }
 
@@ -1109,8 +1107,10 @@ void Editor::modelImportPopup()
         ImGui::SameLine();
         ImGui::BeginDisabled();
 
-        ImGui::PushItemWidth(importData.path.empty()? ImGui::GetContentRegionAvail().x
-                                                             : ImGui::CalcTextSize(importData.path.data()).x + 8);
+        float textboxLen = ImGui::GetContentRegionAvail().x;
+        if (!importData.path.empty())textboxLen = std::min(textboxLen, ImGui::CalcTextSize(importData.path.data()).x + 8);
+
+        ImGui::PushItemWidth(textboxLen);
 
         if (importData.path.empty()) ImGui::InputText("##Model-path", const_cast<char*>(preview), 3);
         else ImGui::InputText("##Model-path", importData.path.data(), importData.path.size());

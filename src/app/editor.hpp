@@ -67,7 +67,7 @@ private:
     void modelDragDropSource(uuid32_t modelID);
     void modelDragDropTargetWholeWindow();
 
-    void popups();
+    void sharedPopups();
     void assetPanelPopup();
     void sceneGraphPopup();
     void skyboxImportPopup();
@@ -100,10 +100,6 @@ private:
     bool mShowInspectorPanel = true;
     bool mShowRendererPanel = true;
     bool mShowDebugPanel = true;
-
-    bool mAssetPanelPopup = false;
-    bool mSceneGraphPopup = false;
-    bool mSkyboxImportPopup = false;
     bool mModelImportPopup = false;
 
     ImVec2 mViewportSize;
