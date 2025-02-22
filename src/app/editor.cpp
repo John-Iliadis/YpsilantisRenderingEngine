@@ -124,27 +124,34 @@ void Editor::cameraPanel()
         mRenderer.mCamera.setState(Camera::State::VIEW_MODE);
 
     ImGui::SameLine();
+    helpMarker("Press V");
+
     if (ImGui::RadioButton("Edit", cameraState == Camera::State::EDITOR_MODE))
         mRenderer.mCamera.setState(Camera::State::EDITOR_MODE);
 
     ImGui::SameLine();
+    helpMarker("Press E");
+
     if (ImGui::RadioButton("First Person", cameraState == Camera::State::FIRST_PERSON))
         mRenderer.mCamera.setState(Camera::State::FIRST_PERSON);
+
+    ImGui::SameLine();
+    helpMarker("Press F");
 
     ImGui::Separator();
 
     cameraState = mRenderer.mCamera.state();
 
-    ImGui::DragFloat("Rotate Sensitivity", mRenderer.mCamera.rotateSensitivity(), 0.1f, -FLT_MAX, FLT_MAX, "%.0f");
+    ImGui::DragFloat("Rotate Sensitivity", mRenderer.mCamera.rotateSensitivity(), 0.1f, -FLT_MAX, FLT_MAX, "%.0f", ImGuiSliderFlags_AlwaysClamp);
 
     if (cameraState == Camera::State::VIEW_MODE || cameraState == Camera::State::EDITOR_MODE)
-        ImGui::DragFloat("Z Scroll Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.2f");
+        ImGui::DragFloat("Z Scroll Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
     if (cameraState == Camera::State::VIEW_MODE)
-        ImGui::DragFloat("Pan Speed", mRenderer.mCamera.panSpeed(), 0.01f, 0.f, FLT_MAX, "%.2f");
+        ImGui::DragFloat("Pan Speed", mRenderer.mCamera.panSpeed(), 0.1f, 0.f, FLT_MAX, "%.0f", ImGuiSliderFlags_AlwaysClamp);
 
     if (cameraState == Camera::State::FIRST_PERSON)
-        ImGui::DragFloat("Fly Speed", mRenderer.mCamera.flySpeed(), 0.01f, 0.01f, FLT_MAX, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::DragFloat("Fly Speed", mRenderer.mCamera.flySpeed(), 0.1f, 0.01f, FLT_MAX, "%.0f", ImGuiSliderFlags_AlwaysClamp);
 
     ImGui::End();
 }

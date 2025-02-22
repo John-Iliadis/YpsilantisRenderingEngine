@@ -4,6 +4,10 @@
 
 #include "camera.hpp"
 
+static constexpr float PanVarDivisor = 100000.f;
+static constexpr float RotateVarDivisor = 200.f;
+static constexpr float FlySpeedDivisor = 20.f;
+
 static constexpr glm::mat4 sRightHandedBasis
 {
     1.f, 0.f, 0.f, 0.f,
@@ -25,10 +29,10 @@ Camera::Camera(glm::vec3 position, float fovY, float width, float height, float 
     , mFarZ(farZ)
     , mPreviousMousePos()
     , mState(Camera::State::VIEW_MODE)
-    , mFlySpeed(2.f)
-    , mPanSpeed(1.f)
+    , mFlySpeed(50.f)
+    , mPanSpeed(100.f)
     , mZScrollOffset(1.f)
-    , mRotateSensitivity(30.f)
+    , mRotateSensitivity(10.f)
     , mLeftButtonDown()
     , mRightButtonDown()
 {
@@ -156,17 +160,11 @@ void Camera::resize(uint32_t width, uint32_t height)
 
 void Camera::scroll(float x, float y)
 {
-    if (!y)
-        return;
+    if (!y) return;
 
-    switch (mState)
+    if (mState == VIEW_MODE || mState == EDITOR_MODE)
     {
-        case VIEW_MODE:
-        case EDITOR_MODE:
-        {
-            mPosition += mBasis[2] * mZScrollOffset * -glm::sign(y);
-            break;
-        }
+        mPosition += mBasis[2] * mZScrollOffset * -glm::sign(y);
     }
 }
 
@@ -194,14 +192,18 @@ void Camera::updateFirstPerson(float dt)
         mouseDt.y = ImGui::GetMousePos().y - mPreviousMousePos.y;
     }
 
-    if (z || x || mouseDt.x || mouseDt.y)
+    if (z || x)
     {
-        float xOffset = mFlySpeed * dt * glm::sign(x);
-        float zOffset = mFlySpeed * dt * glm::sign(z);
-        mPosition += mBasis[0] * xOffset + mBasis[2] * zOffset;
+        float xOffset = mFlySpeed * dt * glm::sign(x) / FlySpeedDivisor;
+        float zOffset = mFlySpeed * dt * glm::sign(z) / FlySpeedDivisor;
 
-        mTheta += -mouseDt.x * dt * mRotateSensitivity;
-        mPhi += -mouseDt.y * dt * mRotateSensitivity;
+        mPosition += mBasis[0] * xOffset + mBasis[2] * zOffset;
+    }
+
+    if (mouseDt.x || mouseDt.y)
+    {
+        mTheta += -mouseDt.x * mRotateSensitivity / RotateVarDivisor;
+        mPhi += -mouseDt.y * mRotateSensitivity / RotateVarDivisor;
         mPhi = glm::clamp(mPhi, -89.f, 89.f);
     }
 }
@@ -216,14 +218,14 @@ void Camera::updateViewMode(float dt)
     {
         if (mRightButtonDown)
         {
-            mTheta += -mouseDt.x * dt * mRotateSensitivity;
-            mPhi += -mouseDt.y * dt * mRotateSensitivity;
+            mTheta += -mouseDt.x * mRotateSensitivity / RotateVarDivisor;
+            mPhi += -mouseDt.y * mRotateSensitivity / RotateVarDivisor;
             mPhi = glm::clamp(mPhi, -89.f, 89.f);
         }
         else if (mLeftButtonDown)
         {
-            float xOffset = -mPanSpeed * dt * mouseDt.x;
-            float yOffset = mPanSpeed * dt * mouseDt.y;
+            float xOffset = -mPanSpeed * mouseDt.x / PanVarDivisor;
+            float yOffset = mPanSpeed * mouseDt.y / PanVarDivisor;
 
             mPosition += mBasis[0] * xOffset + mBasis[1] * yOffset;
         }
@@ -241,8 +243,8 @@ void Camera::updateEditorMode(float dt)
 
     if (mouseDt.x || mouseDt.y)
     {
-        mTheta += -mouseDt.x * dt * mRotateSensitivity;
-        mPhi += -mouseDt.y * dt * mRotateSensitivity;
+        mTheta += -mouseDt.x * mRotateSensitivity / RotateVarDivisor;
+        mPhi += -mouseDt.y * mRotateSensitivity / RotateVarDivisor;
         mPhi = glm::clamp(mPhi, -89.f, 89.f);
     }
 }
