@@ -47,8 +47,8 @@ void InstancedMesh::addInstance(uuid32_t id)
 
     uint32_t instanceIndex = mInstanceCount - 1;
 
-    assert(mInstanceIdToIndexMap.emplace(id, instanceIndex).second);
-    assert(mInstanceIndexToIdMap.emplace(instanceIndex, id).second);
+    check(mInstanceIdToIndexMap.emplace(id, instanceIndex).second, "Failed insert.");
+    check(mInstanceIndexToIdMap.emplace(instanceIndex, id).second, "Failed insert.");
 
     InstanceData instanceData {.id = id};
     mInstanceBuffer.update(instanceIndex * sInstanceSize, sInstanceSize, &instanceData);
@@ -80,7 +80,9 @@ void InstancedMesh::removeInstance(uuid32_t id)
         uint32_t transferIndexID = mInstanceIndexToIdMap.at(transferIndex);
 
         mInstanceIdToIndexMap.at(transferIndexID) = removeIndex;
-        mInstanceIndexToIdMap.emplace(removeIndex, transferIndex);
+
+        mInstanceIndexToIdMap.emplace(removeIndex, transferIndexID);
+        mInstanceIndexToIdMap.erase(transferIndex);
 
         mInstanceBuffer.copyBuffer(mInstanceBuffer,
                                    removeIndex * sInstanceSize,

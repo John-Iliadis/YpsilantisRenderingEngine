@@ -16,12 +16,12 @@ bool hasTextures(const Material& material)
 
 void createDefaultMaterialTextures(const VulkanRenderDevice& renderDevice)
 {
-    float baseColorTexData[4] {1.f, 1.f, 1.f, 1.f};
-    float metallicTexData[4] {1.f, 1.f, 1.f, 1.f};
-    float roughnessTexData[4] {1.f, 1.f, 1.f, 1.f};
-    float normalTexData[4] {0.5f, 0.5f, 1.f, 0.f};
-    float aoTexData[4] {1.f, 1.f, 1.f, 1.f};
-    float emissionTexData[4] {0.f, 0.f, 0.f, 0.f};
+    uint32_t baseColorTexData = 0xffffffff;
+    uint32_t metallicTexData = 0x00000000;
+    uint32_t roughnessTexData = 0xffffffff;
+    uint32_t normalTexData = 0x8080ff00;
+    uint32_t aoTexData = 0xffffffff;
+    uint32_t emissionTexData = 0x00000000;
 
     TextureSpecification specification {
         .format = VK_FORMAT_R8G8B8A8_UNORM,
@@ -41,12 +41,12 @@ void createDefaultMaterialTextures(const VulkanRenderDevice& renderDevice)
         .generateMipMaps = false
     };
 
-    defaultBaseColorTex = {renderDevice, specification, baseColorTexData};
-    defaultMetallicTex = {renderDevice, specification, metallicTexData};
-    defaultRoughnessTex = {renderDevice, specification, roughnessTexData};
-    defaultNormalTex = {renderDevice, specification, normalTexData};
-    defaultAoTex = {renderDevice, specification, aoTexData};
-    defaultEmissionTex = {renderDevice, specification, emissionTexData};
+    defaultBaseColorTex = {renderDevice, specification, &baseColorTexData};
+    defaultMetallicTex = {renderDevice, specification, &metallicTexData};
+    defaultRoughnessTex = {renderDevice, specification, &roughnessTexData};
+    defaultNormalTex = {renderDevice, specification, &normalTexData};
+    defaultAoTex = {renderDevice, specification, &aoTexData};
+    defaultEmissionTex = {renderDevice, specification, &emissionTexData};
 }
 
 void destroyDefaultMaterialTextures()
