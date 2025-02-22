@@ -93,13 +93,13 @@ private:
     SaveData& mSaveData;
     SceneGraph mSceneGraph;
 
-    bool mShowViewport;
-    bool mShowAssetPanel;
-    bool mShowSceneGraph;
-    bool mShowCameraPanel;
-    bool mShowInspectorPanel;
-    bool mShowRendererPanel;
-    bool mShowDebugPanel;
+    bool mShowViewport = true;
+    bool mShowAssetPanel = true;
+    bool mShowSceneGraph = true;
+    bool mShowCameraPanel = true;
+    bool mShowInspectorPanel = true;
+    bool mShowRendererPanel = true;
+    bool mShowDebugPanel = true;
 
     bool mAssetPanelPopup = false;
     bool mSceneGraphPopup = false;
