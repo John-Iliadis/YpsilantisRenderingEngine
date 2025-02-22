@@ -161,11 +161,6 @@ void Camera::scroll(float x, float y)
 
     switch (mState)
     {
-        case FIRST_PERSON:
-        {
-            mFlySpeed += glm::sign(y);
-            break;
-        }
         case VIEW_MODE:
         case EDITOR_MODE:
         {
