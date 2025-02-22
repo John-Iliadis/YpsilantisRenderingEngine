@@ -17,6 +17,8 @@ struct DsLayoutSpecification
     std::optional<std::string> debugName;
 };
 
+VkDescriptorSetLayoutBinding binding(uint32_t binding, VkDescriptorType type, uint32_t count, VkShaderStageFlags stages);
+
 class VulkanDsLayout
 {
 public:
@@ -39,11 +41,6 @@ private:
     VkDescriptorSetLayout mDsLayout;
 };
 
-class VulkanDs
-{
-public:
 
-private:
-};
 
 #endif //VULKANRENDERINGENGINE_VULKAN_DESCRIPTOR_HPP

@@ -13,8 +13,6 @@
 #include "instanced_mesh.hpp"
 #include "material.hpp"
 
-constexpr uint32_t PerModelMaxTextureCount = 512;
-
 struct SceneNode
 {
     std::string name;
@@ -59,18 +57,20 @@ public:
 
     void notify(const Message &message) override;
 
-    void createMaterialsSSBO();
+    void createMaterialsUBO();
     void createTextureDescriptorSets(VkDescriptorSetLayout dsLayout);
-    void createMaterialsDescriptorSet(VkDescriptorSetLayout dsLayout);
 
     void render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex) const;
 
     Mesh* getMesh(uuid32_t meshID);
 
 private:
+    void bindMaterialUBO(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t materialIndex, uint32_t matDsIndex) const;
+    void bindTextures(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t materialIndex, uint32_t matDsIndex) const;
+
+private:
     const VulkanRenderDevice& mRenderDevice;
-    VkDescriptorSet mMaterialsDS;
-    VulkanBuffer mMaterialsSSBO;
+    VulkanBuffer mMaterialsUBO;
 };
 
 #endif //VULKANRENDERINGENGINE_MODEL_HPP

@@ -40,8 +40,6 @@ VkDeviceSize imageMemoryDeviceSize(uint32_t width, uint32_t height, VkFormat for
 template<typename T>
 std::vector<T> readBufferToVector(VkDevice device, VkDeviceMemory bufferMemory, VkDeviceSize bufferSize)
 {
-    assert(bufferSize % sizeof(T) != 0);
-
     void* data;
     VkResult result = vkMapMemory(device, bufferMemory, 0, bufferSize, 0, &data);
     vulkanCheck(result, "Failed to map Vulkan buffer memory.");

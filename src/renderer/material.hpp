@@ -5,7 +5,9 @@
 #ifndef VULKANRENDERINGENGINE_MATERIAL_HPP
 #define VULKANRENDERINGENGINE_MATERIAL_HPP
 
-struct Material
+#include "../vk/vulkan_texture.hpp"
+
+struct alignas(64) Material
 {
     alignas(4) int32_t baseColorTexIndex;
     alignas(4) int32_t metallicTexIndex;
@@ -21,14 +23,16 @@ struct Material
     alignas(8) glm::vec2 offset;
 };
 
-inline bool hasTextures(const Material& material)
-{
-    return material.baseColorTexIndex != -1 ||
-        material.metallicTexIndex != -1 ||
-        material.roughnessTexIndex != -1 ||
-        material.normalTexIndex != -1 ||
-        material.aoTexIndex != -1 ||
-        material.emissionTexIndex != -1;
-}
+bool hasTextures(const Material& material);
+
+void createDefaultMaterialTextures(const VulkanRenderDevice& renderDevice);
+void destroyDefaultMaterialTextures();
+
+inline VulkanTexture defaultBaseColorTex;
+inline VulkanTexture defaultMetallicTex;
+inline VulkanTexture defaultRoughnessTex;
+inline VulkanTexture defaultNormalTex;
+inline VulkanTexture defaultAoTex;
+inline VulkanTexture defaultEmissionTex;
 
 #endif //VULKANRENDERINGENGINE_MATERIAL_HPP

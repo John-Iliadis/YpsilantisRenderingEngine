@@ -82,6 +82,7 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_renderpass.cpp
         src/vk/vulkan_renderpass.hpp
         src/renderer/material.hpp
+        src/renderer/material.cpp
 )
 
 add_subdirectory(${DEPENDENCY_DIR}/stb/)

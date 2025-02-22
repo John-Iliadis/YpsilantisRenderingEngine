@@ -20,6 +20,9 @@ inline PFN_vkCmdSetFrontFaceEXT pfnCmdSetFrontFaceEXT;
 // VK_EXT_host_query_reset
 inline PFN_vkResetQueryPoolEXT pfnResetQueryPoolEXT;
 
+// VK_KHR_push_descriptor
+inline PFN_vkCmdPushDescriptorSet pfnCmdPushDescriptorSet;
+
 inline void loadExtensionFunctionsPointers(VkInstance instance)
 {
 #ifdef DEBUG_MODE
@@ -35,6 +38,8 @@ inline void loadExtensionFunctionsPointers(VkInstance instance)
     pfnCmdSetFrontFaceEXT = reinterpret_cast<PFN_vkCmdSetFrontFaceEXT>(vkGetInstanceProcAddr(instance, "vkCmdSetFrontFaceEXT"));
 
     pfnResetQueryPoolEXT = reinterpret_cast<PFN_vkResetQueryPoolEXT>(vkGetInstanceProcAddr(instance, "vkResetQueryPoolEXT"));
+
+    pfnCmdPushDescriptorSet = reinterpret_cast<PFN_vkCmdPushDescriptorSet>(vkGetInstanceProcAddr(instance, "vkCmdPushDescriptorSetKHR"));
 }
 
 #endif //VULKANRENDERINGENGINE_VULKAN_FUNCTION_POINTERS_HPP

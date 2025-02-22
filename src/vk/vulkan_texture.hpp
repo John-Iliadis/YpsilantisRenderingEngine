@@ -81,8 +81,6 @@ public:
     VulkanTexture(VulkanTexture&& other) noexcept;
     VulkanTexture& operator=(VulkanTexture&& other) noexcept;
 
-    void uploadImageData(VkCommandBuffer commandBuffer, const void* data, uint32_t layerIndex = 0);
-    void uploadImageData(const void* data, uint32_t layerIndex = 0);
     void generateMipMaps(VkCommandBuffer commandBuffer);
     void generateMipMaps();
     void setDebugName(const std::string& debugName) override;

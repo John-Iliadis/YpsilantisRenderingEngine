@@ -169,13 +169,6 @@ void VulkanImage::transitionLayout(VkImageLayout oldLayout, VkImageLayout newLay
     endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 
-void VulkanImage::copyBuffer(const VulkanBuffer &buffer, uint32_t layerIndex)
-{
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
-    copyBuffer(commandBuffer, buffer, layerIndex);
-    endSingleTimeCommands(*mRenderDevice, commandBuffer);
-}
-
 void VulkanImage::setDebugName(const std::string &debugName)
 {
     setVulkanObjectDebugName(*mRenderDevice, VK_OBJECT_TYPE_IMAGE, debugName, image);
@@ -207,6 +200,19 @@ void VulkanImage::copyBuffer(VkCommandBuffer commandBuffer, const VulkanBuffer &
                            image,
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                            1, &copyRegion);
+}
+
+void VulkanImage::uploadImageData(const void *data, uint32_t layerIndex)
+{
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
+
+    VkDeviceSize size = width * height * formatSize(format);
+
+    VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::Host, data);
+
+    copyBuffer(commandBuffer, stagingBuffer, layerIndex);
+
+    endSingleTimeCommands(*mRenderDevice, commandBuffer);
 }
 
 VkImageView createImageView(const VulkanRenderDevice& renderDevice,

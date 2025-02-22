@@ -4,6 +4,7 @@
 
 layout (location = 0) out vec2 vTexCoords;
 layout (location = 1) out vec3 vNormal;
+layout (location = 2) out vec4 vColor;
 
 layout (set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -19,5 +20,6 @@ void main()
 {
     vTexCoords = texCoords;
     vNormal = normalMat * normal;
+    vColor = color;
     gl_Position = viewProj * modelMat * vec4(position, 1.0);
 }

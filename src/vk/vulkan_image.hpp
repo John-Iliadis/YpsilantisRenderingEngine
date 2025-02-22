@@ -44,6 +44,7 @@ public:
     VulkanImage(VulkanImage&& other) noexcept;
     VulkanImage& operator=(VulkanImage&& other) noexcept;
 
+    void uploadImageData(const void* data, uint32_t layerIndex = 0);
     void transitionLayout(VkCommandBuffer commandBuffer,
                           VkImageLayout oldLayout, VkImageLayout newLayout,
                           VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
@@ -52,7 +53,6 @@ public:
                           VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
                           VkAccessFlags srcAccess, VkAccessFlags dstAccess);
     void copyBuffer(VkCommandBuffer commandBuffer, const VulkanBuffer& buffer, uint32_t layerIndex = 0);
-    void copyBuffer(const VulkanBuffer& buffer, uint32_t layerIndex = 0);
     void swap(VulkanImage& other) noexcept;
     virtual void setDebugName(const std::string& debugName);
 

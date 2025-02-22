@@ -20,6 +20,8 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 
     mCamera = Camera(glm::vec3(0.f, 0.1f, 0.f), 30.f, mWidth, mHeight, 0.01f);
 
+    createDefaultMaterialTextures(mRenderDevice);
+
     createColorTexture();
     createDepthTexture();
     createNormalTexture();
@@ -61,6 +63,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 
 Renderer::~Renderer()
 {
+    destroyDefaultMaterialTextures();
     vkDestroyFramebuffer(mRenderDevice.device, mClearFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mColorDepthFramebuffer, nullptr);
@@ -163,9 +166,8 @@ void Renderer::notify(const Message &message)
 
         mModels.emplace(model->id, model);
 
-        model->createMaterialsSSBO();
+        model->createMaterialsUBO();
         model->createTextureDescriptorSets(mSingleImageDsLayout);
-        model->createMaterialsDescriptorSet(mMaterialsDsLayout);
     }
 }
 
@@ -529,13 +531,8 @@ void Renderer::createSingleImageDsLayout()
 {
     DsLayoutSpecification specification {
         .bindings = {
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-            }
-        },
+            binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+            },
         .debugName = "Renderer::mSingleImageDsLayout"
     };
 
@@ -546,12 +543,7 @@ void Renderer::createCameraRenderDataDsLayout()
 {
     DsLayoutSpecification specification {
         .bindings = {
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT
-            }
+            binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
         },
         .debugName = "Renderer::mCameraRenderDataDsLayout"
     };
@@ -561,34 +553,16 @@ void Renderer::createCameraRenderDataDsLayout()
 
 void Renderer::createMaterialsDsLayout()
 {
-    std::array<VkDescriptorBindingFlagsEXT, 2> descriptorBindingFlags {
-        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
-        VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT |
-            VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
-    };
-
-    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT dsLayoutBindingFlagsCI {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT,
-        .bindingCount = 2,
-        .pBindingFlags = descriptorBindingFlags.data()
-    };
-
     DsLayoutSpecification specification {
-        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
-        .pNext = &dsLayoutBindingFlagsCI,
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
         .bindings = {
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-            },
-            {
-                .binding = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = PerModelMaxTextureCount,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-            }
+            binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         .debugName = "Renderer::mMaterialsDsLayout"
     };
@@ -600,18 +574,8 @@ void Renderer::createDepthNormalInputDsLayout()
 {
     DsLayoutSpecification specification {
         .bindings = {
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-            },
-            {
-                .binding = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-            }
+            binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
         },
         .debugName = "Renderer::mDepthNormalDsLayout"
     };
@@ -958,11 +922,6 @@ void Renderer::createPrepassPipeline()
             .dsLayouts = {
                 mCameraRenderDataDsLayout,
                 mMaterialsDsLayout
-            },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(uint32_t)
             }
         },
         .renderPass = mPrepassRenderpass,
@@ -1262,11 +1221,6 @@ void Renderer::createShadingPipeline()
                 mCameraRenderDataDsLayout,
                 mSingleImageDsLayout,
                 mMaterialsDsLayout
-            },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(uint32_t)
             }
         },
         .renderPass = mColorDepthRenderpass,

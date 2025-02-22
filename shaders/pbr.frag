@@ -2,14 +2,11 @@
 
 #include "material.glsl"
 
-#extension GL_EXT_nonuniform_qualifier : require
-
 layout (location = 0) in vec2 vTexCoords;
 layout (location = 1) in vec3 vNormal;
+layout (location = 2) in vec4 vColor;
 
 layout (location = 0) out vec4 outFragColor;
-
-layout (push_constant) uniform PushConstants { int materialIndex; };
 
 layout (set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -23,17 +20,19 @@ layout (set = 0, binding = 0) uniform CameraUBO {
 
 layout (set = 1, binding = 0) uniform sampler2D ssaoTexture;
 
-layout (set = 2, binding = 0) readonly buffer MaterialsSSBO { Material materials[]; };
-layout (set = 2, binding = 1) uniform sampler2D textures[];
+layout (set = 2, binding = 0) uniform MaterialsUBO { Material material; };
+layout (set = 2, binding = 1) uniform sampler2D baseColorTex;
+layout (set = 2, binding = 2) uniform sampler2D metallicTex;
+layout (set = 2, binding = 3) uniform sampler2D roughnessTex;
+layout (set = 2, binding = 4) uniform sampler2D normalTex;
+layout (set = 2, binding = 5) uniform sampler2D aoTex;
+layout (set = 2, binding = 6) uniform sampler2D emissionTex;
 
 void main()
 {
-//    int baseColorTexIndex = materials[nonuniformEXT(materialIndex)].baseColorTexIndex;
-//
-//    vec4 base = materials[nonuniformEXT(materialIndex)].baseColorFactor;
-//
-//    vec4 baseCol = texture(textures[nonuniformEXT(baseColorTexIndex)], vTexCoords);
-//
-//    outFragColor = base * baseCol;
-    outFragColor = vec4(vec3(0.5), 1.0);
+    vec4 color = vColor;
+    vec4 baseColorFactor = material.baseColorFactor;
+    vec4 sample_ = texture(baseColorTex, vTexCoords * material.tiling);
+
+    outFragColor = color * baseColorFactor * sample_;
 }

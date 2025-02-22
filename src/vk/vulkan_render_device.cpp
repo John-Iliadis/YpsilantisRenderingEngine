@@ -8,9 +8,9 @@
 
 static const std::vector<const char*> extensions {
     "VK_KHR_swapchain",
-    "VK_EXT_descriptor_indexing",
     "VK_EXT_extended_dynamic_state",
-    "VK_EXT_host_query_reset"
+    "VK_EXT_host_query_reset",
+    "VK_KHR_push_descriptor"
 };
 
 static bool checkExtSupport(VkPhysicalDevice physicalDevice)
@@ -85,20 +85,9 @@ void VulkanRenderDevice::createLogicalDevice()
         .hostQueryReset = VK_TRUE
     };
 
-    VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptorIndexingFeatures {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
-        .pNext = &resetFeatures,
-        .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
-        .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-        .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
-        .descriptorBindingPartiallyBound = VK_TRUE,
-        .descriptorBindingVariableDescriptorCount = VK_TRUE,
-        .runtimeDescriptorArray = VK_TRUE
-    };
-
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
-        .pNext = &descriptorIndexingFeatures,
+        .pNext = &resetFeatures,
         .extendedDynamicState = VK_TRUE
     };
 
@@ -173,8 +162,7 @@ void VulkanRenderDevice::createDescriptorPool()
 
     VkDescriptorPoolCreateInfo descriptorPoolCreateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT |
-            VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
         .maxSets = maxSets,
         .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
         .pPoolSizes = poolSizes.data()

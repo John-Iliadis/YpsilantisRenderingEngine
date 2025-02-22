@@ -4,6 +4,16 @@
 
 #include "vulkan_descriptor.hpp"
 
+VkDescriptorSetLayoutBinding binding(uint32_t binding, VkDescriptorType type, uint32_t count, VkShaderStageFlags stages)
+{
+    return {
+        .binding = binding,
+        .descriptorType = type,
+        .descriptorCount = count,
+        .stageFlags = stages
+    };
+}
+
 // -- VulkanDsLayout -- //
 
 VulkanDsLayout::VulkanDsLayout()
