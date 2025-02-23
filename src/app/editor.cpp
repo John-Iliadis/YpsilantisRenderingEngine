@@ -580,13 +580,6 @@ void Editor::rendererPanel()
 
         if (ImGui::Button("Import Faces"))
             ImGui::OpenPopup("skyboxImportPopup");
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("Import Equirectangular"))
-        {
-
-        }
     }
 
     skyboxImportPopup();
@@ -1013,15 +1006,43 @@ void Editor::sceneGraphPopup()
 void Editor::skyboxImportPopup()
 {
     static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
-                                          ImGuiWindowFlags_NoSavedSettings |
-                                          ImGuiWindowFlags_NoScrollbar |
-                                          ImGuiWindowFlags_NoResize;
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoScrollbar;
+
+    static const char* preview = "...";
+    static std::array<std::string, 6> paths;
+
+    static auto loadPath = [] (const char* buttonLabel, std::string& outPath) {
+        if (ImGui::Button(buttonLabel))
+        {
+            static const char* filter = "Image files *.png *.jpeg *.jpg *.bmp\0*.jpeg;*.png;*.jpg;*.bmp;\0";
+            std::filesystem::path path = fileDialog("Select Texture", filter);
+            if (!path.empty()) outPath = path.string();
+        }
+    };
+
+    static auto displayPath = [] (std::string& path) {
+        ImGui::SameLine();
+        ImGui::BeginDisabled();
+
+        float textBoxLen = ImGui::GetContentRegionAvail().x;
+        if (!path.empty()) textBoxLen = std::min(textBoxLen, ImGui::CalcTextSize(path.data()).x + 8);
+
+        ImGui::PushItemWidth(textBoxLen);
+
+        if (path.empty()) ImGui::InputText("##skybox-path", const_cast<char*>(preview), 3);
+        else ImGui::InputText("##skybox-path", path.data(), path.size());
+
+        ImGui::PopItemWidth();
+        ImGui::EndDisabled();
+    };
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 
     ImGui::SetNextWindowBgAlpha(1.0f);
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(250, 250), ImVec2(FLT_MAX, FLT_MAX));
 
     if (ImGui::BeginPopupModal("skyboxImportPopup", nullptr, windowFlags))
     {
@@ -1030,49 +1051,26 @@ void Editor::skyboxImportPopup()
         ImGui::PopStyleVar();
         ImGui::Separator();
 
-        char c[3];
-        c[0] = '.';
-        c[1] = '.';
-        c[2] = '.';
+        loadPath("Add X+", paths.at(0));
+        displayPath(paths.at(0));
 
-        ImGui::Button("Add X+");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::PushItemWidth(-FLT_MIN);
-        ImGui::InputText("##X+input", c, 3);
-        ImGui::PopItemWidth();
-        ImGui::EndDisabled();
+        loadPath("Add X-", paths.at(1));
+        displayPath(paths.at(1));
 
-        ImGui::Button("Add X-");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::InputText("##X-input", c, 3);
-        ImGui::EndDisabled();
+        loadPath("Add Y+", paths.at(2));
+        displayPath(paths.at(2));
 
-        ImGui::Button("Add Y+");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::InputText("##Y+input", c, 3);
-        ImGui::EndDisabled();
+        loadPath("Add Y-", paths.at(3));
+        displayPath(paths.at(3));
 
-        ImGui::Button("Add Y-");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::InputText("##Y-input", c, 3);
-        ImGui::EndDisabled();
+        loadPath("Add Z+", paths.at(4));
+        displayPath(paths.at(4));
 
-        ImGui::Button("Add Z+");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::InputText("##Z+input", c, 3);
-        ImGui::EndDisabled();
+        loadPath("Add Z-", paths.at(5));
+        displayPath(paths.at(5));
 
-        ImGui::Button("Add Z-");
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-        ImGui::InputText("##Z-input", c, 3);
-        ImGui::EndDisabled();
         ImGui::Separator();
+        helpMarker("The coordinate system is right handed with the positive Y-axis pointing up.");
 
         float padding = 10.0f;  // Padding from the edge
         float buttonWidth = 80.0f;
@@ -1084,13 +1082,21 @@ void Editor::skyboxImportPopup()
         ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - padding);
 
         if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
+        {
+            paths.fill({});
             ImGui::CloseCurrentPopup();
+        }
 
         ImGui::SameLine();
 
+        ImGui::BeginDisabled(std::any_of(paths.begin(), paths.end(), [] (const auto& s) {return s.empty();}));
         if (ImGui::Button("OK", ImVec2(buttonWidth, 0)))
         {
+            mRenderer.importSkybox(paths);
+            paths.fill({});
+            ImGui::CloseCurrentPopup();
         }
+        ImGui::EndDisabled();
 
         ImGui::EndPopup();
     }
@@ -1099,8 +1105,8 @@ void Editor::skyboxImportPopup()
 void Editor::modelImportPopup()
 {
     static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
-                                          ImGuiWindowFlags_NoSavedSettings |
-                                          ImGuiWindowFlags_NoScrollbar;
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoScrollbar;
 
     static const char* preview = "...";
     static ModelImportData importData {
@@ -1191,7 +1197,7 @@ void Editor::importModel(const ModelImportData &importData)
 
 std::filesystem::path Editor::selectModelFileDialog()
 {
-    return fileDialog("Select glTF Model", "glTF Files *.gltf *.glb\0*.gltf\0.*glb\0\0");
+    return fileDialog("Select glTF Model", "glTF Files *.gltf *.glb\0*.gltf;*.glb;\0");
 }
 
 void Editor::checkPayloadType(const char *type)
