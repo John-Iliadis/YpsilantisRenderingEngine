@@ -21,7 +21,7 @@ InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice,
     : mRenderDevice(&renderDevice)
     , mVertexBuffer(renderDevice, vertices.size() * sVertexSize, BufferType::Vertex, MemoryType::Device, vertices.data())
     , mIndexBuffer(renderDevice, indices.size() * sizeof(uint32_t), BufferType::Index, MemoryType::Device, indices.data())
-    , mInstanceBuffer(renderDevice, sInitialInstanceBufferCapacity * sInstanceSize, BufferType::Vertex, MemoryType::Device)
+    , mInstanceBuffer(renderDevice, sInitialInstanceBufferCapacity * sInstanceSize, BufferType::Vertex, MemoryType::HostCoherent)
     , mInstanceCount()
     , mInstanceBufferCapacity(sInitialInstanceBufferCapacity)
 {
@@ -33,7 +33,7 @@ InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice,
     : mRenderDevice(&renderDevice)
     , mVertexBuffer(std::move(vertexBuffer))
     , mIndexBuffer(std::move(indexBuffer))
-    , mInstanceBuffer(renderDevice, sInitialInstanceBufferCapacity * sInstanceSize, BufferType::Vertex, MemoryType::Device)
+    , mInstanceBuffer(renderDevice, sInitialInstanceBufferCapacity * sInstanceSize, BufferType::Vertex, MemoryType::HostCoherent)
     , mInstanceCount()
     , mInstanceBufferCapacity(sInitialInstanceBufferCapacity)
 {
@@ -51,7 +51,7 @@ void InstancedMesh::addInstance(uuid32_t id)
     check(mInstanceIndexToIdMap.emplace(instanceIndex, id).second, "Failed insert.");
 
     InstanceData instanceData {.id = id};
-    mInstanceBuffer.update(instanceIndex * sInstanceSize, sInstanceSize, &instanceData);
+    mInstanceBuffer.mapBufferMemory(instanceIndex * sInstanceSize, sInstanceSize, &instanceData);
 }
 
 void InstancedMesh::updateInstance(uuid32_t id, const glm::mat4& transformation)
@@ -64,7 +64,7 @@ void InstancedMesh::updateInstance(uuid32_t id, const glm::mat4& transformation)
         .id = id,
     };
 
-    mInstanceBuffer.update(instanceIndex * sInstanceSize, sInstanceSize, &instanceData);
+    mInstanceBuffer.mapBufferMemory(instanceIndex * sInstanceSize, sInstanceSize, &instanceData);
 }
 
 void InstancedMesh::removeInstance(uuid32_t id)
@@ -174,7 +174,7 @@ void InstancedMesh::checkResize()
 
     uint32_t newCapacity = mInstanceCount * 2;
 
-    VulkanBuffer newInstanceBuffer(*mRenderDevice, newCapacity * sInstanceSize, BufferType::Vertex, MemoryType::Device);
+    VulkanBuffer newInstanceBuffer(*mRenderDevice, newCapacity * sInstanceSize, BufferType::Vertex, MemoryType::HostCoherent);
     newInstanceBuffer.copyBuffer(mInstanceBuffer, 0, 0, mInstanceBufferCapacity * sInstanceSize);
     newInstanceBuffer.swap(mInstanceBuffer);
 
