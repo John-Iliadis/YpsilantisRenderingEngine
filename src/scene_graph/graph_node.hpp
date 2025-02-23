@@ -7,6 +7,8 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include "../app/uuid_registry.hpp"
 #include "../app/simple_notification_service.hpp"
 #include "../renderer/instanced_mesh.hpp"
@@ -25,9 +27,8 @@ class GraphNode
 {
 public:
     GraphNode();
-    GraphNode(NodeType type,
-              const std::string& name,
-              const glm::mat4& transformation,
+    GraphNode(NodeType type, const std::string& name,
+              glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale,
               GraphNode* parent,
               std::optional<uuid32_t> modelID = {});
     virtual ~GraphNode();
@@ -38,6 +39,17 @@ public:
     void orphan();
     void markDirty();
 
+    void setName(const std::string& name);
+    void setLocalTransform(const glm::mat4& transform);
+    void calcLocalTransform();
+    virtual void updateGlobalTransform();
+
+    float* translationPtr();
+    float* rotationPtr();
+    float* scalePtr();
+    const glm::mat4& localTransform() const;
+    const glm::mat4& globalTransform() const;
+
     uuid32_t id() const;
     NodeType type() const;
     const std::string& name() const;
@@ -45,20 +57,19 @@ public:
     GraphNode* parent() const;
     const std::vector<GraphNode*>& children() const;
 
-    const glm::mat4& localTransform() const;
-    const glm::mat4& globalTransform();
-    void setName(const std::string& name);
-    void setLocalTransform(const glm::mat4& transform);
-    virtual void updateGlobalTransform();
-
 protected:
     uuid32_t mID;
     NodeType mType;
     std::string mName;
     std::optional<uuid32_t> mModelID;
-    glm::mat4 mLocalTransform;
-    glm::mat4 mGlobalTransform;
     bool mDirty;
+
+    glm::vec3 mTranslation;
+    glm::vec3 mRotation;
+    glm::vec3 mScale;
+
+    glm::mat4 mGlobalTransform;
+    glm::mat4 mLocalTransform;
 
     GraphNode* mParent;
     std::vector<GraphNode*> mChildren;

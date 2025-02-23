@@ -6,7 +6,7 @@
 
 SceneGraph::SceneGraph()
     : SubscriberSNS({Topic::Type::Renderer})
-    , mRoot(NodeType::Empty, "RootNode", glm::identity<glm::mat4>(), nullptr)
+    , mRoot(NodeType::Empty, "RootNode", {}, {}, glm::vec3(1.f), nullptr)
 {
 }
 

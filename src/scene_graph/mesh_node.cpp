@@ -9,9 +9,11 @@ MeshNode::MeshNode()
 {
 }
 
-MeshNode::MeshNode(NodeType type, const std::string &name, const glm::mat4 &transformation, GraphNode *parent,
+MeshNode::MeshNode(NodeType type, const std::string &name,
+                   glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale,
+                   GraphNode *parent,
                    uuid32_t modelID, std::vector<uuid32_t> meshIDs)
-    : GraphNode(type, name, transformation, parent, modelID)
+    : GraphNode(type, name, translation, rotation, scale, parent, modelID)
     , mMeshIDs(meshIDs)
 {
 }
@@ -29,6 +31,8 @@ void MeshNode::updateGlobalTransform()
 {
     if (mDirty)
     {
+        calcLocalTransform();
+
         if (mParent)
         {
             mGlobalTransform = mParent->globalTransform() * mLocalTransform;

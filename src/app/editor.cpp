@@ -352,16 +352,17 @@ void Editor::emptyNodeInspector(GraphNode *node)
 
     if (node->modelID().has_value())
     {
-        ImGui::SeparatorText("Info");
-
-        const auto& model = *mRenderer.mModels.at(*node->modelID());
-        ImGui::Text("Associated Model: %s", model.name.c_str());
+        if (ImGui::CollapsingHeader("Info##emptyNodeInspector", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            const auto& model = *mRenderer.mModels.at(*node->modelID());
+            ImGui::Text("Associated Model: %s", model.name.c_str());
+        }
     }
 }
 
 void Editor::meshNodeInspector(GraphNode *node)
 {
-    MeshNode* meshNode = dynamic_cast<MeshNode*>(node);
+    MeshNode *meshNode = dynamic_cast<MeshNode*>(node);
 
     ImGui::Text("Asset Type: Mesh Node");
     ImGui::Text("Name: %s", node->name().c_str());
@@ -370,67 +371,69 @@ void Editor::meshNodeInspector(GraphNode *node)
 
     ImGui::SeparatorText("Info");
 
-    auto& model = *mRenderer.mModels.at(meshNode->modelID().value());
-
-    std::vector<Mesh*> meshes;
-    for (uuid32_t meshID : meshNode->meshIDs())
-        meshes.push_back(model.getMesh(meshID));
-
-    ImGui::Text("Associated Model: %s", model.name.c_str());
-
-    if (meshes.size() == 1)
+    if (ImGui::CollapsingHeader("Info##meshNodeInspector", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        Mesh& mesh = *meshes.front();
-        int32_t materialIndex = mesh.materialIndex;
+        auto &model = *mRenderer.mModels.at(meshNode->modelID().value());
 
-        ImGui::Text("Mesh: %s", mesh.name.c_str());
-        ImGui::Text("Material: %s", mesh.materialIndex == -1? "None"
-                                                                : model.materialNames.at(materialIndex).c_str());
-    }
-    else
-    {
-        for (uint32_t i = 0; i < meshes.size(); ++i)
+        std::vector<Mesh *> meshes;
+        for (uuid32_t meshID: meshNode->meshIDs())
+            meshes.push_back(model.getMesh(meshID));
+
+        ImGui::Text("Associated Model: %s", model.name.c_str());
+
+        if (meshes.size() == 1)
         {
-            Mesh& mesh = *meshes.at(i);
-            uint32_t materialIndex = mesh.materialIndex;
+            Mesh &mesh = *meshes.front();
+            int32_t materialIndex = mesh.materialIndex;
 
-            ImGui::Text("Mesh %d: %s", i, mesh.name.c_str());
-            ImGui::Text("Material %d: %s", i, mesh.materialIndex == -1? "None"
-                                                                             : model.materialNames.at(materialIndex).c_str());
-            if (i != meshes.size() - 1)
-                ImGui::Spacing();
+            ImGui::Text("Mesh: %s", mesh.name.c_str());
+            ImGui::Text("Material: %s", mesh.materialIndex == -1 ? "None"
+                                                                 : model.materialNames.at(materialIndex).c_str());
+        }
+        else
+        {
+            for (uint32_t i = 0; i < meshes.size(); ++i)
+            {
+                Mesh &mesh = *meshes.at(i);
+                uint32_t materialIndex = mesh.materialIndex;
+
+                ImGui::Text("Mesh %d: %s", i, mesh.name.c_str());
+                ImGui::Text("Material %d: %s", i, mesh.materialIndex == -1 ? "None"
+                                                                           : model.materialNames.at(
+                        materialIndex).c_str());
+                if (i != meshes.size() - 1)
+                    ImGui::Spacing();
+            }
         }
     }
 }
 
 void Editor::nodeTransform(GraphNode *node)
 {
-    ImGui::SeparatorText("Transformation");
-
-    glm::mat4 mat = node->globalTransform();
-
-    float translation[3];
-    float rotation[3];
-    float scale[3];
-
-    ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(mat), translation, rotation, scale);
-
     bool modified = false;
 
-    if (ImGui::DragFloat3("Translation", translation, 0.01f))
-        modified = true;
-
-    if (ImGui::DragFloat3("Rotation", rotation, 0.1f))
-        modified = true;
-
-    if (ImGui::DragFloat3("Scale", scale, 0.01f, 0.001f, FLT_MAX, "%.3f", ImGuiSliderFlags_AlwaysClamp))
-        modified = true;
-
-    if (modified)
+    if (ImGui::CollapsingHeader("Transformation", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, glm::value_ptr(mat));
-        node->setLocalTransform(mat);
+        ImGui::SeparatorText("Translation");
+
+        if (ImGui::DragFloat("X##Translation", node->translationPtr(), 0.001f)) modified = true;
+        if (ImGui::DragFloat("Y##Translation", node->translationPtr() + 1, 0.001f)) modified = true;
+        if (ImGui::DragFloat("Z##Translation", node->translationPtr() + 2, 0.001f)) modified = true;
+
+        ImGui::SeparatorText("Rotation");
+
+        if (ImGui::DragFloat("X##Rotation", node->rotationPtr(), 0.1f, 0.f, 0.f, "%.1f")) modified = true;
+        if (ImGui::DragFloat("Y##Rotation", node->rotationPtr() + 1, 0.1f, 0.f, 0.f, "%.1f")) modified = true;
+        if (ImGui::DragFloat("Z##Rotation", node->rotationPtr() + 2, 0.1f, 0.f, 0.f, "%.1f")) modified = true;
+
+        ImGui::SeparatorText("Scale");
+
+        if (ImGui::DragFloat("X##Scale", node->scalePtr(), 0.01f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
+        if (ImGui::DragFloat("Y##Scale", node->scalePtr() + 1, 0.01f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
+        if (ImGui::DragFloat("Z##Scale", node->scalePtr() + 2, 0.01f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
     }
+
+    if (modified) node->markDirty();
 }
 
 void Editor::viewPort()
@@ -660,7 +663,15 @@ GraphNode *Editor::createModelGraphRecursive(Model &model, const SceneNode &scen
     if (!sceneNode.meshIndices.empty())
         graphNode = createMeshNode(model, sceneNode, parent);
     else
-        graphNode = new GraphNode(NodeType::Empty, sceneNode.name, sceneNode.transformation, parent, model.id);
+    {
+        graphNode = new GraphNode(NodeType::Empty,
+                                  sceneNode.name,
+                                  sceneNode.translation,
+                                  sceneNode.rotation,
+                                  sceneNode.scale,
+                                  parent,
+                                  model.id);
+    }
 
     for (const auto& child : sceneNode.children)
         graphNode->addChild(createModelGraphRecursive(model, child, graphNode));
@@ -670,7 +681,7 @@ GraphNode *Editor::createModelGraphRecursive(Model &model, const SceneNode &scen
 
 GraphNode *Editor::createEmptyNode(GraphNode *parent, const std::string& name)
 {
-    return new GraphNode(NodeType::Empty, name, glm::identity<glm::mat4>(), parent);
+    return new GraphNode(NodeType::Empty, name, {}, {}, glm::vec3(1.f), parent);
 }
 
 GraphNode* Editor::createMeshNode(Model &model, const SceneNode &sceneNode, GraphNode* parent)
@@ -684,7 +695,14 @@ GraphNode* Editor::createMeshNode(Model &model, const SceneNode &sceneNode, Grap
         meshIDs.push_back(mesh.meshID);
     }
 
-    GraphNode* graphNode = new MeshNode(NodeType::Mesh, sceneNode.name, sceneNode.transformation, parent, model.id, meshIDs);
+    GraphNode* graphNode = new MeshNode(NodeType::Mesh,
+                                        sceneNode.name,
+                                        sceneNode.translation,
+                                        sceneNode.rotation,
+                                        sceneNode.scale,
+                                        parent,
+                                        model.id,
+                                        meshIDs);
 
     for (uuid32_t meshID : meshIDs)
         model.getMesh(meshID)->mesh.addInstance(graphNode->id());
@@ -1199,7 +1217,9 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
         {
             newNode = new GraphNode(node->type(),
                                     node->name(),
-                                    node->localTransform(),
+                                    glm::make_vec3(node->translationPtr()),
+                                    glm::make_vec3(node->rotationPtr()),
+                                    glm::make_vec3(node->scalePtr()),
                                     node->parent(),
                                     node->modelID());
             break;
@@ -1215,7 +1235,9 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
 
             newNode = new MeshNode(meshNode->type(),
                                    meshNode->name(),
-                                   meshNode->localTransform(),
+                                   glm::make_vec3(node->translationPtr()),
+                                   glm::make_vec3(node->rotationPtr()),
+                                   glm::make_vec3(node->scalePtr()),
                                    meshNode->parent(),
                                    modelID, meshIDs);
 

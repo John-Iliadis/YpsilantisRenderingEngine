@@ -168,9 +168,25 @@ void ModelLoader::getTextureNames(const aiScene& aiScene)
 
 SceneNode ModelLoader::createRootSceneNode(const aiScene& aiScene, const aiNode& aiNode)
 {
+    glm::mat4 transformation = assimpToGlmMat4(aiNode.mTransformation);
+
+    glm::vec3 translation;
+    glm::quat rotation;
+    glm::vec3 scale;
+    glm::vec3 skew;
+    glm::vec4 perspective;
+
+    glm::decompose(transformation, scale, rotation, translation, skew, perspective);
+
+    glm::vec3 eulerAngles = glm::degrees(glm::eulerAngles(rotation));
+
+    eulerAngles.y = eulerAngles.y == 0.f && std::signbit(eulerAngles.y)? 0.f : eulerAngles.y;
+
     SceneNode sceneNode {
         .name = aiNode.mName.length ? aiNode.mName.C_Str() : "Unnamed",
-        .transformation = assimpToGlmMat4(aiNode.mTransformation)
+        .translation = translation,
+        .rotation = eulerAngles,
+        .scale = scale
     };
 
     if (uint32_t meshCount = aiNode.mNumMeshes)

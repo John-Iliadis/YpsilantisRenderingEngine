@@ -12,6 +12,7 @@
 #include <assimp/texture.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 #include "../utils/loaded_image.hpp"
 #include "../utils/utils.hpp"
 #include "../utils/timer.hpp"

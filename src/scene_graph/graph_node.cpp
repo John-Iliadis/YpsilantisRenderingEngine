@@ -8,24 +8,25 @@ GraphNode::GraphNode()
     : mID(UUIDRegistry::generateSceneNodeID())
     , mType(NodeType::Empty)
     , mName("")
-    , mLocalTransform(glm::identity<glm::mat4>())
-    , mGlobalTransform(glm::identity<glm::mat4>())
+    , mTranslation()
+    , mRotation()
+    , mScale(1.f)
     , mDirty()
     , mParent()
 {
 }
 
-GraphNode::GraphNode(NodeType type,
-                     const std::string& name,
-                     const glm::mat4& transformation,
+GraphNode::GraphNode(NodeType type, const std::string& name,
+                     glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale,
                      GraphNode* parent,
                      std::optional<uuid32_t> modelID)
     : mID(UUIDRegistry::generateSceneNodeID())
     , mType(type)
     , mName(name)
     , mModelID(modelID)
-    , mLocalTransform(transformation)
-    , mGlobalTransform(transformation)
+    , mTranslation(translation)
+    , mRotation(rotation)
+    , mScale(scale)
     , mDirty(true)
     , mParent(parent)
 {
@@ -106,7 +107,7 @@ const glm::mat4 &GraphNode::localTransform() const
     return mLocalTransform;
 }
 
-const glm::mat4 &GraphNode::globalTransform()
+const glm::mat4 &GraphNode::globalTransform() const
 {
     return mGlobalTransform;
 }
@@ -121,6 +122,8 @@ void GraphNode::updateGlobalTransform()
 {
     if (mDirty)
     {
+        calcLocalTransform();
+
         if (mParent)
         {
             mGlobalTransform = mParent->mGlobalTransform * mLocalTransform;
@@ -140,4 +143,28 @@ void GraphNode::updateGlobalTransform()
 void GraphNode::setName(const std::string &name)
 {
     mName = name;
+}
+
+float *GraphNode::translationPtr()
+{
+    return glm::value_ptr(mTranslation);
+}
+
+float *GraphNode::rotationPtr()
+{
+    return glm::value_ptr(mRotation);
+}
+
+float *GraphNode::scalePtr()
+{
+    return glm::value_ptr(mScale);
+}
+
+void GraphNode::calcLocalTransform()
+{
+    glm::quat quat = glm::quat(glm::radians(mRotation));
+    glm::mat4 rot = glm::toMat4(quat);
+
+    mLocalTransform = glm::translate(glm::identity<glm::mat4>(), mTranslation) * rot;
+    mLocalTransform = glm::scale(mLocalTransform, mScale);
 }

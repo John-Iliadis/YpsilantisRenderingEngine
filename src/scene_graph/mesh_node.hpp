@@ -11,7 +11,9 @@ class MeshNode : public GraphNode
 {
 public:
     MeshNode();
-    MeshNode(NodeType type, const std::string& name, const glm::mat4& transformation, GraphNode* parent,
+    MeshNode(NodeType type, const std::string& name,
+             glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale,
+             GraphNode* parent,
              uuid32_t modelID, std::vector<uuid32_t> meshIDs);
     ~MeshNode();
 

@@ -16,7 +16,9 @@
 struct SceneNode
 {
     std::string name;
-    glm::mat4 transformation;
+    glm::vec3 translation;
+    glm::vec3 rotation;
+    glm::vec3 scale;
     std::vector<uint32_t> meshIndices;
     std::vector<SceneNode> children;
 };
