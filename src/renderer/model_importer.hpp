@@ -68,19 +68,19 @@ public:
     bool success() const;
 
 private:
-    void createHierarchy();
-    void loadMeshes();
-    void loadTextures();
-    void loadMaterials();
-    void getTextureNames();
+    void createHierarchy(const aiScene& aiScene);
+    void loadMeshes(const aiScene& aiScene);
+    void loadTextures(const aiScene& aiScene);
+    void loadMaterials(const aiScene& aiScene);
+    void getTextureNames(const aiScene& aiScene);
 
-    SceneNode createRootSceneNode(const aiNode& aiNode);
+    SceneNode createRootSceneNode(const aiScene& aiScene, const aiNode& aiNode);
 
     VulkanBuffer loadVertexData(const aiMesh& aiMesh);
     VulkanBuffer loadIndexData(const aiMesh& aiMesh);
 
     std::optional<ImageData> loadImageData(const std::string& texName);
-    std::optional<ImageData> loadEmbeddedImageData(const std::string& texName);
+    std::optional<ImageData> loadEmbeddedImageData(const aiScene& aiScene, const std::string& texName);
 
     std::optional<std::string> getTextureName(const aiMaterial& aiMaterial, aiTextureType type);
 
@@ -94,7 +94,6 @@ private:
 
 private:
     const VulkanRenderDevice& mRenderDevice;
-    Assimp::Importer mImporter;
     std::unordered_set<std::string> mTextureNames;
     std::unordered_map<std::string, int32_t> mInsertedTexIndex;
     bool mSuccess;

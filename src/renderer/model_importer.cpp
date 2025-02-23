@@ -42,32 +42,33 @@ ModelLoader::ModelLoader(const VulkanRenderDevice& renderDevice, const ModelImpo
 {
     debugLog("Loading model: " + path.string());
 
-    mImporter.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, sRemoveComponents);
-    mImporter.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, sRemovePrimitives);
-    mImporter.SetPropertyBool(AI_CONFIG_PP_PTV_NORMALIZE, importData.normalize);
+    Assimp::Importer importer;
+    importer.SetPropertyInteger(AI_CONFIG_PP_RVC_FLAGS, sRemoveComponents);
+    importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, sRemovePrimitives);
+    importer.SetPropertyBool(AI_CONFIG_PP_PTV_NORMALIZE, importData.normalize);
 
-    mImporter.ReadFile(path.string(), sImportFlags);
+    importer.ReadFile(path.string(), sImportFlags);
 
     if (importData.flipUVs) stbi_set_flip_vertically_on_load(true);
 
-    auto scene = mImporter.GetScene();
+    const auto* scene = importer.GetScene();
 
-    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)
+    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
     {
         debugLog("Failed to load model: " + path.string());
-        debugLog("Importer error: " + std::string(mImporter.GetErrorString()));
+        debugLog("Importer error: " + std::string(importer.GetErrorString()));
         return;
     }
 
     try
     {
-        createHierarchy();
-        loadMeshes();
+        createHierarchy(*scene);
+        loadMeshes(*scene);
 
-        getTextureNames();
+        getTextureNames(*scene);
 
-        loadTextures();
-        loadMaterials();
+        loadTextures(*scene);
+        loadMaterials(*scene);
 
         mSuccess = true;
     }
@@ -85,19 +86,16 @@ bool ModelLoader::success() const
     return mSuccess;
 }
 
-void ModelLoader::createHierarchy()
+void ModelLoader::createHierarchy(const aiScene &aiScene)
 {
-    const aiNode& aiRoot = *mImporter.GetScene()->mRootNode;
-    root = createRootSceneNode(aiRoot);
+    root = createRootSceneNode(aiScene, *aiScene.mRootNode);
 }
 
-void ModelLoader::loadMeshes()
+void ModelLoader::loadMeshes(const aiScene& aiScene)
 {
-    const aiScene& scene = *mImporter.GetScene();
-
-    for (uint32_t i = 0; i < scene.mNumMeshes; ++i)
+    for (uint32_t i = 0; i < aiScene.mNumMeshes; ++i)
     {
-        const aiMesh& aiMesh = *scene.mMeshes[i];
+        const aiMesh& aiMesh = *aiScene.mMeshes[i];
 
         debugLog(std::format("Loading mesh: {}", aiMesh.mName.data));
 
@@ -112,15 +110,13 @@ void ModelLoader::loadMeshes()
     }
 }
 
-void ModelLoader::loadTextures()
+void ModelLoader::loadTextures(const aiScene& aiScene)
 {
-    const aiScene& aiScene = *mImporter.GetScene();
-
     for (const std::string& texName : mTextureNames)
     {
         if (aiScene.GetEmbeddedTexture(texName.c_str()))
         {
-            if (auto imageData = loadEmbeddedImageData(texName))
+            if (auto imageData = loadEmbeddedImageData(aiScene, texName))
             {
                 mInsertedTexIndex.emplace(texName, images.size());
                 images.push_back(std::move(*imageData));
@@ -137,10 +133,8 @@ void ModelLoader::loadTextures()
     }
 }
 
-void ModelLoader::loadMaterials()
+void ModelLoader::loadMaterials(const aiScene& aiScene)
 {
-    const aiScene& aiScene = *mImporter.GetScene();
-
     for (uint32_t i = 0; i < aiScene.mNumMaterials; ++i)
     {
         const aiMaterial& aiMaterial = *aiScene.mMaterials[i];
@@ -150,10 +144,8 @@ void ModelLoader::loadMaterials()
     }
 }
 
-void ModelLoader::getTextureNames()
+void ModelLoader::getTextureNames(const aiScene& aiScene)
 {
-    const aiScene& aiScene = *mImporter.GetScene();
-
     for (uint32_t i = 0; i < aiScene.mNumMaterials; ++i)
     {
         const aiMaterial& material = *aiScene.mMaterials[i];
@@ -174,7 +166,7 @@ void ModelLoader::getTextureNames()
     }
 }
 
-SceneNode ModelLoader::createRootSceneNode(const aiNode &aiNode)
+SceneNode ModelLoader::createRootSceneNode(const aiScene& aiScene, const aiNode& aiNode)
 {
     SceneNode sceneNode {
         .name = aiNode.mName.length ? aiNode.mName.C_Str() : "Unnamed",
@@ -191,7 +183,7 @@ SceneNode ModelLoader::createRootSceneNode(const aiNode &aiNode)
     for (uint32_t i = 0; i < aiNode.mNumChildren; ++i)
     {
         const struct aiNode& aiChild = *aiNode.mChildren[i];
-        sceneNode.children.push_back(createRootSceneNode(aiChild));
+        sceneNode.children.push_back(createRootSceneNode(aiScene, aiChild));
     }
 
     return sceneNode;
@@ -237,7 +229,7 @@ VulkanBuffer ModelLoader::loadVertexData(const aiMesh &aiMesh)
         vertices.at(i).color = aiMesh.HasVertexColors(0)? *reinterpret_cast<glm::vec4*>(&aiMesh.mColors[0][i]) : glm::vec4(1.f);
     }
 
-    return {mRenderDevice, vertices.size() * sizeof(Vertex), BufferType::Staging, MemoryType::Host, vertices.data()};
+    return {mRenderDevice, vertices.size() * sizeof(Vertex), BufferType::Staging, MemoryType::HostCached, vertices.data()};
 }
 
 VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
@@ -258,7 +250,7 @@ VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
         }
     }
 
-    return {mRenderDevice, indices.size() * sizeof(uint32_t), BufferType::Staging, MemoryType::Host, indices.data()};
+    return {mRenderDevice, indices.size() * sizeof(uint32_t), BufferType::Staging, MemoryType::HostCached, indices.data()};
 }
 
 std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
@@ -284,7 +276,7 @@ std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
         .width = loadedImage.width(),
         .height = loadedImage.height(),
         .name = texPath.filename().string(),
-        .stagingBuffer {mRenderDevice, deviceSize, BufferType::Staging, MemoryType::Host, loadedImage.data()},
+        .stagingBuffer {mRenderDevice, deviceSize, BufferType::Staging, MemoryType::HostCached, loadedImage.data()},
         .magFilter = TextureMagFilter::Linear,
         .minFilter = TextureMinFilter::Linear,
         .wrapModeS = TextureWrap::Repeat,
@@ -292,9 +284,9 @@ std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
     };
 }
 
-std::optional<ImageData> ModelLoader::loadEmbeddedImageData(const std::string &texName)
+std::optional<ImageData> ModelLoader::loadEmbeddedImageData(const aiScene& aiScene, const std::string& texName)
 {
-    const aiTexture& aiTexture = *mImporter.GetScene()->GetEmbeddedTexture(texName.data());
+    const aiTexture& aiTexture = *aiScene.GetEmbeddedTexture(texName.data());
 
     debugLog("Loading embedded image: " + texName);
 
@@ -332,7 +324,7 @@ std::optional<ImageData> ModelLoader::loadEmbeddedImageData(const std::string &t
 
     VkDeviceSize deviceSize = imageMemoryDeviceSize(imageData.width, imageData.height, VK_FORMAT_R8G8B8A8_UNORM);
 
-    imageData.stagingBuffer = VulkanBuffer(mRenderDevice, deviceSize, BufferType::Staging, MemoryType::Host, data);
+    imageData.stagingBuffer = VulkanBuffer(mRenderDevice, deviceSize, BufferType::Staging, MemoryType::HostCached, data);
 
     return imageData;
 }
