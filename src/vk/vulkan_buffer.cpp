@@ -65,6 +65,7 @@ VkMemoryPropertyFlags toVkFlags(MemoryType memoryType)
     {
         case MemoryType::Host: return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
         case MemoryType::HostCoherent: return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        case MemoryType::HostCached: return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         case MemoryType::Device: return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         default: assert(false);
     }
@@ -109,7 +110,9 @@ VulkanBuffer::VulkanBuffer(const VulkanRenderDevice &renderDevice,
     , mType(bufferType)
     , mMemoryType(memoryType)
 {
-    if (memoryType == MemoryType::Host || memoryType == MemoryType::HostCoherent)
+    if (memoryType == MemoryType::Host ||
+        memoryType == MemoryType::HostCoherent ||
+        memoryType == MemoryType::HostCached)
     {
         mapBufferMemory(0, size, bufferData);
     }

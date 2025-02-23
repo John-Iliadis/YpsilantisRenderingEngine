@@ -20,6 +20,7 @@ enum class MemoryType
 {
     Host,
     HostCoherent,
+    HostCached,
     Device
 };
 
