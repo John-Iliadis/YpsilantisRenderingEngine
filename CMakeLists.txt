@@ -83,6 +83,8 @@ add_executable(${PROJECT_NAME}
         src/vk/vulkan_renderpass.hpp
         src/renderer/material.hpp
         src/renderer/material.cpp
+        src/renderer/cubemap_loader.cpp
+        src/renderer/cubemap_loader.hpp
 )
 
 add_subdirectory(${DEPENDENCY_DIR}/stb/)
