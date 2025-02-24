@@ -1,6 +1,6 @@
 #version 460 core
 
-layout (location = 0) in vec3 position;
+#include "cube_data.glsl"
 
 layout (location = 0) out vec3 vTexCoords;
 
@@ -16,7 +16,15 @@ layout (set = 0, binding = 0) uniform CameraUBO {
 
 void main()
 {
+    uint index = cubeIndices[gl_VertexIndex];
+    vec3 position = cubeVertices[index];
+
     vTexCoords = position;
-    vec4 pos = view * vec4(position, 1.0);
-    gl_Position = vec4(pos.xyz, pos.z);
+
+    mat4 viewNoTranslation = mat4(mat3(view));
+    mat4 proj = projection;
+    proj[1] *= -1;
+
+    vec4 viewProjPos = proj * viewNoTranslation * vec4(position, 1.0);
+    gl_Position = viewProjPos.xyww;
 }

@@ -11,8 +11,9 @@
 #include "../app/save_data.hpp"
 #include "../vk/vulkan_pipeline.hpp"
 #include "camera.hpp"
-#include "model_importer.hpp"
 #include "model.hpp"
+#include "model_importer.hpp"
+#include "cubemap_loader.hpp"
 
 constexpr uint32_t InitialViewportWidth = 1000;
 constexpr uint32_t InitialViewportHeight = 700;
@@ -33,6 +34,8 @@ public:
     void notify(const Message &message) override;
 
 private:
+    void loadSkybox();
+
     void executeClearRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
     void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
@@ -135,6 +138,7 @@ private:
     VkDescriptorSet mDepthNormalDs{};
     VkDescriptorSet mSsaoDs{};
     VkDescriptorSet mDepthDs{};
+    VkDescriptorSet mSkyboxDs{};
     VkDescriptorSet mColorDs{};
     VkDescriptorSet mPostProcessingDs{};
 
@@ -144,14 +148,15 @@ private:
     // grid data
     struct GridData
     {
-        alignas(16) glm::vec4 thinLineColor = glm::vec4(0.5, 0.5, 0.5, 1.f);
-        alignas(16) glm::vec4 thickLineColor = glm::vec4(0.f, 0.f, 0.f, 1.f);
+        alignas(16) glm::vec4 thinLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 80.f / 255.f);
+        alignas(16) glm::vec4 thickLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 1.f);
         alignas(4) float cellSize = 0.5f;
         alignas(4) float minPixelsBetweenCells = 1.2f;
     } mGridData;
 
     bool mSkyboxLoaded = false;
-    bool mRenderSkybox = false;
+    bool mRenderSkybox = true;
+    bool mSsaoOn = false;
     bool mRenderGrid = true;
 
 private:

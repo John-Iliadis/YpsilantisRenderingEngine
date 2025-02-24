@@ -124,19 +124,26 @@ void Editor::cameraPanel()
         mRenderer.mCamera.setState(Camera::State::VIEW_MODE);
 
     ImGui::SameLine();
-    helpMarker("Press V");
+    helpMarker("Press V to select mode\n"
+               "Hold left click to pan\n"
+               "Hold right click to rotate\n"
+               "Use the scroll wheel to zoom");
 
     if (ImGui::RadioButton("Edit", cameraState == Camera::State::EDITOR_MODE))
         mRenderer.mCamera.setState(Camera::State::EDITOR_MODE);
 
     ImGui::SameLine();
-    helpMarker("Press E");
+    helpMarker("Press E to select mode\n"
+               "Hold right click to rotate\n"
+               "Use the scroll wheel to zoom");
 
     if (ImGui::RadioButton("First Person", cameraState == Camera::State::FIRST_PERSON))
         mRenderer.mCamera.setState(Camera::State::FIRST_PERSON);
 
     ImGui::SameLine();
-    helpMarker("Press F");
+    helpMarker("Press F to select\n"
+               "Use WASD to move\n"
+               "Hold left click to rotate\n");
 
     ImGui::Separator();
 
@@ -145,7 +152,7 @@ void Editor::cameraPanel()
     ImGui::DragFloat("Rotate Sensitivity", mRenderer.mCamera.rotateSensitivity(), 0.1f, -FLT_MAX, FLT_MAX, "%.0f", ImGuiSliderFlags_AlwaysClamp);
 
     if (cameraState == Camera::State::VIEW_MODE || cameraState == Camera::State::EDITOR_MODE)
-        ImGui::DragFloat("Z Scroll Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::DragFloat("Zoom Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
     if (cameraState == Camera::State::VIEW_MODE)
         ImGui::DragFloat("Pan Speed", mRenderer.mCamera.panSpeed(), 0.1f, 0.f, FLT_MAX, "%.0f", ImGuiSliderFlags_AlwaysClamp);
@@ -574,8 +581,7 @@ void Editor::rendererPanel()
 
     if (ImGui::CollapsingHeader("Skybox", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        static bool renderSkybox;
-        ImGui::Checkbox("Render Skybox", &renderSkybox);
+        ImGui::Checkbox("Render Skybox", &mRenderer.mRenderSkybox);
         ImGui::Separator();
 
         if (ImGui::Button("Import Faces"))

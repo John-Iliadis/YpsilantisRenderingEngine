@@ -44,6 +44,7 @@ public:
     VulkanImage(VulkanImage&& other) noexcept;
     VulkanImage& operator=(VulkanImage&& other) noexcept;
 
+    void uploadImageData(VkCommandBuffer commandBuffer, const VulkanBuffer& buffer, uint32_t layerIndex = 0);
     void uploadImageData(const void* data, uint32_t layerIndex = 0);
     void transitionLayout(VkCommandBuffer commandBuffer,
                           VkImageLayout oldLayout, VkImageLayout newLayout,

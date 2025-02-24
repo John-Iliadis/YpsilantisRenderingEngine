@@ -282,34 +282,18 @@ VulkanSampler createSampler(const VulkanRenderDevice& renderDevice,
 
     switch (wrapT)
     {
-        case TextureWrap::Repeat:
-            addressModeT = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-            break;
-        case TextureWrap::MirroredRepeat:
-            addressModeT = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-            break;
-        case TextureWrap::ClampToEdge:
-            addressModeT = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-            break;
-        case TextureWrap::ClampToBorder:
-            addressModeT = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-            break;
+        case TextureWrap::Repeat: addressModeT = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
+        case TextureWrap::MirroredRepeat: addressModeT = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
+        case TextureWrap::ClampToEdge: addressModeT = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
+        case TextureWrap::ClampToBorder: addressModeT = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER; break;
     }
 
     switch (wrapR)
     {
-        case TextureWrap::Repeat:
-            addressModeR = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-            break;
-        case TextureWrap::MirroredRepeat:
-            addressModeR = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-            break;
-        case TextureWrap::ClampToEdge:
-            addressModeR = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-            break;
-        case TextureWrap::ClampToBorder:
-            addressModeR = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-            break;
+        case TextureWrap::Repeat: addressModeR = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
+        case TextureWrap::MirroredRepeat: addressModeR = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
+        case TextureWrap::ClampToEdge: addressModeR = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
+        case TextureWrap::ClampToBorder: addressModeR = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER; break;
     }
 
     if (minFilter == TextureMinFilter::Linear ||

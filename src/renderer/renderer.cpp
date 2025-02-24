@@ -18,7 +18,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
         mHeight = saveData["viewport"]["height"];
     }
 
-    mCamera = Camera(glm::vec3(0.f, 0.1f, 0.f), 30.f, mWidth, mHeight, 0.01f);
+    mCamera = Camera(glm::vec3(0.f, 1.f, -1.f), 30.f, mWidth, mHeight, 0.01f);
 
     createDefaultMaterialTextures(mRenderDevice);
 
@@ -59,6 +59,8 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createPostProcessingRenderpass();
     createPostProcessingFramebuffer();
     createPostProcessingPipeline();
+
+    loadSkybox();
 }
 
 Renderer::~Renderer()
@@ -122,6 +124,50 @@ void Renderer::importModel(const ModelImportData& importData)
                                            importData.flipUVs));
 }
 
+void Renderer::importSkybox(const std::array<std::string, 6> &paths)
+{
+    CubemapLoader loader(mRenderDevice, paths);
+
+    if (!loader.success()) return;
+
+    loader.get(mSkyboxTexture);
+
+    if (!mSkyboxLoaded)
+    {
+        VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
+
+        VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = mRenderDevice.descriptorPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &dsLayout
+        };
+
+        VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mSkyboxDs);
+        vulkanCheck(result, "Failed to allocate descriptor set.");
+    }
+
+    VkDescriptorImageInfo imageInfo {
+        .sampler = mSkyboxTexture.vulkanSampler.sampler,
+        .imageView = mSkyboxTexture.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mSkyboxDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &imageInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+
+    mSkyboxLoaded = true;
+}
+
 void Renderer::deleteModel(uuid32_t id)
 {
     SNS::publishMessage(Topic::Type::Renderer, Message::modelDeleted(id));
@@ -176,7 +222,7 @@ void Renderer::notify(const Message &message)
 
 void Renderer::executeClearRenderpass(VkCommandBuffer commandBuffer)
 {
-    static constexpr VkClearValue colorClear {.color = {1.f, 1.f, 1.f, 1.f}};
+    static constexpr VkClearValue colorClear {.color = {64.f / 255.f, 60.f / 255.f, 60.f / 255.f, 1.f}};
     static constexpr VkClearValue depthClear {.depthStencil = {.depth = 1.f, .stencil = 0}};
     static constexpr VkClearValue normalClear {.color = {0.f, 0.f, 0.f, 0.f}};
 
@@ -235,7 +281,37 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
 
 void Renderer::executeSkyboxRenderpass(VkCommandBuffer commandBuffer)
 {
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mColorDepthRenderpass,
+        .framebuffer = mColorDepthFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
 
+    beginDebugLabel(commandBuffer, "Skybox Renderpass");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    if (mSkyboxLoaded && mRenderSkybox)
+    {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSkyboxPipeline);
+
+        std::array<VkDescriptorSet, 2> descriptorSets {mCameraDs, mSkyboxDs};
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mSkyboxPipeline,
+                                0, descriptorSets.size(), descriptorSets.data(),
+                                0, nullptr);
+
+        vkCmdDraw(commandBuffer, 36, 1, 0, 0);
+    }
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
 }
 
 void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
@@ -269,7 +345,7 @@ void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
                             0, descriptorSets.size(), descriptorSets.data(),
                             0, nullptr);
 
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    if (mSsaoOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -312,9 +388,6 @@ void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
 
 void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
 {
-    if (!mRenderGrid)
-        return;
-
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = mColorDepthRenderpass,
@@ -343,7 +416,7 @@ void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
                        0, sizeof(GridData),
                        &mGridData);
 
-    vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+    if (mRenderGrid) vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -1016,27 +1089,10 @@ void Renderer::createColorDepthFramebuffer()
 
 void Renderer::createSkyboxPipeline()
 {
-    VkVertexInputBindingDescription vertexInputBindingDescription {
-        .binding = 0,
-        .stride = sizeof(glm::vec3),
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-    };
-
-    VkVertexInputAttributeDescription vertexInputAttributeDescription {
-        .location = 0,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = 0
-    };
-
     PipelineSpecification specification {
         .shaderStages = {
             .vertShaderPath = "shaders/skybox.vert.spv",
             .fragShaderPath = "shaders/skybox.frag.spv"
-        },
-        .vertexInput = {
-            .bindings = {vertexInputBindingDescription},
-            .attributes = {vertexInputAttributeDescription}
         },
         .inputAssembly = {
             .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
@@ -1390,4 +1446,18 @@ void Renderer::createPostProcessingPipeline()
     };
 
     mPostProcessingPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::loadSkybox()
+{
+    std::array<std::string, 6> paths {
+        "../assets/cubemaps/sky/right.jpg",
+        "../assets/cubemaps/sky/left.jpg",
+        "../assets/cubemaps/sky/top.jpg",
+        "../assets/cubemaps/sky/bottom.jpg",
+        "../assets/cubemaps/sky/front.jpg",
+        "../assets/cubemaps/sky/back.jpg",
+    };
+
+    importSkybox(paths);
 }

@@ -202,11 +202,16 @@ void VulkanImage::copyBuffer(VkCommandBuffer commandBuffer, const VulkanBuffer &
                            1, &copyRegion);
 }
 
+void VulkanImage::uploadImageData(VkCommandBuffer commandBuffer, const VulkanBuffer &buffer, uint32_t layerIndex)
+{
+    copyBuffer(commandBuffer, buffer, layerIndex);
+}
+
 void VulkanImage::uploadImageData(const void *data, uint32_t layerIndex)
 {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(*mRenderDevice);
 
-    VkDeviceSize size = width * height * formatSize(format);
+    VkDeviceSize size = imageMemoryDeviceSize(width, height, format);
 
     VulkanBuffer stagingBuffer(*mRenderDevice, size, BufferType::Staging, MemoryType::Host, data);
 
