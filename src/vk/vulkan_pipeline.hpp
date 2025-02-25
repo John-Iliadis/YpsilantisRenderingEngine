@@ -32,6 +32,11 @@ struct PipelineSpecification
         uint32_t patchControlUnits;
     } tesselation;
 
+    struct ViewportState {
+        std::optional<VkViewport> viewport;
+        std::optional<VkRect2D> scissor;
+    } viewportState;
+
     struct Rasterization {
         bool rasterizerDiscardPrimitives;
         VkPolygonMode polygonMode;

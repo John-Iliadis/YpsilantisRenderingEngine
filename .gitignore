@@ -3,5 +3,6 @@
 /cmake-build-release
 /build
 /assets
+/archive
 features.txt
 renderpasses.png

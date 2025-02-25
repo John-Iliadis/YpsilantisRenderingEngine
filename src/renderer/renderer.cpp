@@ -132,21 +132,6 @@ void Renderer::importSkybox(const std::array<std::string, 6> &paths)
 
     loader.get(mSkyboxTexture);
 
-    if (!mSkyboxLoaded)
-    {
-        VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
-
-        VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .descriptorPool = mRenderDevice.descriptorPool,
-            .descriptorSetCount = 1,
-            .pSetLayouts = &dsLayout
-        };
-
-        VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mSkyboxDs);
-        vulkanCheck(result, "Failed to allocate descriptor set.");
-    }
-
     VkDescriptorImageInfo imageInfo {
         .sampler = mSkyboxTexture.vulkanSampler.sampler,
         .imageView = mSkyboxTexture.imageView,
@@ -164,8 +149,6 @@ void Renderer::importSkybox(const std::array<std::string, 6> &paths)
     };
 
     vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
-
-    mSkyboxLoaded = true;
 }
 
 void Renderer::deleteModel(uuid32_t id)
@@ -296,7 +279,7 @@ void Renderer::executeSkyboxRenderpass(VkCommandBuffer commandBuffer)
     beginDebugLabel(commandBuffer, "Skybox Renderpass");
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    if (mSkyboxLoaded && mRenderSkybox)
+    if (mRenderSkybox)
     {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSkyboxPipeline);
 
@@ -306,6 +289,12 @@ void Renderer::executeSkyboxRenderpass(VkCommandBuffer commandBuffer)
                                 mSkyboxPipeline,
                                 0, descriptorSets.size(), descriptorSets.data(),
                                 0, nullptr);
+
+        vkCmdPushConstants(commandBuffer,
+                           mSkyboxPipeline,
+                           VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(int32_t) * 3,
+                           &mSkyboxData);
 
         vkCmdDraw(commandBuffer, 36, 1, 0, 0);
     }
@@ -1125,6 +1114,11 @@ void Renderer::createSkyboxPipeline()
             .dsLayouts = {
                 mCameraRenderDataDsLayout,
                 mSingleImageDsLayout
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(int32_t) * 3
             }
         },
         .renderPass = mColorDepthRenderpass,
@@ -1450,13 +1444,25 @@ void Renderer::createPostProcessingPipeline()
 
 void Renderer::loadSkybox()
 {
+    VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mSkyboxDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
     std::array<std::string, 6> paths {
-        "../assets/cubemaps/sky/right.jpg",
-        "../assets/cubemaps/sky/left.jpg",
-        "../assets/cubemaps/sky/top.jpg",
-        "../assets/cubemaps/sky/bottom.jpg",
-        "../assets/cubemaps/sky/front.jpg",
-        "../assets/cubemaps/sky/back.jpg",
+        "../assets/cubemaps/sky/Daylight_Box_Right.bmp",
+        "../assets/cubemaps/sky/Daylight_Box_Left.bmp",
+        "../assets/cubemaps/sky/Daylight_Box_Top.bmp",
+        "../assets/cubemaps/sky/Daylight_Box_Bottom.bmp",
+        "../assets/cubemaps/sky/Daylight_Box_Front.bmp",
+        "../assets/cubemaps/sky/Daylight_Box_Back.bmp"
     };
 
     importSkybox(paths);

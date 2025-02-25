@@ -5,9 +5,9 @@
 #ifndef VULKANRENDERINGENGINE_CUBEMAP_LOADER_HPP
 #define VULKANRENDERINGENGINE_CUBEMAP_LOADER_HPP
 
-#include <stb/stb_image.h>
-#include "../vk/vulkan_texture.hpp"
-#include "../vk/vulkan_buffer.hpp"
+#include "stb/stb_image.h"
+#include "../../vk/vulkan_texture.hpp"
+#include "../../vk/vulkan_buffer.hpp"
 
 class CubemapLoader
 {

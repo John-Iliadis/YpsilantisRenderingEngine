@@ -13,7 +13,7 @@
 #include "camera.hpp"
 #include "model.hpp"
 #include "model_importer.hpp"
-#include "cubemap_loader.hpp"
+#include "loaders/cubemap_loader.hpp"
 
 constexpr uint32_t InitialViewportWidth = 1000;
 constexpr uint32_t InitialViewportHeight = 700;
@@ -34,8 +34,6 @@ public:
     void notify(const Message &message) override;
 
 private:
-    void loadSkybox();
-
     void executeClearRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
     void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
@@ -85,6 +83,8 @@ private:
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
     void createPostProcessingPipeline();
+
+    void loadSkybox();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
@@ -145,16 +145,22 @@ private:
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
 
+    struct SkyboxData
+    {
+        alignas(4) int32_t flipX = false;
+        alignas(4) int32_t flipY = false;
+        alignas(4) int32_t flipZ = false;
+    } mSkyboxData;
+
     // grid data
     struct GridData
     {
         alignas(16) glm::vec4 thinLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 80.f / 255.f);
         alignas(16) glm::vec4 thickLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 1.f);
         alignas(4) float cellSize = 0.5f;
-        alignas(4) float minPixelsBetweenCells = 1.2f;
+        alignas(4) float minPixelsBetweenCells = 0.7f;
     } mGridData;
 
-    bool mSkyboxLoaded = false;
     bool mRenderSkybox = true;
     bool mSsaoOn = false;
     bool mRenderGrid = true;

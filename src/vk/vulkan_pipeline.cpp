@@ -150,6 +150,14 @@ void VulkanGraphicsPipeline::createPipeline(const PipelineSpecification &specifi
         .scissorCount = 1
     };
 
+    if (specification.viewportState.viewport)
+    {
+        const auto& viewportState = specification.viewportState;
+
+        viewportStateCreateInfo.pViewports = &*viewportState.viewport;
+        viewportStateCreateInfo.pScissors = &*viewportState.scissor;
+    }
+
     VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .rasterizerDiscardEnable = specification.rasterization.rasterizerDiscardPrimitives,

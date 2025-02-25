@@ -99,8 +99,6 @@ void Editor::mainMenuBar()
 
 void Editor::cameraPanel()
 {
-    static constexpr ImGuiSliderFlags sliderFlags = ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput;
-
     ImGui::Begin("Camera", &mShowCameraPanel);
 
     ImGui::SeparatorText("Settings");
@@ -109,12 +107,12 @@ void Editor::cameraPanel()
     ImGui::DragFloat("Near Plane",
                      mRenderer.mCamera.nearPlane(),
                      0.01f, 0.001f, *mRenderer.mCamera.farPlane(),
-                     "%.3f", sliderFlags);
+                     "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
     ImGui::DragFloat("Far Plane",
                      mRenderer.mCamera.farPlane(),
                      0.1f, *mRenderer.mCamera.nearPlane(), 10000.f,
-                     "%.2f", sliderFlags);
+                     "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
     ImGui::SeparatorText("Camera Mode");
 
@@ -376,8 +374,6 @@ void Editor::meshNodeInspector(GraphNode *node)
 
     nodeTransform(node);
 
-    ImGui::SeparatorText("Info");
-
     if (ImGui::CollapsingHeader("Info##meshNodeInspector", ImGuiTreeNodeFlags_DefaultOpen))
     {
         auto &model = *mRenderer.mModels.at(meshNode->modelID().value());
@@ -564,7 +560,7 @@ void Editor::plotPerformanceGraphs()
 void Editor::rendererPanel()
 {
     static constexpr ImGuiColorEditFlags colorEditFlags = ImGuiColorEditFlags_DisplayRGB |
-                                                          ImGuiColorEditFlags_AlphaBar;
+        ImGuiColorEditFlags_AlphaBar;
 
     ImGui::Begin("Renderer", &mShowRendererPanel);
 
@@ -584,7 +580,12 @@ void Editor::rendererPanel()
         ImGui::Checkbox("Render Skybox", &mRenderer.mRenderSkybox);
         ImGui::Separator();
 
-        if (ImGui::Button("Import Faces"))
+        ImGui::Checkbox("Flip X-axis##skyboxX", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipX));
+        ImGui::Checkbox("Flip Y-axis##skyboxY", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipY));
+        ImGui::Checkbox("Flip Z-axis##skyboxZ", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipZ));
+        ImGui::Separator();
+
+        if (ImGui::Button("Import New"))
             ImGui::OpenPopup("skyboxImportPopup");
     }
 
