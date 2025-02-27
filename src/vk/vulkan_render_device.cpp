@@ -100,7 +100,8 @@ void VulkanRenderDevice::createLogicalDevice()
     };
 
     VkPhysicalDeviceFeatures features {
-        .samplerAnisotropy = VK_TRUE
+        .samplerAnisotropy = VK_TRUE,
+        .fragmentStoresAndAtomics = VK_TRUE
     };
 
     VkDeviceCreateInfo deviceCreateInfo {

@@ -37,23 +37,31 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createSingleImageDescriptorSets();
     createDepthNormalDs();
 
-    createClearRenderPass();
-    createClearFramebuffer();
-
     createPrepassRenderpass();
     createPrepassFramebuffer();
     createPrepassPipeline();
 
-    createColorDepthRenderpass();
-    createColorDepthFramebuffer();
-
+    createSkyboxRenderpass();
+    createSkyboxFramebuffer();
     createSkyboxPipeline();
 
     createSsaoRenderpass();
     createSsaoFramebuffer();
     createSsaoPipeline();
 
-    createShadingPipeline();
+    createOitTextures();
+    createOitBuffers();
+    createOitResourcesDs();
+    updateOitResourcesDs();
+    createForwardRenderpass();
+    createForwardFramebuffer();
+    createOitTransparentCollectionPipeline();
+    createOitTransparencyResolutionPipeline();
+    createOpaqueForwardPassPipeline();
+    createForwardPassBlendPipeline();
+
+    createGridRenderpass();
+    createGridFramebuffer();
     createGridPipeline();
 
     createPostProcessingRenderpass();
@@ -66,16 +74,19 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 Renderer::~Renderer()
 {
     destroyDefaultMaterialTextures();
-    vkDestroyFramebuffer(mRenderDevice.device, mClearFramebuffer, nullptr);
+
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
-    vkDestroyFramebuffer(mRenderDevice.device, mColorDepthFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mSkyboxFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mForwardPassFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mSsaoFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mGridFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
 
-    vkDestroyRenderPass(mRenderDevice.device, mClearRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderpass, nullptr);
-    vkDestroyRenderPass(mRenderDevice.device, mColorDepthRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mSkyboxRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSsaoRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mForwardRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mGridRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
 }
 
@@ -88,21 +99,11 @@ void Renderer::render(VkCommandBuffer commandBuffer)
 {
     setViewport(commandBuffer);
 
-    executeClearRenderpass(commandBuffer);
     executePrepass(commandBuffer);
     executeSkyboxRenderpass(commandBuffer);
     executeSsaoRenderpass(commandBuffer);
-    executeShadingRenderpass(commandBuffer);
+    executeForwardRenderpass(commandBuffer);
     executeGridRenderpass(commandBuffer);
-
-    mColorTexture.transitionLayout(commandBuffer,
-                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                               VK_PIPELINE_STAGE_TRANSFER_BIT,
-                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                               VK_ACCESS_TRANSFER_WRITE_BIT,
-                               VK_ACCESS_SHADER_READ_BIT);
-
     executePostProcessingRenderpass(commandBuffer);
 }
 
@@ -174,20 +175,25 @@ void Renderer::resize(uint32_t width, uint32_t height)
 
     vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, freeDs.size(), freeDs.data());
 
+    createOitTextures();
     createColorTexture();
     createDepthTexture();
     createNormalTexture();
     createSsaoTexture();
     createPostProcessTexture();
 
-    createClearFramebuffer();
     createPrepassFramebuffer();
-    createColorDepthFramebuffer();
+    createSkyboxFramebuffer();
     createSsaoFramebuffer();
+    createForwardFramebuffer();
+    createGridFramebuffer();
     createPostProcessingFramebuffer();
 
     createSingleImageDescriptorSets();
     createDepthNormalDs();
+
+    createOitBuffers();
+    updateOitResourcesDs();
 }
 
 void Renderer::notify(const Message &message)
@@ -203,38 +209,12 @@ void Renderer::notify(const Message &message)
     }
 }
 
-void Renderer::executeClearRenderpass(VkCommandBuffer commandBuffer)
-{
-    static constexpr VkClearValue colorClear {.color = {64.f / 255.f, 60.f / 255.f, 60.f / 255.f, 1.f}};
-    static constexpr VkClearValue depthClear {.depthStencil = {.depth = 1.f, .stencil = 0}};
-    static constexpr VkClearValue normalClear {.color = {0.f, 0.f, 0.f, 0.f}};
-
-    static std::array<VkClearValue, 3> clearValues {
-        colorClear,
-        depthClear,
-        normalClear
-    };
-
-    VkRenderPassBeginInfo renderPassBeginInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mClearRenderpass,
-        .framebuffer = mClearFramebuffer,
-        .renderArea = {
-            .offset = {.x = 0, .y = 0},
-            .extent = {.width = mWidth, .height = mHeight}
-        },
-        .clearValueCount = static_cast<uint32_t>(clearValues.size()),
-        .pClearValues = clearValues.data()
-    };
-
-    beginDebugLabel(commandBuffer, "Clear Renderpass");
-    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdEndRenderPass(commandBuffer);
-    endDebugLabel(commandBuffer);
-}
-
 void Renderer::executePrepass(VkCommandBuffer commandBuffer)
 {
+    static constexpr VkClearValue normalClear {.color = {0.f, 0.f, 0.f, 0.f}};
+    static constexpr VkClearValue depthClear {.depthStencil = {.depth = 1.f, .stencil = 0}};
+    static constexpr std::array<VkClearValue, 2> clears {normalClear, depthClear};
+
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = mPrepassRenderpass,
@@ -243,8 +223,8 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
             .offset = {.x = 0, .y = 0},
             .extent = {.width = mWidth, .height = mHeight}
         },
-        .clearValueCount = 0,
-        .pClearValues = nullptr
+        .clearValueCount = static_cast<uint32_t>(clears.size()),
+        .pClearValues = clears.data()
     };
 
     beginDebugLabel(commandBuffer, "Prepass");
@@ -256,7 +236,7 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
                             0, 1, &mCameraDs,
                             0, nullptr);
 
-    renderModels(commandBuffer, mPrepassPipeline, 1);
+    renderModels(commandBuffer, mPrepassPipeline, 1, true);
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -264,16 +244,18 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
 
 void Renderer::executeSkyboxRenderpass(VkCommandBuffer commandBuffer)
 {
+    static constexpr VkClearValue colorClear {.color = {64.f / 255.f, 60.f / 255.f, 60.f / 255.f, 1.f}};
+
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mColorDepthRenderpass,
-        .framebuffer = mColorDepthFramebuffer,
+        .renderPass = mSkyboxRenderpass,
+        .framebuffer = mSkyboxFramebuffer,
         .renderArea = {
             .offset = {.x = 0, .y = 0},
             .extent = {.width = mWidth, .height = mHeight}
         },
-        .clearValueCount = 0,
-        .pClearValues = nullptr
+        .clearValueCount = 1,
+        .pClearValues = &colorClear
     };
 
     beginDebugLabel(commandBuffer, "Skybox Renderpass");
@@ -340,36 +322,103 @@ void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
     endDebugLabel(commandBuffer);
 }
 
-void Renderer::executeShadingRenderpass(VkCommandBuffer commandBuffer)
+void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
 {
+    static constexpr VkClearValue transparencyClear {.color = {0.f, 0.f, 0.f, 0.f}};
+
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mColorDepthRenderpass,
-        .framebuffer = mColorDepthFramebuffer,
+        .renderPass = mForwardRenderpass,
+        .framebuffer = mForwardPassFramebuffer,
         .renderArea = {
             .offset = {.x = 0, .y = 0},
             .extent = {.width = mWidth, .height = mHeight}
         },
-        .clearValueCount = 0,
-        .pClearValues = nullptr
+        .clearValueCount = 1,
+        .pClearValues = &transparencyClear
     };
 
-    std::array<VkDescriptorSet, 2> descriptorSets {
-        mCameraDs,
-        mSsaoDs
-    };
+    beginDebugLabel(commandBuffer, "Forward Pass");
 
-    beginDebugLabel(commandBuffer, "Shading Renderpass");
+    { // clear oit resources
+        static constexpr VkClearColorValue clearColor {.uint32 = {0xffffffff}};
+        static constexpr VkImageSubresourceRange imageSubresourceRange {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        };
+
+        vkCmdClearColorImage(commandBuffer,
+                             mTransparentNodeIndexStorageImage.image,
+                             VK_IMAGE_LAYOUT_GENERAL,
+                             &clearColor,
+                             1, &imageSubresourceRange);
+
+        vkCmdFillBuffer(commandBuffer, mOitLinkedListInfoSSBO.getBuffer(), 0, sizeof(uint32_t), 0);
+
+        VkMemoryBarrier memoryBarrier {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT
+        };
+
+        vkCmdPipelineBarrier(commandBuffer,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0, 1, &memoryBarrier,
+                             0, nullptr, 0, nullptr);
+    }
+
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mShadingPipeline);
 
-    vkCmdBindDescriptorSets(commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mShadingPipeline,
-                            0, descriptorSets.size(), descriptorSets.data(),
-                            0, nullptr);
+    { // subpass 0: transparent fragment collection
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mTransparentCollectionPipeline);
 
-    renderModels(commandBuffer, mShadingPipeline, 2);
+        std::array<VkDescriptorSet, 2> ds {mCameraDs, mOitResourcesDs};
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mTransparentCollectionPipeline,
+                                0, ds.size(), ds.data(),
+                                0, nullptr);
+
+        renderModels(commandBuffer, mTransparentCollectionPipeline, 2, false);
+    }
+
+    { // subpass 1: transparency resolution
+        vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mTransparencyResolutionPipeline);
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mTransparencyResolutionPipeline,
+                                0, 1, &mOitResourcesDs,
+                                0, nullptr);
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    }
+
+    { // subpass 2: opaque pass
+        vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mOpaqueForwardPassPipeline);
+
+        std::array<VkDescriptorSet, 2> ds {mCameraDs, mSsaoDs};
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mOpaqueForwardPassPipeline,
+                                0, ds.size(), ds.data(),
+                                0, nullptr);
+
+        renderModels(commandBuffer, mOpaqueForwardPassPipeline, 2, true);
+    }
+
+    { // subpass 3: blend pass
+        vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mForwardPassBlendPipeline);
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mForwardPassBlendPipeline,
+                                0, 1, &mTransparentTexInputAttachmentDs,
+                                0, nullptr);
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    }
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -379,8 +428,8 @@ void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
 {
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mColorDepthRenderpass,
-        .framebuffer = mColorDepthFramebuffer,
+        .renderPass = mGridRenderpass,
+        .framebuffer = mGridFramebuffer,
         .renderArea = {
             .offset = {.x = 0, .y = 0},
             .extent = {.width = mWidth, .height = mHeight}
@@ -463,10 +512,29 @@ void Renderer::setViewport(VkCommandBuffer commandBuffer)
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 }
 
-void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex)
+void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex, bool opaque)
 {
     for (const auto& [id, model] : mModels)
-        model->render(commandBuffer, pipelineLayout, matDsIndex);
+    {
+        if (opaque)
+        {
+            pfnCmdSetCullModeEXT(commandBuffer, model->cullMode);
+            pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+        }
+
+        for (const auto& mesh : model->meshes)
+        {
+            if (mesh.opaque == opaque)
+            {
+                uint32_t materialIndex = mesh.materialIndex;
+
+                model->bindMaterialUBO(commandBuffer, pipelineLayout, materialIndex, matDsIndex);
+                model->bindTextures(commandBuffer, pipelineLayout, materialIndex, matDsIndex);
+
+                mesh.mesh.render(commandBuffer);
+            }
+        }
+    }
 }
 
 void Renderer::updateCameraUBO()
@@ -661,6 +729,7 @@ void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &tex
 
     VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &ds);
     vulkanCheck(result, "Failed to allocate descriptor set.");
+    setVulkanObjectDebugName(mRenderDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, name, ds);
 
     VkDescriptorImageInfo imageInfo {
         .sampler = texture.vulkanSampler.sampler,
@@ -765,123 +834,23 @@ void Renderer::createDepthNormalDs()
     vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
 }
 
-void Renderer::createClearRenderPass()
-{
-    VkAttachmentDescription colorAttachment {
-        .format = mColorTexture.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentDescription depthAttachment {
-        .format = mDepthTexture.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentDescription normalAttachment {
-        .format = mNormalTexture.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    std::array<VkAttachmentDescription, 3> attachments {
-        colorAttachment,
-        depthAttachment,
-        normalAttachment
-    };
-
-    VkAttachmentReference colorAttachmentRef {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentReference depthAttachmentRed {
-        .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentReference normalAttachmentRef {
-        .attachment = 2,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    std::array<VkAttachmentReference, 2> colorAttachments {
-        colorAttachmentRef,
-        normalAttachmentRef,
-    };
-
-    VkSubpassDescription clearSubpass {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size()),
-        .pColorAttachments = colorAttachments.data(),
-        .pDepthStencilAttachment = &depthAttachmentRed
-    };
-
-    VkRenderPassCreateInfo renderPassCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = static_cast<uint32_t>(attachments.size()),
-        .pAttachments = attachments.data(),
-        .subpassCount = 1,
-        .pSubpasses = &clearSubpass,
-    };
-
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mClearRenderpass);
-    vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mClearRenderpass, "Renderer::mClearRenderPass");
-}
-
-void Renderer::createClearFramebuffer()
-{
-    vkDestroyFramebuffer(mRenderDevice.device, mClearFramebuffer, nullptr);
-
-    std::array<VkImageView, 3> imageViews {
-        mColorTexture.imageView,
-        mDepthTexture.imageView,
-        mNormalTexture.imageView,
-    };
-
-    VkFramebufferCreateInfo framebufferCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mClearRenderpass,
-        .attachmentCount = static_cast<uint32_t>(imageViews.size()),
-        .pAttachments = imageViews.data(),
-        .width = mWidth,
-        .height = mHeight,
-        .layers = 1
-    };
-
-    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mClearFramebuffer);
-    vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mClearFramebuffer, "Renderer::mClearFramebuffer");
-}
-
 void Renderer::createPrepassRenderpass()
 {
     VkAttachmentDescription normalAttachment {
         .format = mNormalTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
     VkAttachmentDescription depthAttachment {
         .format = mDepthTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     };
 
@@ -997,14 +966,14 @@ void Renderer::createPrepassPipeline()
     mPrepassPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
-void Renderer::createColorDepthRenderpass()
+void Renderer::createSkyboxRenderpass()
 {
     VkAttachmentDescription colorAttachment {
         .format = mColorTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
@@ -1047,14 +1016,14 @@ void Renderer::createColorDepthRenderpass()
         .pSubpasses = &subpass
     };
 
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mColorDepthRenderpass);
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mSkyboxRenderpass);
     vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mColorDepthRenderpass, "Renderer::mColorDepthRenderpass");
+    setRenderpassDebugName(mRenderDevice, mSkyboxRenderpass, "Renderer::mSkyboxRenderpass");
 }
 
-void Renderer::createColorDepthFramebuffer()
+void Renderer::createSkyboxFramebuffer()
 {
-    vkDestroyFramebuffer(mRenderDevice.device, mColorDepthFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mSkyboxFramebuffer, nullptr);
 
     std::array<VkImageView, 2> imageViews {
         mColorTexture.imageView,
@@ -1063,7 +1032,7 @@ void Renderer::createColorDepthFramebuffer()
 
     VkFramebufferCreateInfo framebufferCreateInfo {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mColorDepthRenderpass,
+        .renderPass = mSkyboxRenderpass,
         .attachmentCount = static_cast<uint32_t>(imageViews.size()),
         .pAttachments = imageViews.data(),
         .width = mWidth,
@@ -1071,9 +1040,9 @@ void Renderer::createColorDepthFramebuffer()
         .layers = 1
     };
 
-    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mColorDepthFramebuffer);
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mSkyboxFramebuffer);
     vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mColorDepthFramebuffer, "Renderer::mColorDepthFramebuffer");
+    setFramebufferDebugName(mRenderDevice, mSkyboxFramebuffer, "Renderer::mSkyboxFramebuffer");
 }
 
 void Renderer::createSkyboxPipeline()
@@ -1121,7 +1090,7 @@ void Renderer::createSkyboxPipeline()
                 .size = sizeof(int32_t) * 3
             }
         },
-        .renderPass = mColorDepthRenderpass,
+        .renderPass = mSkyboxRenderpass,
         .subpassIndex = 0,
         .debugName = "Renderer::mSkyboxPipeline"
     };
@@ -1230,7 +1199,432 @@ void Renderer::createSsaoPipeline()
     mSsaoPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
-void Renderer::createShadingPipeline()
+void Renderer::createOitTextures()
+{
+    mTransparentNodeIndexStorageImage = {
+        mRenderDevice,
+        VK_IMAGE_VIEW_TYPE_2D,
+        VK_FORMAT_R32_UINT,
+        mWidth, mHeight,
+        VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT
+    };
+
+    mTransparentNodeIndexStorageImage.transitionLayout(
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0,
+        VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+    mTransparentNodeIndexStorageImage.setDebugName("Renderer::mTransparentNodeIndexStorageImage");
+
+    TextureSpecification transparencyTexSpecification {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .width = mWidth,
+        .height = mHeight,
+        .layerCount = 1,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Nearest,
+        .minFilter = TextureMinFilter::Nearest,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .generateMipMaps = false
+    };
+
+    mTransparencyTexture = {mRenderDevice, transparencyTexSpecification};
+    mTransparencyTexture.setDebugName("Renderer::mTransparencyTexture");
+}
+
+void Renderer::createOitBuffers()
+{
+    mOitLinkedListLength = 8;
+
+    uint32_t ssboMemSize = mWidth * mHeight * sizeof(TransparentNode) * mOitLinkedListLength;
+
+    mOitLinkedListInfoSSBO = {mRenderDevice, 2 * sizeof(uint32_t), BufferType::Storage, MemoryType::Device};
+
+    uint32_t data[2] = {0, mWidth * mHeight * mOitLinkedListLength};
+    mOitLinkedListInfoSSBO.update(0, sizeof(data), data);
+
+    mOitLinkedListSSBO = {mRenderDevice, ssboMemSize, BufferType::Storage, MemoryType::Device};
+}
+
+void Renderer::createOitResourcesDs()
+{
+    // mOitResourcesDsLayout
+    DsLayoutSpecification mOitResourcesDsLayoutSpecification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        .debugName = "Renderer::mOitResourcesDs"
+    };
+
+    mOitResourcesDsLayout = {mRenderDevice, mOitResourcesDsLayoutSpecification};
+
+    // mSingleInputAttachmentDsLayout
+    DsLayoutSpecification mSingleInputAttachmentDsLayoutSpecification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+        },
+        .debugName = "Renderer::mSingleInputAttachmentDsLayout"
+    };
+
+    mSingleInputAttachmentDsLayout = {mRenderDevice, mSingleInputAttachmentDsLayoutSpecification};
+
+    // mOitResourcesDs + mTransparentTexInputAttachmentDs allocation
+    std::array<VkDescriptorSetLayout, 2> dsLayouts {
+        mOitResourcesDsLayout,
+        mSingleInputAttachmentDsLayout
+    };
+
+    VkDescriptorSetAllocateInfo dsAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = static_cast<uint32_t>(dsLayouts.size()),
+        .pSetLayouts = dsLayouts.data()
+    };
+
+    std::array<VkDescriptorSet, 2> descriptorSets;
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &dsAllocateInfo, descriptorSets.data());
+    vulkanCheck(result, "Failed to allocate descriptor sets");
+
+    mOitResourcesDs = descriptorSets.at(0);
+    mTransparentTexInputAttachmentDs = descriptorSets.at(1);
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mOitResourcesDs",
+                             mOitResourcesDs);
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mTransparentTexInputAttachmentDs",
+                             mTransparentTexInputAttachmentDs);
+}
+
+void Renderer::updateOitResourcesDs()
+{
+    // mOitResourcesDs + mTransparentTexInputAttachmentDs
+    VkDescriptorImageInfo imageInfo {
+        .imageView = mTransparentNodeIndexStorageImage.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL
+    };
+
+    VkDescriptorBufferInfo oitLinkedListSSBODescriptorInfo {
+        .buffer = mOitLinkedListSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorBufferInfo oitLinkedListInfoSSBODescriptorInfo {
+        .buffer = mOitLinkedListInfoSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorImageInfo transparentTexImageInfo {
+        .sampler = mTransparencyTexture.vulkanSampler.sampler,
+        .imageView = mTransparencyTexture.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    std::array<VkWriteDescriptorSet, 4> descriptorWrites {{
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mOitResourcesDs,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .pImageInfo = &imageInfo
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mOitResourcesDs,
+            .dstBinding = 1,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pBufferInfo = &oitLinkedListSSBODescriptorInfo
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mOitResourcesDs,
+            .dstBinding = 2,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            .pBufferInfo = &oitLinkedListInfoSSBODescriptorInfo
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mTransparentTexInputAttachmentDs,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+            .pImageInfo = &transparentTexImageInfo
+        },
+    }};
+
+    vkUpdateDescriptorSets(mRenderDevice.device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+}
+
+void Renderer::createForwardRenderpass()
+{
+    VkAttachmentDescription transparentColorAttachment {
+        .format = mTransparencyTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentDescription colorAttachment {
+        .format = mColorTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentDescription depthAttachment {
+        .format = mDepthTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    std::array<VkAttachmentDescription, 3> attachments {
+        transparentColorAttachment,
+        colorAttachment,
+        depthAttachment
+    };
+
+    VkAttachmentReference transparencyAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentReference transparencyInputAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference colorAttachmentRef {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentReference depthAttachmentRef {
+        .attachment = 2,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    std::array<uint32_t, 2> transparentFragmentCollectionSubpassPreserveAttachments {0, 1};
+    VkSubpassDescription transparentFragmentCollectionSubpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .pDepthStencilAttachment = &depthAttachmentRef,
+        .preserveAttachmentCount = static_cast<uint32_t>(transparentFragmentCollectionSubpassPreserveAttachments.size()),
+        .pPreserveAttachments = transparentFragmentCollectionSubpassPreserveAttachments.data()
+    };
+
+    std::array<uint32_t, 2> transparencyResolutionSubpassPreserveAttachments {1, 2};
+    VkSubpassDescription transparencyResolutionSubpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &transparencyAttachmentRef,
+        .preserveAttachmentCount = static_cast<uint32_t>(transparencyResolutionSubpassPreserveAttachments.size()),
+        .pPreserveAttachments = transparencyResolutionSubpassPreserveAttachments.data()
+    };
+
+    uint32_t opaqueForwardSubpassPreserveAttachment = 0;
+    VkSubpassDescription opaqueForwardSubpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef,
+        .pDepthStencilAttachment = &depthAttachmentRef,
+        .preserveAttachmentCount = 1,
+        .pPreserveAttachments = &opaqueForwardSubpassPreserveAttachment
+    };
+
+    uint32_t blendSubpassPreserveAttachment = 2;
+    VkSubpassDescription blendSubpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .inputAttachmentCount = 1,
+        .pInputAttachments = &transparencyInputAttachmentRef,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef,
+        .preserveAttachmentCount = 1,
+        .pPreserveAttachments = &blendSubpassPreserveAttachment
+    };
+
+    std::array<VkSubpassDescription, 4> subpasses {
+        transparentFragmentCollectionSubpass,
+        transparencyResolutionSubpass,
+        opaqueForwardSubpass,
+        blendSubpass
+    };
+
+    std::array<VkSubpassDependency, 3> dependencies;
+
+    dependencies.at(0).srcSubpass = 0;
+    dependencies.at(0).dstSubpass = 1;
+    dependencies.at(0).srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies.at(0).dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies.at(0).srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    dependencies.at(0).dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    dependencies.at(0).dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    dependencies.at(1).srcSubpass = 1;
+    dependencies.at(1).dstSubpass = 3;
+    dependencies.at(1).srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies.at(1).dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies.at(1).srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies.at(1).dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    dependencies.at(1).dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    dependencies.at(2).srcSubpass = 2;
+    dependencies.at(2).dstSubpass = 3;
+    dependencies.at(2).srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies.at(2).dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies.at(2).srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies.at(2).dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies.at(2).dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
+        .subpassCount = static_cast<uint32_t>(subpasses.size()),
+        .pSubpasses = subpasses.data(),
+        .dependencyCount = static_cast<uint32_t>(dependencies.size()),
+        .pDependencies = dependencies.data()
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mForwardRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mForwardRenderpass, "Renderer::mForwardRenderpass");
+}
+
+void Renderer::createForwardFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mForwardPassFramebuffer, nullptr);
+
+    std::array<VkImageView, 3> attachments {
+        mTransparencyTexture.imageView,
+        mColorTexture.imageView,
+        mDepthTexture.imageView
+    };
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mForwardRenderpass,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mForwardPassFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mForwardPassFramebuffer, "Renderer::mForwardPassFramebuffer");
+}
+
+void Renderer::createOitTransparentCollectionPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/transparent_frag_collection.vert.spv",
+            .fragShaderPath = "shaders/transparent_frag_collection.frag.spv"
+        },
+        .vertexInput = {
+            .bindings = InstancedMesh::bindingDescriptions(),
+            .attributes = InstancedMesh::attributeDescriptions()
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .rasterization = {
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .cullMode = VK_CULL_MODE_NONE,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = VK_TRUE,
+            .enableDepthWrite = VK_FALSE,
+            .depthCompareOp = VK_COMPARE_OP_LESS
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {
+            .dsLayouts = {
+                mCameraRenderDataDsLayout,
+                mOitResourcesDsLayout,
+                mMaterialsDsLayout
+            }
+        },
+        .renderPass = mForwardRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mTransparentCollectionPipeline"
+    };
+
+    mTransparentCollectionPipeline = {mRenderDevice, specification};
+}
+
+void Renderer::createOitTransparencyResolutionPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/fullscreen_render.vert.spv",
+            .fragShaderPath = "shaders/transparency_resolution.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .rasterization = {
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .cullMode = VK_CULL_MODE_NONE,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {
+            .dsLayouts = {
+                mOitResourcesDsLayout
+            }
+        },
+        .renderPass = mForwardRenderpass,
+        .subpassIndex = 1,
+        .debugName = "Renderer::mTransparencyResolutionPipeline"
+    };
+
+    mTransparencyResolutionPipeline = {mRenderDevice, specification};
+}
+
+void Renderer::createOpaqueForwardPassPipeline()
 {
     PipelineSpecification specification {
         .shaderStages = {
@@ -1276,12 +1670,135 @@ void Renderer::createShadingPipeline()
                 mMaterialsDsLayout
             }
         },
-        .renderPass = mColorDepthRenderpass,
-        .subpassIndex = 0,
-        .debugName = "Renderer::mShadingPipeline"
+        .renderPass = mForwardRenderpass,
+        .subpassIndex = 2,
+        .debugName = "Renderer::mOpaqueForwardPassPipeline"
     };
 
-    mShadingPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+    mOpaqueForwardPassPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::createForwardPassBlendPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/fullscreen_render.vert.spv",
+            .fragShaderPath = "shaders/transparency_blend.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .rasterization = {
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .cullMode = VK_CULL_MODE_NONE,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .blending = {
+            .enable = true,
+            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+            .alphaBlendOp = VK_BLEND_OP_ADD
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {
+            .dsLayouts = {
+                mSingleInputAttachmentDsLayout
+            }
+        },
+        .renderPass = mForwardRenderpass,
+        .subpassIndex = 3,
+        .debugName = "Renderer::mForwardPassBlendPipeline"
+    };
+
+    mForwardPassBlendPipeline = {mRenderDevice, specification};
+}
+
+void Renderer::createGridRenderpass()
+{
+    VkAttachmentDescription colorAttachment {
+        .format = mColorTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentDescription depthAttachment {
+        .format = mDepthTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    std::array<VkAttachmentDescription, 2> attachments {{
+        colorAttachment,
+        depthAttachment
+    }};
+
+    VkAttachmentReference colorAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentReference depthAttachmentRef {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef,
+        .pDepthStencilAttachment = &depthAttachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mGridRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mGridRenderpass, "Renderer::mGridRenderpass");
+}
+
+void Renderer::createGridFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mGridFramebuffer, nullptr);
+
+    std::array<VkImageView, 2> imageViews {
+        mColorTexture.imageView,
+        mDepthTexture.imageView,
+    };
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mGridRenderpass,
+        .attachmentCount = static_cast<uint32_t>(imageViews.size()),
+        .pAttachments = imageViews.data(),
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mGridFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mGridFramebuffer, "Renderer::mGridFramebuffer");
 }
 
 void Renderer::createGridPipeline()
@@ -1334,7 +1851,7 @@ void Renderer::createGridPipeline()
                 .size = sizeof(GridData),
             }
         },
-        .renderPass = mColorDepthRenderpass,
+        .renderPass = mGridRenderpass,
         .subpassIndex = 0,
         .debugName = "Renderer::mGridPipeline"
     };

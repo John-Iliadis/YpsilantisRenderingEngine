@@ -96,6 +96,7 @@ void ModelLoader::loadMeshes(const aiScene& aiScene)
     for (uint32_t i = 0; i < aiScene.mNumMeshes; ++i)
     {
         const aiMesh& aiMesh = *aiScene.mMeshes[i];
+        const aiMaterial& aiMaterial = *aiScene.mMaterials[aiMesh.mMaterialIndex];
 
         debugLog(std::format("Loading mesh: {}", aiMesh.mName.data));
 
@@ -103,7 +104,8 @@ void ModelLoader::loadMeshes(const aiScene& aiScene)
             .name = aiMesh.mName.data,
             .vertexStagingBuffer = loadVertexData(aiMesh),
             .indexStagingBuffer = loadIndexData(aiMesh),
-            .materialIndex = aiMesh.mMaterialIndex
+            .materialIndex = aiMesh.mMaterialIndex,
+            .opaque = isOpaque(aiMaterial)
         };
 
         meshes.push_back(std::move(meshData));
@@ -441,6 +443,16 @@ float ModelLoader::getRoughnessFactor(const aiMaterial &aiMaterial)
     return defaultRoughnessFactor;
 }
 
+bool ModelLoader::isOpaque(const aiMaterial &aiMaterial)
+{
+    float opacity;
+
+    if (aiMaterial.Get(AI_MATKEY_OPACITY, opacity) != AI_SUCCESS)
+        opacity = 1.f;
+
+    return opacity == 1.f;
+}
+
 ModelImporter::ModelImporter(const VulkanRenderDevice &renderDevice)
     : SubscriberSNS({Topic::Type::Renderer})
     , mRenderDevice(renderDevice)
@@ -563,7 +575,8 @@ void ModelImporter::addMeshes(VkCommandBuffer commandBuffer, Model &model, const
             .meshID = UUIDRegistry::generateMeshID(),
             .name = meshData.name,
             .mesh {mRenderDevice, std::move(vertexBuffer), std::move(indexBuffer)},
-            .materialIndex = meshData.materialIndex
+            .materialIndex = meshData.materialIndex,
+            .opaque = meshData.opaque
         };
 
         model.meshes.push_back(std::move(mesh));

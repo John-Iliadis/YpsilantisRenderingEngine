@@ -1,24 +1,27 @@
 #version 460 core
 
+// shadow mapping
+// lighting
+// ibl
+
 #include "material.glsl"
+#include "transparent_node.glsl"
 
 layout (location = 0) in vec2 vTexCoords;
 layout (location = 1) in vec3 vNormal;
 layout (location = 2) in vec4 vColor;
 
-layout (location = 0) out vec4 outFragColor;
+layout (set = 1, binding = 0, r32ui) uniform coherent uimage2D nodeIndexStorageTex;
 
-layout (set = 0, binding = 0) uniform CameraUBO {
-    mat4 view;
-    mat4 projection;
-    mat4 viewProj;
-    vec4 cameraPos;
-    vec4 cameraDir;
-    float nearPlane;
-    float farPlane;
+layout (set = 1, binding = 1) buffer LinkedListSSBO {
+    TransparentNode nodes[];
 };
 
-layout (set = 1, binding = 0) uniform sampler2D ssaoTexture;
+layout (set = 1, binding = 2) buffer NodeCounterSSBO
+{
+    uint nodeCount;
+    uint maxNodeCount;
+};
 
 layout (set = 2, binding = 0) uniform MaterialsUBO { Material material; };
 layout (set = 2, binding = 1) uniform sampler2D baseColorTex;
@@ -30,9 +33,16 @@ layout (set = 2, binding = 6) uniform sampler2D emissionTex;
 
 void main()
 {
-    vec4 color = vColor;
+    uint nodeIndex = atomicAdd(nodeCount, 1);
+
+    if (nodeIndex >= maxNodeCount)
+        discard;
+
     vec4 baseColorFactor = material.baseColorFactor;
     vec4 baseColorSample = texture(baseColorTex, vTexCoords * material.tiling);
 
-    outFragColor = color * baseColorFactor * baseColorSample;
+    vec4 color = vColor * baseColorFactor * baseColorSample;
+    uint previousNodeIndex = imageAtomicExchange(nodeIndexStorageTex, ivec2(gl_FragCoord.xy), nodeIndex);
+
+    nodes[nodeIndex] = TransparentNode(color, gl_FragCoord.z, previousNodeIndex);
 }

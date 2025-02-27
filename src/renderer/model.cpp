@@ -68,22 +68,6 @@ void Model::createTextureDescriptorSets(VkDescriptorSetLayout dsLayout)
     }
 }
 
-void Model::render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex) const
-{
-    pfnCmdSetCullModeEXT(commandBuffer, cullMode);
-    pfnCmdSetFrontFaceEXT(commandBuffer, frontFace);
-
-    for (const auto& mesh : meshes)
-    {
-        uint32_t materialIndex = mesh.materialIndex;
-
-        bindMaterialUBO(commandBuffer, pipelineLayout, materialIndex, matDsIndex);
-        bindTextures(commandBuffer, pipelineLayout, materialIndex, matDsIndex);
-
-        mesh.mesh.render(commandBuffer);
-    }
-}
-
 Mesh* Model::getMesh(uuid32_t meshID)
 {
     for (auto& mesh : meshes)

@@ -29,6 +29,7 @@ struct Mesh
     std::string name;
     InstancedMesh mesh;
     uint32_t materialIndex;
+    bool opaque;
 };
 
 struct Texture
@@ -65,13 +66,10 @@ public:
     void createMaterialsUBO();
     void createTextureDescriptorSets(VkDescriptorSetLayout dsLayout);
 
-    void render(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex) const;
-
-    Mesh* getMesh(uuid32_t meshID);
-
-private:
     void bindMaterialUBO(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t materialIndex, uint32_t matDsIndex) const;
     void bindTextures(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t materialIndex, uint32_t matDsIndex) const;
+
+    Mesh* getMesh(uuid32_t meshID);
 
 private:
     const VulkanRenderDevice& mRenderDevice;

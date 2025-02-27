@@ -18,6 +18,8 @@
 constexpr uint32_t InitialViewportWidth = 1000;
 constexpr uint32_t InitialViewportHeight = 700;
 
+struct TransparentNode;
+
 class Renderer : public SubscriberSNS
 {
 public:
@@ -34,15 +36,14 @@ public:
     void notify(const Message &message) override;
 
 private:
-    void executeClearRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
     void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
-    void executeShadingRenderpass(VkCommandBuffer commandBuffer);
+    void executeForwardRenderpass(VkCommandBuffer commandBuffer);
     void executeGridRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
-    void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
+    void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex, bool opaque);
     void updateCameraUBO();
 
     void createColorTexture();
@@ -61,23 +62,31 @@ private:
     void createSingleImageDescriptorSets();
     void createDepthNormalDs();
 
-    void createClearRenderPass();
-    void createClearFramebuffer();
-
     void createPrepassRenderpass();
     void createPrepassFramebuffer();
     void createPrepassPipeline();
 
-    void createColorDepthRenderpass();
-    void createColorDepthFramebuffer();
-
+    void createSkyboxRenderpass();
+    void createSkyboxFramebuffer();
     void createSkyboxPipeline();
 
     void createSsaoRenderpass();
     void createSsaoFramebuffer();
     void createSsaoPipeline();
 
-    void createShadingPipeline();
+    void createOitTextures();
+    void createOitBuffers();
+    void createOitResourcesDs();
+    void updateOitResourcesDs();
+    void createForwardRenderpass();
+    void createForwardFramebuffer();
+    void createOitTransparentCollectionPipeline();
+    void createOitTransparencyResolutionPipeline();
+    void createOpaqueForwardPassPipeline();
+    void createForwardPassBlendPipeline();
+
+    void createGridRenderpass();
+    void createGridFramebuffer();
     void createGridPipeline();
 
     void createPostProcessingRenderpass();
@@ -97,7 +106,18 @@ private:
     Camera mCamera;
     VulkanBuffer mCameraUBO;
 
+    // oit
+    VulkanImage mTransparentNodeIndexStorageImage;
+    VulkanBuffer mOitLinkedListInfoSSBO;
+    VulkanBuffer mOitLinkedListSSBO;
+    VulkanDsLayout mOitResourcesDsLayout;
+    VkDescriptorSet mOitResourcesDs;
+    VulkanDsLayout mSingleInputAttachmentDsLayout;
+    VkDescriptorSet mTransparentTexInputAttachmentDs;
+    uint32_t mOitLinkedListLength;
+
     // render targets
+    VulkanTexture mTransparencyTexture;
     VulkanTexture mColorTexture;
     VulkanTexture mDepthTexture;
     VulkanTexture mNormalTexture;
@@ -106,17 +126,19 @@ private:
     VulkanTexture mSkyboxTexture;
 
     // render passes
-    VkRenderPass mClearRenderpass{};
     VkRenderPass mPrepassRenderpass{};
-    VkRenderPass mColorDepthRenderpass{};
+    VkRenderPass mSkyboxRenderpass{};
     VkRenderPass mSsaoRenderpass{};
+    VkRenderPass mForwardRenderpass{};
+    VkRenderPass mGridRenderpass{};
     VkRenderPass mPostProcessingRenderpass{};
 
     // framebuffers
-    VkFramebuffer mClearFramebuffer{};
     VkFramebuffer mPrepassFramebuffer{};
-    VkFramebuffer mColorDepthFramebuffer{};
+    VkFramebuffer mSkyboxFramebuffer{};
+    VkFramebuffer mForwardPassFramebuffer{};
     VkFramebuffer mSsaoFramebuffer{};
+    VkFramebuffer mGridFramebuffer{};
     VkFramebuffer mPostProcessingFramebuffer{};
 
     // pipelines
@@ -124,7 +146,10 @@ private:
     VulkanGraphicsPipeline mSkyboxPipeline;
     VulkanGraphicsPipeline mGridPipeline;
     VulkanGraphicsPipeline mSsaoPipeline;
-    VulkanGraphicsPipeline mShadingPipeline;
+    VulkanGraphicsPipeline mTransparentCollectionPipeline;
+    VulkanGraphicsPipeline mTransparencyResolutionPipeline;
+    VulkanGraphicsPipeline mOpaqueForwardPassPipeline;
+    VulkanGraphicsPipeline mForwardPassBlendPipeline;
     VulkanGraphicsPipeline mPostProcessingPipeline;
 
     // descriptor set layouts
@@ -167,6 +192,13 @@ private:
 
 private:
     friend class Editor;
+};
+
+struct TransparentNode
+{
+    alignas(16) glm::vec4 color;
+    alignas(4) float depth;
+    alignas(4) uint32_t next;
 };
 
 #endif //VULKANRENDERINGENGINE_RENDERER_HPP
