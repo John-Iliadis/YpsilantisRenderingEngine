@@ -114,7 +114,6 @@ private:
     VkDescriptorSet mOitResourcesDs;
     VulkanDsLayout mSingleInputAttachmentDsLayout;
     VkDescriptorSet mTransparentTexInputAttachmentDs;
-    uint32_t mOitLinkedListLength;
 
     // render targets
     VulkanTexture mTransparencyTexture;
@@ -186,8 +185,11 @@ private:
         alignas(4) float minPixelsBetweenCells = 0.7f;
     } mGridData;
 
+    uint32_t mOitLinkedListLength = 8;
+
     bool mRenderSkybox = true;
     bool mSsaoOn = false;
+    bool mOitOn = true;
     bool mRenderGrid = true;
 
 private:

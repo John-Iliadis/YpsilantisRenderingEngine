@@ -381,7 +381,7 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 0, ds.size(), ds.data(),
                                 0, nullptr);
 
-        renderModels(commandBuffer, mTransparentCollectionPipeline, 2, false);
+        if (mOitOn) renderModels(commandBuffer, mTransparentCollectionPipeline, 2, false);
     }
 
     { // subpass 1: transparency resolution
@@ -392,7 +392,7 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 mTransparencyResolutionPipeline,
                                 0, 1, &mOitResourcesDs,
                                 0, nullptr);
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        if (mOitOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     }
 
     { // subpass 2: opaque pass
@@ -1242,13 +1242,10 @@ void Renderer::createOitTextures()
 
 void Renderer::createOitBuffers()
 {
-    mOitLinkedListLength = 8;
-
     uint32_t ssboMemSize = mWidth * mHeight * sizeof(TransparentNode) * mOitLinkedListLength;
+    uint32_t data[2] = {0, mWidth * mHeight * mOitLinkedListLength};
 
     mOitLinkedListInfoSSBO = {mRenderDevice, 2 * sizeof(uint32_t), BufferType::Storage, MemoryType::Device};
-
-    uint32_t data[2] = {0, mWidth * mHeight * mOitLinkedListLength};
     mOitLinkedListInfoSSBO.update(0, sizeof(data), data);
 
     mOitLinkedListSSBO = {mRenderDevice, ssboMemSize, BufferType::Storage, MemoryType::Device};
