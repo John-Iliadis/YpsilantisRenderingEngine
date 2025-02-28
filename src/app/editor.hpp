@@ -45,6 +45,9 @@ private:
     GraphNode* createModelGraphRecursive(Model& model, const SceneNode& sceneNode, GraphNode* parent);
     GraphNode* createEmptyNode(GraphNode* parent, const std::string& name);
     GraphNode* createMeshNode(Model& model, const SceneNode& sceneNode, GraphNode* parent);
+    void addDirLight();
+    void addPointLight();
+    void addSpotLight();
     void copyNode(uuid32_t nodeID);
     void cutNode(uuid32_t nodeID);
     void pasteNode(GraphNode* parent);
@@ -55,7 +58,10 @@ private:
     void sceneNodeInspector(GraphNode* node);
     void emptyNodeInspector(GraphNode* node);
     void meshNodeInspector(GraphNode* node);
-    void nodeTransform(GraphNode* node);
+    void dirLightInspector(GraphNode* node);
+    void pointLightInspector(GraphNode* node);
+    void spotLightInspector(GraphNode* node);
+    bool nodeTransform(GraphNode* node);
 
     void deleteSelectedObject();
     void deleteSelectedNode();

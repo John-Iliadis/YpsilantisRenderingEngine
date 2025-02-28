@@ -18,7 +18,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
         mHeight = saveData["viewport"]["height"];
     }
 
-    mCamera = Camera(glm::vec3(0.f, 1.f, -1.f), 30.f, mWidth, mHeight, 0.01f);
+    mCamera = Camera(glm::vec3(0.f, 1.f, 0.f), 30.f, mWidth, mHeight, 0.01f);
 
     createDefaultMaterialTextures(mRenderDevice);
 
@@ -68,6 +68,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createPostProcessingFramebuffer();
     createPostProcessingPipeline();
 
+    createLightBuffers();
     loadSkybox();
 }
 
@@ -1956,6 +1957,13 @@ void Renderer::createPostProcessingPipeline()
     mPostProcessingPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
+void Renderer::createLightBuffers()
+{
+    mDirLightSSBO = {mRenderDevice, MaxDirLights * sizeof(DirectionalLight), BufferType::Storage, MemoryType::Device};
+    mSpotLightSSBO = {mRenderDevice, MaxSpotLights * sizeof(SpotLight), BufferType::Storage, MemoryType::Device};
+    mPointLightSSBO = {mRenderDevice, MaxPointLights * sizeof(PointLight), BufferType::Storage, MemoryType::Device};
+}
+
 void Renderer::loadSkybox()
 {
     VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
@@ -1980,4 +1988,64 @@ void Renderer::loadSkybox()
     };
 
     importSkybox(paths);
+}
+
+void Renderer::addDirLight(uuid32_t id, const DirectionalLight &light)
+{
+    addLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id, light);
+}
+
+void Renderer::addPointLight(uuid32_t id, const PointLight &light)
+{
+    addLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id, light);
+}
+
+void Renderer::addSpotLight(uuid32_t id, const SpotLight &light)
+{
+    addLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id, light);
+}
+
+DirectionalLight &Renderer::getDirLight(uuid32_t id)
+{
+    return getLight(mUuidToDirLightIndex, mDirectionalLights, id);
+}
+
+PointLight &Renderer::getPointLight(uuid32_t id)
+{
+    return getLight(mUuidToPointLightIndex, mPointLights, id);
+}
+
+SpotLight &Renderer::getSpotLight(uuid32_t id)
+{
+    return getLight(mUuidToSpotLightIndex, mSpotLights, id);
+}
+
+void Renderer::updateDirLight(uuid32_t id)
+{
+    updateLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id);
+}
+
+void Renderer::updateSpotLight(uuid32_t id)
+{
+    updateLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
+}
+
+void Renderer::updatePointLight(uuid32_t id)
+{
+    updateLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id);
+}
+
+void Renderer::deleteDirLight(uuid32_t id)
+{
+    deleteLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id);
+}
+
+void Renderer::deletePointLight(uuid32_t id)
+{
+    deleteLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id);
+}
+
+void Renderer::deleteSpotLight(uuid32_t id)
+{
+    deleteLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
 }

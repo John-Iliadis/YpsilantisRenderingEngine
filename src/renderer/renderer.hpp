@@ -10,13 +10,17 @@
 #include "../utils/main_thread_task_queue.hpp"
 #include "../app/save_data.hpp"
 #include "../vk/vulkan_pipeline.hpp"
+#include "loaders/cubemap_loader.hpp"
 #include "camera.hpp"
 #include "model.hpp"
 #include "model_importer.hpp"
-#include "loaders/cubemap_loader.hpp"
+#include "lights.hpp"
 
 constexpr uint32_t InitialViewportWidth = 1000;
 constexpr uint32_t InitialViewportHeight = 700;
+constexpr uint32_t MaxDirLights = 1024;
+constexpr uint32_t MaxPointLights = 1024;
+constexpr uint32_t MaxSpotLights = 1024;
 
 struct TransparentNode;
 
@@ -34,6 +38,19 @@ public:
     void deleteModel(uuid32_t id);
     void resize(uint32_t width, uint32_t height);
     void notify(const Message &message) override;
+
+    void addDirLight(uuid32_t id, const DirectionalLight& light);
+    void addPointLight(uuid32_t id, const PointLight& light);
+    void addSpotLight(uuid32_t id, const SpotLight& light);
+    DirectionalLight& getDirLight(uuid32_t id);
+    PointLight& getPointLight(uuid32_t id);
+    SpotLight& getSpotLight(uuid32_t id);
+    void updateDirLight(uuid32_t id);
+    void updateSpotLight(uuid32_t id);
+    void updatePointLight(uuid32_t id);
+    void deleteDirLight(uuid32_t id);
+    void deletePointLight(uuid32_t id);
+    void deleteSpotLight(uuid32_t id);
 
 private:
     void executePrepass(VkCommandBuffer commandBuffer);
@@ -93,6 +110,7 @@ private:
     void createPostProcessingFramebuffer();
     void createPostProcessingPipeline();
 
+    void createLightBuffers();
     void loadSkybox();
 
 private:
@@ -169,6 +187,21 @@ private:
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
 
+    // lights
+    std::vector<DirectionalLight> mDirectionalLights;
+    std::vector<PointLight> mPointLights;
+    std::vector<SpotLight> mSpotLights;
+
+    std::unordered_map<uuid32_t, index_t> mUuidToDirLightIndex;
+    std::unordered_map<uuid32_t, index_t> mUuidToPointLightIndex;
+    std::unordered_map<uuid32_t, index_t> mUuidToSpotLightIndex;
+
+    VulkanBuffer mDirLightSSBO;
+    VulkanBuffer mPointLightSSBO;
+    VulkanBuffer mSpotLightSSBO;
+
+    // render data
+
     struct SkyboxData
     {
         alignas(4) int32_t flipX = false;
@@ -202,5 +235,7 @@ struct TransparentNode
     alignas(4) float depth;
     alignas(4) uint32_t next;
 };
+
+#include "renderer.inl"
 
 #endif //VULKANRENDERINGENGINE_RENDERER_HPP

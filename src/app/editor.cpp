@@ -341,16 +341,16 @@ void Editor::sceneNodeInspector(GraphNode *node)
     {
         case NodeType::Empty: emptyNodeInspector(node); break;
         case NodeType::Mesh: meshNodeInspector(node); break;
-        case NodeType::DirectionalLight: nullptr; break;
-        case NodeType::PointLight: nullptr; break;
-        case NodeType::SpotLight: nullptr; break;
+        case NodeType::DirectionalLight: dirLightInspector(node); break;
+        case NodeType::PointLight: pointLightInspector(node); break;
+        case NodeType::SpotLight: spotLightInspector(node); break;
         default: assert(false);
     }
 }
 
 void Editor::emptyNodeInspector(GraphNode *node)
 {
-    ImGui::Text("Asset Type: Empty Node");
+    ImGui::Text("Asset Type: Scene Node (Empty)");
     ImGui::Text("Name: %s", node->name().c_str());
 
     nodeTransform(node);
@@ -369,7 +369,7 @@ void Editor::meshNodeInspector(GraphNode *node)
 {
     MeshNode *meshNode = dynamic_cast<MeshNode*>(node);
 
-    ImGui::Text("Asset Type: Mesh Node");
+    ImGui::Text("Asset Type: Scene Node (Mesh)");
     ImGui::Text("Name: %s", node->name().c_str());
 
     nodeTransform(node);
@@ -411,7 +411,93 @@ void Editor::meshNodeInspector(GraphNode *node)
     }
 }
 
-void Editor::nodeTransform(GraphNode *node)
+void Editor::dirLightInspector(GraphNode *node)
+{
+    DirectionalLight& dirLight = mRenderer.getDirLight(node->id());
+
+    ImGui::Text("Asset Type: Scene Node (Directional Light)");
+    ImGui::Text("Name: %s", node->name().data());
+    ImGui::Separator();
+
+    bool modified = false;
+
+    if (nodeTransform(node))
+        modified = true;
+
+    if (ImGui::CollapsingHeader("Emission##dirLight", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (ImGui::ColorEdit3("Color##dirLight", glm::value_ptr(dirLight.color), ImGuiColorEditFlags_DisplayRGB))
+            modified = true;
+
+        if (ImGui::DragFloat("Intensity##dirLight", &dirLight.intensity))
+            modified = true;
+    }
+
+    if (modified) mRenderer.updateDirLight(node->id());
+}
+
+void Editor::pointLightInspector(GraphNode *node)
+{
+    PointLight& pointLight = mRenderer.getPointLight(node->id());
+
+    ImGui::Text("Asset Type: Scene Node (Point Light)");
+    ImGui::Text("Name: %s", node->name().data());
+    ImGui::Separator();
+
+    bool modified = false;
+
+    if (nodeTransform(node))
+        modified = true;
+
+    if (ImGui::CollapsingHeader("Emission##pointLight", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (ImGui::ColorEdit3("Color##pointLight", glm::value_ptr(pointLight.color), ImGuiColorEditFlags_DisplayRGB))
+            modified = true;
+
+        if (ImGui::DragFloat("Intensity##pointLight", &pointLight.intensity))
+            modified = true;
+
+        if (ImGui::DragFloat("Range##pointLight", &pointLight.range))
+            modified = true;
+    }
+
+    if (modified) mRenderer.updatePointLight(node->id());
+}
+
+void Editor::spotLightInspector(GraphNode *node)
+{
+    SpotLight& spotLight = mRenderer.getSpotLight(node->id());
+
+    ImGui::Text("Asset Type: Scene Node (Spot Light)");
+    ImGui::Text("Name: %s", node->name().data());
+
+    bool modified = false;
+
+    if (nodeTransform(node))
+        modified = true;
+
+    if (ImGui::CollapsingHeader("Emission##spotLight", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (ImGui::ColorEdit3("Color##spotLight", glm::value_ptr(spotLight.color), ImGuiColorEditFlags_DisplayRGB))
+            modified = true;
+
+        if (ImGui::DragFloat("Intensity##spotLight", &spotLight.intensity))
+            modified = true;
+
+        if (ImGui::DragFloat("Range##spotLight", &spotLight.range))
+            modified = true;
+
+        if (ImGui::DragFloat("Inner Angle##pointLight", &spotLight.innerAngle, 0.01f, 1.f, spotLight.outerAngle, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+            modified = true;
+
+        if (ImGui::DragFloat("Outer Angle##pointLight", &spotLight.outerAngle, 0.01f, spotLight.innerAngle, 179.f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+            modified = true;
+    }
+
+    if (modified) mRenderer.updateSpotLight(node->id());
+}
+
+bool Editor::nodeTransform(GraphNode *node)
 {
     bool modified = false;
 
@@ -431,12 +517,14 @@ void Editor::nodeTransform(GraphNode *node)
 
         ImGui::SeparatorText("Scale");
 
-        if (ImGui::DragFloat("X##Scale", node->scalePtr(), 0.01f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
-        if (ImGui::DragFloat("Y##Scale", node->scalePtr() + 1, 0.01f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
-        if (ImGui::DragFloat("Z##Scale", node->scalePtr() + 2, 0.01f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
+        if (ImGui::DragFloat("X##Scale", node->scalePtr(), 0.001f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
+        if (ImGui::DragFloat("Y##Scale", node->scalePtr() + 1, 0.001f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
+        if (ImGui::DragFloat("Z##Scale", node->scalePtr() + 2, 0.001f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
     }
 
     if (modified) node->markDirty();
+
+    return modified;
 }
 
 void Editor::viewPort()
@@ -494,6 +582,12 @@ void Editor::deleteSelectedNode()
         mCopiedNodeID = 0;
     }
 
+    GraphNode* node = mSceneGraph.searchNode(mSelectedObjectID);
+
+    if (node->type() == NodeType::DirectionalLight) mRenderer.deleteDirLight(node->id());
+    if (node->type() == NodeType::PointLight) mRenderer.deletePointLight(node->id());
+    if (node->type() == NodeType::SpotLight) mRenderer.deleteSpotLight(node->id());
+
     mSceneGraph.deleteNode(mSelectedObjectID);
     mSelectedObjectID = 0;
 }
@@ -528,7 +622,7 @@ void Editor::debugPanel()
 
 void Editor::plotPerformanceGraphs()
 {
-    static constexpr uint32_t maxSamples = 500;
+    static constexpr uint32_t maxSamples = 200;
     static std::vector<float> fpsValues(maxSamples, 0.f);
     static std::vector<float> dtValues(maxSamples, 0.f);
 
@@ -739,6 +833,62 @@ GraphNode* Editor::createMeshNode(Model &model, const SceneNode &sceneNode, Grap
         model.getMesh(meshID)->mesh.addInstance(graphNode->id());
 
     return graphNode;
+}
+
+void Editor::addDirLight()
+{
+    DirectionalLight dirLight {
+        .color = glm::vec4(1.f),
+        .direction = glm::vec4(1.f, -1.f, 1.f, 1.f),
+        .intensity = 0.5f
+    };
+
+    GraphNode* lightNode = new GraphNode(NodeType::DirectionalLight,
+                                         "Directional Light",
+                                         {}, dirLight.direction, {},
+                                         nullptr);
+
+    mSceneGraph.addNode(lightNode);
+    mRenderer.addDirLight(lightNode->id(), dirLight);
+}
+
+void Editor::addPointLight()
+{
+    static constexpr PointLight pointLight {
+        .color = glm::vec4(1.f),
+        .position = glm::vec4(),
+        .intensity = 0.5f,
+        .range = 10.f
+    };
+
+    GraphNode* lightNode = new GraphNode(NodeType::PointLight,
+                                         "Point Light",
+                                         pointLight.position, {}, {},
+                                         nullptr);
+
+    mSceneGraph.addNode(lightNode);
+    mRenderer.addPointLight(lightNode->id(), pointLight);
+}
+
+void Editor::addSpotLight()
+{
+    static constexpr SpotLight spotLight {
+        .color = glm::vec4(1.f),
+        .position = glm::vec4(),
+        .direction = glm::vec4(0.f, -1.f, 0.f, 0.f),
+        .intensity = 0.5f,
+        .range = 10.f,
+        .innerAngle = 45.f,
+        .outerAngle = 60.f
+    };
+
+    GraphNode* lightNode = new GraphNode(NodeType::SpotLight,
+                                         "Spot Light",
+                                         spotLight.position, spotLight.direction, {},
+                                         nullptr);
+
+    mSceneGraph.addNode(lightNode);
+    mRenderer.addSpotLight(lightNode->id(), spotLight);
 }
 
 void Editor::copyNode(uuid32_t nodeID)
@@ -998,13 +1148,13 @@ void Editor::sceneGraphPopup()
         if (ImGui::BeginMenu("Create Light"))
         {
             if (ImGui::MenuItem("Directional Light##sceneGraph"))
-                nullptr;
+                addDirLight();
 
             if (ImGui::MenuItem("Point Light##sceneGraph"))
-                nullptr;
+                addPointLight();
 
             if (ImGui::MenuItem("Spot Light##sceneGraph"))
-                nullptr;
+                addSpotLight();
 
             ImGui::EndMenu();
         }
@@ -1266,6 +1416,39 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
                                     glm::make_vec3(node->scalePtr()),
                                     node->parent(),
                                     node->modelID());
+            break;
+        }
+        case NodeType::DirectionalLight:
+        {
+            newNode = new GraphNode(node->type(),
+                                    node->name(),
+                                    glm::make_vec3(node->translationPtr()),
+                                    glm::make_vec3(node->rotationPtr()),
+                                    glm::make_vec3(node->scalePtr()),
+                                    node->parent());
+            mRenderer.addDirLight(newNode->id(), mRenderer.getDirLight(node->id()));
+            break;
+        }
+        case NodeType::SpotLight:
+        {
+            newNode = new GraphNode(node->type(),
+                                    node->name(),
+                                    glm::make_vec3(node->translationPtr()),
+                                    glm::make_vec3(node->rotationPtr()),
+                                    glm::make_vec3(node->scalePtr()),
+                                    node->parent());
+            mRenderer.addSpotLight(newNode->id(), mRenderer.getSpotLight(node->id()));
+            break;
+        }
+        case NodeType::PointLight:
+        {
+            newNode = new GraphNode(node->type(),
+                                    node->name(),
+                                    glm::make_vec3(node->translationPtr()),
+                                    glm::make_vec3(node->rotationPtr()),
+                                    glm::make_vec3(node->scalePtr()),
+                                    node->parent());
+            mRenderer.addPointLight(newNode->id(), mRenderer.getPointLight(node->id()));
             break;
         }
         case NodeType::Mesh:

@@ -1,3 +1,4 @@
+
 struct TransparentNode
 {
     vec4 color;

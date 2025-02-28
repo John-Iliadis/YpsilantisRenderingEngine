@@ -1,3 +1,4 @@
+
 const vec3 cubeVertices[8] = vec3[](
     vec3(-1.0, -1.0, -1.0),
     vec3( 1.0, -1.0, -1.0),

@@ -85,6 +85,7 @@ add_executable(${PROJECT_NAME}
         src/renderer/material.cpp
         src/renderer/loaders/cubemap_loader.cpp
         src/renderer/loaders/cubemap_loader.hpp
+        src/renderer/lights.hpp
 )
 
 add_subdirectory(${DEPENDENCY_DIR}/stb/)
