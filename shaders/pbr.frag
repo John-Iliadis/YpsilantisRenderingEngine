@@ -2,6 +2,8 @@
 
 #include "material.glsl"
 
+layout (early_fragment_tests) in;
+
 layout (location = 0) in vec2 vTexCoords;
 layout (location = 1) in vec3 vNormal;
 layout (location = 2) in vec4 vColor;

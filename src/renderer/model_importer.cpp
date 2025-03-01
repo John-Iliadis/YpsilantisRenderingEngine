@@ -5,6 +5,7 @@
 #include "model_importer.hpp"
 
 // todo: support specular glossiness
+// todo: add opacity map
 
 static constexpr uint32_t sImportFlags
 {
@@ -623,7 +624,8 @@ void ModelImporter::addTextures(VkCommandBuffer commandBuffer, Model &model, con
                                  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                  VK_PIPELINE_STAGE_TRANSFER_BIT,
                                  VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+                                 VK_ACCESS_TRANSFER_WRITE_BIT,
+                                 VK_ACCESS_TRANSFER_READ_BIT);
 
         texture.generateMipMaps(commandBuffer);
 
@@ -632,7 +634,7 @@ void ModelImporter::addTextures(VkCommandBuffer commandBuffer, Model &model, con
                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                                  VK_PIPELINE_STAGE_TRANSFER_BIT,
                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                 VK_ACCESS_TRANSFER_WRITE_BIT,
+                                 VK_ACCESS_TRANSFER_READ_BIT,
                                  VK_ACCESS_SHADER_READ_BIT);
 
         texture.setDebugName(imageData.name);

@@ -69,6 +69,12 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createPostProcessingPipeline();
 
     createLightBuffers();
+    createLightIconTextures();
+    createLightIconTextureDsLayout();
+    createLightIconRenderpass();
+    createLightIconFramebuffer();
+    createLightIconPipeline();
+
     loadSkybox();
 }
 
@@ -82,6 +88,7 @@ Renderer::~Renderer()
     vkDestroyFramebuffer(mRenderDevice.device, mSsaoFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mGridFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mLightIconFramebuffer, nullptr);
 
     vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSkyboxRenderpass, nullptr);
@@ -89,6 +96,7 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mForwardRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mGridRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mLightIconRenderpass, nullptr);
 }
 
 void Renderer::update()
@@ -106,6 +114,7 @@ void Renderer::render(VkCommandBuffer commandBuffer)
     executeForwardRenderpass(commandBuffer);
     executeGridRenderpass(commandBuffer);
     executePostProcessingRenderpass(commandBuffer);
+    executeLightIconRenderpass(commandBuffer);
 }
 
 void Renderer::importModel(const ModelImportData& importData)
@@ -189,6 +198,7 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createForwardFramebuffer();
     createGridFramebuffer();
     createPostProcessingFramebuffer();
+    createLightIconFramebuffer();
 
     createSingleImageDescriptorSets();
     createDepthNormalDs();
@@ -493,6 +503,36 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
     endDebugLabel(commandBuffer);
 }
 
+void Renderer::executeLightIconRenderpass(VkCommandBuffer commandBuffer)
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mLightIconRenderpass,
+        .framebuffer = mLightIconFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        }
+    };
+
+    beginDebugLabel(commandBuffer, "Light Icon Renderpass");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLightIconPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mLightIconPipeline,
+                            0, 1, &mCameraDs,
+                            0, nullptr);
+
+    renderLightIcons(commandBuffer, mUuidToDirLightIndex, mDirLightIcon, NodeType::DirectionalLight);
+    renderLightIcons(commandBuffer, mUuidToPointLightIndex, mPointLightIcon, NodeType::PointLight);
+    renderLightIcons(commandBuffer, mUuidToSpotLightIndex, mSpotLightIcon, NodeType::SpotLight);
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
 void Renderer::setViewport(VkCommandBuffer commandBuffer)
 {
     VkViewport viewport {
@@ -542,6 +582,49 @@ void Renderer::updateCameraUBO()
 {
     CameraRenderData renderData(mCamera.renderData());
     mCameraUBO.mapBufferMemory(0, sizeof(CameraRenderData), &renderData);
+}
+
+void Renderer::bindTexture(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, const VulkanTexture &texture)
+{
+    VkDescriptorImageInfo imageInfo(texture.vulkanSampler.sampler, texture.imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = VK_NULL_HANDLE,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &imageInfo
+    };
+
+    pfnCmdPushDescriptorSet(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipelineLayout,
+                            1,
+                            1, &writeDescriptorSet);
+}
+
+void Renderer::renderLightIcons(VkCommandBuffer commandBuffer,
+                                const std::unordered_map<uuid32_t, index_t> &lightMap,
+                                const VulkanTexture &icon,
+                                NodeType lightType)
+{
+    bindTexture(commandBuffer, mLightIconPipeline, icon);
+    for (const auto& [id, index] : lightMap)
+    {
+        auto* node = mSceneGraph.searchNode(id);
+
+        if (node->type() == lightType)
+        {
+            vkCmdPushConstants(commandBuffer,
+                               mLightIconPipeline,
+                               VK_SHADER_STAGE_VERTEX_BIT,
+                               0, sizeof(glm::vec3),
+                               node->translationPtr());
+            vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+        }
+    }
 }
 
 void Renderer::createColorTexture()
@@ -1865,7 +1948,7 @@ void Renderer::createPostProcessingRenderpass()
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
     VkAttachmentReference colorAttachmentRef {
@@ -1962,6 +2045,166 @@ void Renderer::createLightBuffers()
     mDirLightSSBO = {mRenderDevice, MaxDirLights * sizeof(DirectionalLight), BufferType::Storage, MemoryType::Device};
     mSpotLightSSBO = {mRenderDevice, MaxSpotLights * sizeof(SpotLight), BufferType::Storage, MemoryType::Device};
     mPointLightSSBO = {mRenderDevice, MaxPointLights * sizeof(PointLight), BufferType::Storage, MemoryType::Device};
+}
+
+void Renderer::createLightIconTextures()
+{
+    stbi_set_flip_vertically_on_load(true);
+    LoadedImage dirLightIcon("../assets/textures/lights/directional1.png");
+    LoadedImage pointLightIcon("../assets/textures/lights/lightbulb3.png");
+    LoadedImage spotLightIcon("../assets/textures/lights/spotlight3.png");
+    stbi_set_flip_vertically_on_load(false);
+
+    uint32_t iconWidth = 512;
+    uint32_t iconHeight = 512;
+
+    TextureSpecification specification {
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .width = iconWidth,
+        .height = iconHeight,
+        .layerCount = 1,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+        .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Linear,
+        .minFilter = TextureMinFilter::Linear,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .generateMipMaps = true
+    };
+
+    mDirLightIcon = {mRenderDevice, specification, dirLightIcon.data()};
+    mPointLightIcon = {mRenderDevice, specification, pointLightIcon.data()};
+    mSpotLightIcon = {mRenderDevice, specification, spotLightIcon.data()};
+
+    mDirLightIcon.setDebugName("Renderer::mDirLightIcon");
+    mPointLightIcon.setDebugName("Renderer::mPointLightIcon");
+    mSpotLightIcon.setDebugName("Renderer::mSpotLightIcon");
+}
+
+void Renderer::createLightIconTextureDsLayout()
+{
+    DsLayoutSpecification specification {
+        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        .debugName = "Renderer::mIconTextureDsLayout"
+    };
+
+    mIconTextureDsLayout = {mRenderDevice, specification};
+}
+
+void Renderer::createLightIconRenderpass()
+{
+    VkAttachmentDescription colorAttachment {
+        .format = mPostProcessingTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference colorAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &colorAttachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mLightIconRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mLightIconRenderpass, "Renderer::mLightIconRenderpass");
+}
+
+void Renderer::createLightIconFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mLightIconFramebuffer, nullptr);
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mLightIconRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &mPostProcessingTexture.imageView,
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mLightIconFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mLightIconFramebuffer, "Renderer::mLightIconFramebuffer");
+}
+
+void Renderer::createLightIconPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/light_icon.vert.spv",
+            .fragShaderPath = "shaders/light_icon.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .cullMode = VK_CULL_MODE_NONE,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = VK_FALSE,
+            .enableDepthWrite = VK_FALSE,
+        },
+        .blending = {
+            .enable = true,
+            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+            .alphaBlendOp = VK_BLEND_OP_ADD
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {
+            .dsLayouts = {
+                mCameraRenderDataDsLayout,
+                mIconTextureDsLayout
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                .offset = 0,
+                .size = sizeof(glm::vec3)
+            }
+        },
+        .renderPass = mLightIconRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mLightIconPipeline"
+    };
+
+    mLightIconPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
 void Renderer::loadSkybox()

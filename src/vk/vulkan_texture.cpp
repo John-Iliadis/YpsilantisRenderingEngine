@@ -71,19 +71,52 @@ VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const Textu
 VulkanTexture::VulkanTexture(const VulkanRenderDevice &renderDevice, const TextureSpecification &specification, const void *data)
     : VulkanTexture(renderDevice, specification)
 {
-    transitionLayout(VK_IMAGE_LAYOUT_UNDEFINED,
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(renderDevice);
+
+    uint32_t bufferSize = width * height * formatSize(format);
+    VulkanBuffer stagingBuffer(renderDevice, bufferSize, BufferType::Staging, MemoryType::HostCached, data);
+
+    transitionLayout(commandBuffer,
+                     VK_IMAGE_LAYOUT_UNDEFINED,
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                      VK_PIPELINE_STAGE_TRANSFER_BIT,
                      0, VK_ACCESS_TRANSFER_WRITE_BIT);
 
-    uploadImageData(data);
+    uploadImageData(commandBuffer, stagingBuffer);
 
-    transitionLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                     VK_PIPELINE_STAGE_TRANSFER_BIT,
-                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                     VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    if (specification.generateMipMaps)
+    {
+        transitionLayout(commandBuffer,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_ACCESS_TRANSFER_WRITE_BIT,
+                         VK_ACCESS_TRANSFER_READ_BIT);
+
+        generateMipMaps(commandBuffer);
+
+        transitionLayout(commandBuffer,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_ACCESS_TRANSFER_READ_BIT,
+                         VK_ACCESS_SHADER_READ_BIT);
+    }
+    else
+    {
+        transitionLayout(commandBuffer,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_ACCESS_TRANSFER_WRITE_BIT,
+                         VK_ACCESS_SHADER_READ_BIT);
+    }
+
+    endSingleTimeCommands(renderDevice, commandBuffer);
 }
 
 VulkanTexture::~VulkanTexture()

@@ -11,6 +11,7 @@
 #include "../app/save_data.hpp"
 #include "../vk/vulkan_pipeline.hpp"
 #include "loaders/cubemap_loader.hpp"
+#include "../scene_graph/scene_graph.hpp"
 #include "camera.hpp"
 #include "model.hpp"
 #include "model_importer.hpp"
@@ -59,9 +60,15 @@ private:
     void executeForwardRenderpass(VkCommandBuffer commandBuffer);
     void executeGridRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
+    void executeLightIconRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
     void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex, bool opaque);
     void updateCameraUBO();
+    void bindTexture(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, const VulkanTexture& texture);
+    void renderLightIcons(VkCommandBuffer commandBuffer,
+                          const std::unordered_map<uuid32_t, index_t>& lightMap,
+                          const VulkanTexture& icon,
+                          NodeType lightType);
 
     void createColorTexture();
     void createDepthTexture();
@@ -111,11 +118,18 @@ private:
     void createPostProcessingPipeline();
 
     void createLightBuffers();
+    void createLightIconTextures();
+    void createLightIconTextureDsLayout();
+    void createLightIconRenderpass();
+    void createLightIconFramebuffer();
+    void createLightIconPipeline();
+
     void loadSkybox();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
     SaveData& mSaveData;
+    SceneGraph mSceneGraph;
 
     uint32_t mWidth;
     uint32_t mHeight;
@@ -149,6 +163,7 @@ private:
     VkRenderPass mForwardRenderpass{};
     VkRenderPass mGridRenderpass{};
     VkRenderPass mPostProcessingRenderpass{};
+    VkRenderPass mLightIconRenderpass{};
 
     // framebuffers
     VkFramebuffer mPrepassFramebuffer{};
@@ -157,6 +172,7 @@ private:
     VkFramebuffer mSsaoFramebuffer{};
     VkFramebuffer mGridFramebuffer{};
     VkFramebuffer mPostProcessingFramebuffer{};
+    VkFramebuffer mLightIconFramebuffer{};
 
     // pipelines
     VulkanGraphicsPipeline mPrepassPipeline;
@@ -168,12 +184,14 @@ private:
     VulkanGraphicsPipeline mOpaqueForwardPassPipeline;
     VulkanGraphicsPipeline mForwardPassBlendPipeline;
     VulkanGraphicsPipeline mPostProcessingPipeline;
+    VulkanGraphicsPipeline mLightIconPipeline;
 
     // descriptor set layouts
     VulkanDsLayout mSingleImageDsLayout;
     VulkanDsLayout mCameraRenderDataDsLayout;
     VulkanDsLayout mMaterialsDsLayout;
     VulkanDsLayout mDepthNormalDsLayout;
+    VulkanDsLayout mIconTextureDsLayout;
 
     // descriptor sets
     VkDescriptorSet mCameraDs{};
@@ -199,6 +217,10 @@ private:
     VulkanBuffer mDirLightSSBO;
     VulkanBuffer mPointLightSSBO;
     VulkanBuffer mSpotLightSSBO;
+
+    VulkanTexture mDirLightIcon;
+    VulkanTexture mPointLightIcon;
+    VulkanTexture mSpotLightIcon;
 
     // render data
 
