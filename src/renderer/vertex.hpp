@@ -14,7 +14,6 @@ struct Vertex
     glm::vec3 normal;
     glm::vec3 tangent;
     glm::vec3 bitangent;
-    glm::vec4 color;
 };
 
 #endif //VULKANRENDERINGENGINE_VERTEX_HPP

@@ -2115,9 +2115,9 @@ void Renderer::createLightBuffers()
 void Renderer::createLightIconTextures()
 {
     stbi_set_flip_vertically_on_load(true);
-    LoadedImage dirLightIcon("../assets/textures/lights/directional1.png");
+    LoadedImage dirLightIcon("../assets/textures/lights/directional3.png");
     LoadedImage pointLightIcon("../assets/textures/lights/lightbulb3.png");
-    LoadedImage spotLightIcon("../assets/textures/lights/spotlight3.png");
+    LoadedImage spotLightIcon("../assets/textures/lights/spotlight2.png");
     stbi_set_flip_vertically_on_load(false);
 
     uint32_t iconWidth = 512;

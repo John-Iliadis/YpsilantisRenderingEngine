@@ -250,6 +250,7 @@ private:
     bool mSsaoOn = false;
     bool mOitOn = true;
     bool mRenderGrid = true;
+    bool mRenderAxisGizmo = true;
 
 private:
     friend class Editor;

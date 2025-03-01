@@ -155,15 +155,14 @@ std::vector<VkVertexInputAttributeDescription> InstancedMesh::attributeDescripti
         vertAttrib(2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal)),
         vertAttrib(3, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, tangent)),
         vertAttrib(4, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, bitangent)),
-        vertAttrib(5, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Vertex, color)),
-        vertAttrib(6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix)),
-        vertAttrib(7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + sizeof(glm::vec4)),
-        vertAttrib(8, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + 2 * sizeof(glm::vec4)),
-        vertAttrib(9, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + 3 * sizeof(glm::vec4)),
-        vertAttrib(10, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix)),
-        vertAttrib(11, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix) + sizeof(glm::vec4)),
-        vertAttrib(12, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix) + 2 * sizeof(glm::vec4)),
-        vertAttrib(13, 1, VK_FORMAT_R32_UINT, offsetof(InstanceData, id)),
+        vertAttrib(5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix)),
+        vertAttrib(6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + sizeof(glm::vec4)),
+        vertAttrib(7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + 2 * sizeof(glm::vec4)),
+        vertAttrib(8, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + 3 * sizeof(glm::vec4)),
+        vertAttrib(9, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix)),
+        vertAttrib(10, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix) + sizeof(glm::vec4)),
+        vertAttrib(11, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix) + 2 * sizeof(glm::vec4)),
+        vertAttrib(12, 1, VK_FORMAT_R32_UINT, offsetof(InstanceData, id)),
     };
 }
 

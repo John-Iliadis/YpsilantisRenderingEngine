@@ -6,7 +6,6 @@ layout (early_fragment_tests) in;
 
 layout (location = 0) in vec2 vTexCoords;
 layout (location = 1) in vec3 vNormal;
-layout (location = 2) in vec4 vColor;
 
 layout (location = 0) out vec4 outFragColor;
 
@@ -32,9 +31,8 @@ layout (set = 2, binding = 6) uniform sampler2D emissionTex;
 
 void main()
 {
-    vec4 color = vColor;
     vec4 baseColorFactor = material.baseColorFactor;
     vec4 baseColorSample = texture(baseColorTex, vTexCoords * material.tiling);
 
-    outFragColor = color * baseColorFactor * baseColorSample;
+    outFragColor = baseColorFactor * baseColorSample;
 }

@@ -4,7 +4,7 @@
 
 #include "camera.hpp"
 
-static constexpr float PanVarDivisor = 100000.f;
+static constexpr float PanVarDivisor = 10000.f;
 static constexpr float RotateVarDivisor = 200.f;
 static constexpr float FlySpeedDivisor = 20.f;
 
@@ -29,8 +29,8 @@ Camera::Camera(glm::vec3 position, float fovY, float width, float height, float 
     , mFarZ(farZ)
     , mPreviousMousePos()
     , mState(Camera::State::VIEW_MODE)
-    , mFlySpeed(50.f)
-    , mPanSpeed(100.f)
+    , mFlySpeed(150.f)
+    , mPanSpeed(40.f)
     , mZScrollOffset(1.f)
     , mRotateSensitivity(10.f)
     , mLeftButtonDown()

@@ -11,7 +11,6 @@ layout (early_fragment_tests) in;
 
 layout (location = 0) in vec2 vTexCoords;
 layout (location = 1) in vec3 vNormal;
-layout (location = 2) in vec4 vColor;
 
 layout (set = 1, binding = 0, r32ui) uniform coherent uimage2D nodeIndexStorageTex;
 
@@ -43,7 +42,7 @@ void main()
     vec4 baseColorFactor = material.baseColorFactor;
     vec4 baseColorSample = texture(baseColorTex, vTexCoords * material.tiling);
 
-    vec4 color = vColor * baseColorFactor * baseColorSample;
+    vec4 color = baseColorFactor * baseColorSample;
     uint previousNodeIndex = imageAtomicExchange(nodeIndexStorageTex, ivec2(gl_FragCoord.xy), nodeIndex);
 
     nodes[nodeIndex] = TransparentNode(color, gl_FragCoord.z, previousNodeIndex);

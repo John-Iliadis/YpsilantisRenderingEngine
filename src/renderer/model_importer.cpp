@@ -26,7 +26,8 @@ static constexpr int sRemoveComponents
     aiComponent_BONEWEIGHTS |
     aiComponent_ANIMATIONS |
     aiComponent_LIGHTS |
-    aiComponent_CAMERAS
+    aiComponent_CAMERAS |
+    aiComponent_COLORS
 };
 
 static constexpr int sRemovePrimitives
@@ -244,8 +245,6 @@ VulkanBuffer ModelLoader::loadVertexData(const aiMesh &aiMesh)
         {
             vertices.at(i).texCoords = *reinterpret_cast<glm::vec2*>(&aiMesh.mTextureCoords[0][i]);
         }
-
-        vertices.at(i).color = aiMesh.HasVertexColors(0)? *reinterpret_cast<glm::vec4*>(&aiMesh.mColors[0][i]) : glm::vec4(1.f);
     }
 
     return {mRenderDevice, vertices.size() * sizeof(Vertex), BufferType::Staging, MemoryType::HostCached, vertices.data()};
