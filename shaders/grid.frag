@@ -9,11 +9,11 @@ layout (push_constant) uniform PushConstants
 {
     vec4 gridColorThin;
     vec4 gridColorThick;
-    float gridCellSize;
-    float gridMinPixelsBetweenCells;
 };
 
 const float gridSize = 100.0;
+const float gridCellSize = 1.0;
+const float gridMinPixelsBetweenCells = 0.7;
 
 float log10(float x) { return log(x) / log(10.0); }
 float satf(float x) { return clamp(x, 0.0, 1.0); }

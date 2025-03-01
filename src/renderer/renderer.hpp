@@ -227,6 +227,8 @@ private:
     VulkanTexture mSpotLightIcon;
 
     // render data
+    glm::vec4 mClearColor = glm::vec4(0.251f, 0.235f, 0.235f, 1.f);
+    uint32_t mOitLinkedListLength = 8;
 
     struct SkyboxData
     {
@@ -240,11 +242,7 @@ private:
     {
         alignas(16) glm::vec4 thinLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 80.f / 255.f);
         alignas(16) glm::vec4 thickLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 1.f);
-        alignas(4) float cellSize = 0.5f;
-        alignas(4) float minPixelsBetweenCells = 0.7f;
     } mGridData;
-
-    uint32_t mOitLinkedListLength = 8;
 
     bool mRenderSkybox = true;
     bool mSsaoOn = false;

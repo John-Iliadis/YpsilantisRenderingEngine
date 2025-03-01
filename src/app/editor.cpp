@@ -559,17 +559,8 @@ void Editor::viewPort()
 
     modelDragDropTargetWholeWindow();
 
-    ImVec2 windowCoords = ImGui::GetWindowPos();
-    float gizmoSize = 50.f;
-    float paddingX = 70.f;
-    float paddingY = 88.f;
-    float gizmoLeft = windowCoords.x + viewportSize.x - gizmoSize - paddingX;
-    float gizmoTop = windowCoords.y + paddingY;
-    ImOGuizmo::SetRect(gizmoLeft, gizmoTop, gizmoSize);
-
-    glm::mat4 view = mRenderer.mCamera.view();
-    static glm::mat4 proj = glm::perspective(glm::radians(30.f), 1.5f, 0.01f, 100.f);
-    ImOGuizmo::DrawGizmo(glm::value_ptr(view), glm::value_ptr(proj));
+    if (mRenderer.mRenderAxisGizmo)
+        drawAxisGizmo(viewportSize);
 
     ImGui::End();
     ImGui::PopStyleVar(2);
@@ -671,6 +662,12 @@ void Editor::rendererPanel()
 
     ImGui::Begin("Renderer", &mShowRendererPanel);
 
+    if (ImGui::CollapsingHeader("General", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("View Axis Gizmo", &mRenderer.mRenderAxisGizmo);
+        ImGui::ColorEdit3("Clear Color", glm::value_ptr(mRenderer.mClearColor));
+    }
+
     if (ImGui::CollapsingHeader("Grid", ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Checkbox("Render Grid", &mRenderer.mRenderGrid);
@@ -678,8 +675,6 @@ void Editor::rendererPanel()
 
         ImGui::ColorEdit4("Thin line color", glm::value_ptr(mRenderer.mGridData.thinLineColor), colorEditFlags);
         ImGui::ColorEdit4("Thick line color", glm::value_ptr(mRenderer.mGridData.thickLineColor), colorEditFlags);
-        ImGui::SliderFloat("Cell size", &mRenderer.mGridData.cellSize, 0.01, 100.f);
-        ImGui::SliderFloat("Min pixels between cells", &mRenderer.mGridData.minPixelsBetweenCells, 0.1f, 5.f);
     }
 
     if (ImGui::CollapsingHeader("Skybox", ImGuiTreeNodeFlags_DefaultOpen))
@@ -1394,6 +1389,21 @@ void Editor::modelImportPopup()
 
         ImGui::EndPopup();
     }
+}
+
+void Editor::drawAxisGizmo(ImVec2 viewportSize)
+{
+    ImVec2 windowCoords = ImGui::GetWindowPos();
+    float gizmoSize = 50.f;
+    float paddingX = 70.f;
+    float paddingY = 88.f;
+    float gizmoLeft = windowCoords.x + viewportSize.x - gizmoSize - paddingX;
+    float gizmoTop = windowCoords.y + paddingY;
+    ImOGuizmo::SetRect(gizmoLeft, gizmoTop, gizmoSize);
+
+    glm::mat4 view = mRenderer.mCamera.view();
+    static glm::mat4 proj = glm::perspective(glm::radians(30.f), 1.5f, 0.01f, 100.f);
+    ImOGuizmo::DrawGizmo(glm::value_ptr(view), glm::value_ptr(proj));
 }
 
 void Editor::importModel(const ModelImportData &importData)

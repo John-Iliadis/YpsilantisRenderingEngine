@@ -315,7 +315,12 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
 
 void Renderer::executeSkyboxRenderpass(VkCommandBuffer commandBuffer)
 {
-    static constexpr VkClearValue colorClear {.color = {64.f / 255.f, 60.f / 255.f, 60.f / 255.f, 1.f}};
+    VkClearValue colorClear {.color = {
+        mClearColor.r,
+        mClearColor.g,
+        mClearColor.b,
+        mClearColor.a
+    }};
 
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,

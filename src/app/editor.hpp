@@ -80,6 +80,7 @@ private:
     void skyboxImportPopup();
     void modelImportPopup();
 
+    void drawAxisGizmo(ImVec2 viewportSize);
     void importModel(const ModelImportData& importData);
     std::filesystem::path selectModelFileDialog();
     void checkPayloadType(const char* type);
