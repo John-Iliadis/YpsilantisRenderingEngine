@@ -220,6 +220,66 @@ void Renderer::notify(const Message &message)
     }
 }
 
+void Renderer::addDirLight(uuid32_t id, const DirectionalLight &light)
+{
+    addLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id, light);
+}
+
+void Renderer::addPointLight(uuid32_t id, const PointLight &light)
+{
+    addLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id, light);
+}
+
+void Renderer::addSpotLight(uuid32_t id, const SpotLight &light)
+{
+    addLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id, light);
+}
+
+DirectionalLight &Renderer::getDirLight(uuid32_t id)
+{
+    return getLight(mUuidToDirLightIndex, mDirectionalLights, id);
+}
+
+PointLight &Renderer::getPointLight(uuid32_t id)
+{
+    return getLight(mUuidToPointLightIndex, mPointLights, id);
+}
+
+SpotLight &Renderer::getSpotLight(uuid32_t id)
+{
+    return getLight(mUuidToSpotLightIndex, mSpotLights, id);
+}
+
+void Renderer::updateDirLight(uuid32_t id)
+{
+    updateLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id);
+}
+
+void Renderer::updateSpotLight(uuid32_t id)
+{
+    updateLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
+}
+
+void Renderer::updatePointLight(uuid32_t id)
+{
+    updateLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id);
+}
+
+void Renderer::deleteDirLight(uuid32_t id)
+{
+    deleteLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id);
+}
+
+void Renderer::deletePointLight(uuid32_t id)
+{
+    deleteLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id);
+}
+
+void Renderer::deleteSpotLight(uuid32_t id)
+{
+    deleteLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
+}
+
 void Renderer::executePrepass(VkCommandBuffer commandBuffer)
 {
     static constexpr VkClearValue normalClear {.color = {0.f, 0.f, 0.f, 0.f}};
@@ -566,7 +626,7 @@ void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipe
 
         for (const auto& mesh : model->meshes)
         {
-            if (mesh.opaque == opaque)
+            if (model->drawOpaque(mesh) == opaque)
             {
                 uint32_t materialIndex = mesh.materialIndex;
 
@@ -2237,64 +2297,4 @@ void Renderer::loadSkybox()
     };
 
     importSkybox(paths);
-}
-
-void Renderer::addDirLight(uuid32_t id, const DirectionalLight &light)
-{
-    addLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id, light);
-}
-
-void Renderer::addPointLight(uuid32_t id, const PointLight &light)
-{
-    addLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id, light);
-}
-
-void Renderer::addSpotLight(uuid32_t id, const SpotLight &light)
-{
-    addLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id, light);
-}
-
-DirectionalLight &Renderer::getDirLight(uuid32_t id)
-{
-    return getLight(mUuidToDirLightIndex, mDirectionalLights, id);
-}
-
-PointLight &Renderer::getPointLight(uuid32_t id)
-{
-    return getLight(mUuidToPointLightIndex, mPointLights, id);
-}
-
-SpotLight &Renderer::getSpotLight(uuid32_t id)
-{
-    return getLight(mUuidToSpotLightIndex, mSpotLights, id);
-}
-
-void Renderer::updateDirLight(uuid32_t id)
-{
-    updateLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id);
-}
-
-void Renderer::updateSpotLight(uuid32_t id)
-{
-    updateLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
-}
-
-void Renderer::updatePointLight(uuid32_t id)
-{
-    updateLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id);
-}
-
-void Renderer::deleteDirLight(uuid32_t id)
-{
-    deleteLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id);
-}
-
-void Renderer::deletePointLight(uuid32_t id)
-{
-    deleteLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id);
-}
-
-void Renderer::deleteSpotLight(uuid32_t id)
-{
-    deleteLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
 }

@@ -447,11 +447,16 @@ float ModelLoader::getRoughnessFactor(const aiMaterial &aiMaterial)
 bool ModelLoader::isOpaque(const aiMaterial &aiMaterial)
 {
     float opacity;
-
     if (aiMaterial.Get(AI_MATKEY_OPACITY, opacity) != AI_SUCCESS)
-        opacity = 1.f;
+        if (opacity < 1.f)
+            return false;
 
-    return opacity == 1.f;
+    aiString alphaMode;
+    if (aiMaterial.Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) == AI_SUCCESS)
+        if (!strcmp(alphaMode.C_Str(), "BLEND") || !strcmp(alphaMode.C_Str(), "MASK"))
+            return false;
+
+    return true;
 }
 
 ModelImporter::ModelImporter(const VulkanRenderDevice &renderDevice)

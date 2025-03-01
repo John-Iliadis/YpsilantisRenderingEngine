@@ -49,6 +49,7 @@ namespace ImOGuizmo {
 			ImVec3 operator*(const ImVec3& other) const { return { mData[0] * other[0], mData[1] * other[1], mData[2] * other[2] }; }
 			float mData[3];
 		};
+
 		inline ImVec4 multiply(const float* const m, const ImVec4& v)
 		{
 			const float x = m[0] * v.x + m[4] * v.y + m[8] * v.z + m[12] * v.w;

@@ -69,6 +69,7 @@ public:
     void bindMaterialUBO(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t materialIndex, uint32_t matDsIndex) const;
     void bindTextures(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t materialIndex, uint32_t matDsIndex) const;
 
+    bool drawOpaque(const Mesh& mesh);
     Mesh* getMesh(uuid32_t meshID);
 
 private:
