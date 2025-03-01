@@ -11,6 +11,7 @@
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_vulkan.h>
 #include <imgui/ImGuizmo.h>
+#include <imgui/imoguizmo.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 #include "../utils/utils.hpp"
 #include "../scene_graph/scene_graph.hpp"
@@ -97,7 +98,7 @@ private:
 private:
     Renderer& mRenderer;
     SaveData& mSaveData;
-    SceneGraph mSceneGraph;
+    SceneGraph& mSceneGraph;
 
     bool mShowViewport = true;
     bool mShowAssetPanel = true;

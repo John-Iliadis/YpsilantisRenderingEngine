@@ -7,6 +7,7 @@
 Editor::Editor(Renderer& renderer, SaveData& saveData)
     : mRenderer(renderer)
     , mSaveData(saveData)
+    , mSceneGraph(mRenderer.mSceneGraph)
     , mSelectedObjectID()
     , mFPS()
     , mFrametimeMs()
@@ -557,6 +558,18 @@ void Editor::viewPort()
     ImGui::Image(renderedImageHandle, viewportSize);
 
     modelDragDropTargetWholeWindow();
+
+    ImVec2 windowCoords = ImGui::GetWindowPos();
+    float gizmoSize = 50.f;
+    float paddingX = 70.f;
+    float paddingY = 88.f;
+    float gizmoLeft = windowCoords.x + viewportSize.x - gizmoSize - paddingX;
+    float gizmoTop = windowCoords.y + paddingY;
+    ImOGuizmo::SetRect(gizmoLeft, gizmoTop, gizmoSize);
+
+    glm::mat4 view = mRenderer.mCamera.view();
+    static glm::mat4 proj = glm::perspective(glm::radians(30.f), 1.5f, 0.01f, 100.f);
+    ImOGuizmo::DrawGizmo(glm::value_ptr(view), glm::value_ptr(proj));
 
     ImGui::End();
     ImGui::PopStyleVar(2);
