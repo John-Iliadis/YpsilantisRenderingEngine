@@ -64,7 +64,11 @@ private:
     void setViewport(VkCommandBuffer commandBuffer);
     void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex, bool opaque);
     void updateCameraUBO();
-    void bindTexture(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, const VulkanTexture& texture);
+    void bindTexture(VkCommandBuffer commandBuffer,
+                     VkPipelineLayout pipelineLayout,
+                     const VulkanTexture& texture,
+                     uint32_t binding,
+                     uint32_t set);
     void renderLightIcons(VkCommandBuffer commandBuffer,
                           const std::unordered_map<uuid32_t, index_t>& lightMap,
                           const VulkanTexture& icon,

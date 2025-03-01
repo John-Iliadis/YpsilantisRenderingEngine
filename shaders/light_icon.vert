@@ -35,8 +35,9 @@ void main()
     vec3 camRight = -normalize(cross(cameraDir.xyz, vec3(0.f, 1.f, 0.f)));
     vec3 camUp = normalize(cross(camRight, -cameraDir.xyz));
 
-    vec3 pos = position + camRight * quadCoord.x + camUp * quadCoord.y;
-    pos *= quadHalfWidth;
+    vec3 pos = position;
+    pos += camRight * quadCoord.x * quadHalfWidth;
+    pos += camUp * quadCoord.y * quadHalfWidth;
 
     gl_Position = viewProj * vec4(pos, 1.0);
 }

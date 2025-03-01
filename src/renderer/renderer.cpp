@@ -525,6 +525,7 @@ void Renderer::executeLightIconRenderpass(VkCommandBuffer commandBuffer)
                             0, 1, &mCameraDs,
                             0, nullptr);
 
+    bindTexture(commandBuffer, mLightIconPipeline, mDepthTexture, 1, 1);
     renderLightIcons(commandBuffer, mUuidToDirLightIndex, mDirLightIcon, NodeType::DirectionalLight);
     renderLightIcons(commandBuffer, mUuidToPointLightIndex, mPointLightIcon, NodeType::PointLight);
     renderLightIcons(commandBuffer, mUuidToSpotLightIndex, mSpotLightIcon, NodeType::SpotLight);
@@ -584,14 +585,18 @@ void Renderer::updateCameraUBO()
     mCameraUBO.mapBufferMemory(0, sizeof(CameraRenderData), &renderData);
 }
 
-void Renderer::bindTexture(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, const VulkanTexture &texture)
+void Renderer::bindTexture(VkCommandBuffer commandBuffer,
+                           VkPipelineLayout pipelineLayout,
+                           const VulkanTexture &texture,
+                           uint32_t binding,
+                           uint32_t set)
 {
     VkDescriptorImageInfo imageInfo(texture.vulkanSampler.sampler, texture.imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     VkWriteDescriptorSet writeDescriptorSet {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = VK_NULL_HANDLE,
-        .dstBinding = 0,
+        .dstBinding = binding,
         .dstArrayElement = 0,
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -601,7 +606,7 @@ void Renderer::bindTexture(VkCommandBuffer commandBuffer, VkPipelineLayout pipel
     pfnCmdPushDescriptorSet(commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout,
-                            1,
+                            set,
                             1, &writeDescriptorSet);
 }
 
@@ -610,7 +615,7 @@ void Renderer::renderLightIcons(VkCommandBuffer commandBuffer,
                                 const VulkanTexture &icon,
                                 NodeType lightType)
 {
-    bindTexture(commandBuffer, mLightIconPipeline, icon);
+    bindTexture(commandBuffer, mLightIconPipeline, icon, 0, 1);
     for (const auto& [id, index] : lightMap)
     {
         auto* node = mSceneGraph.searchNode(id);
@@ -1820,7 +1825,7 @@ void Renderer::createGridRenderpass()
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
     std::array<VkAttachmentDescription, 2> attachments {{
@@ -2091,6 +2096,7 @@ void Renderer::createLightIconTextureDsLayout()
         .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
         .bindings = {
             binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         .debugName = "Renderer::mIconTextureDsLayout"
     };
