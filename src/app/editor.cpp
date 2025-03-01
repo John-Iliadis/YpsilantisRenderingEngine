@@ -791,6 +791,7 @@ void Editor::sceneNodeRecursive(GraphNode *node)
 void Editor::createModelGraph(Model &model)
 {
     GraphNode* graphNode = createModelGraphRecursive(model, model.root, nullptr);
+    graphNode->setPos(spawnPos());
     mSceneGraph.addNode(graphNode);
 }
 
@@ -819,7 +820,7 @@ GraphNode *Editor::createModelGraphRecursive(Model &model, const SceneNode &scen
 
 GraphNode *Editor::createEmptyNode(GraphNode *parent, const std::string& name)
 {
-    return new GraphNode(NodeType::Empty, name, {}, {}, glm::vec3(1.f), parent);
+    return new GraphNode(NodeType::Empty, name, spawnPos(), {}, glm::vec3(1.f), parent);
 }
 
 GraphNode* Editor::createMeshNode(Model &model, const SceneNode &sceneNode, GraphNode* parent)
@@ -858,7 +859,9 @@ void Editor::addDirLight()
 
     GraphNode* lightNode = new GraphNode(NodeType::DirectionalLight,
                                          "Directional Light",
-                                         {}, dirLight.direction, {},
+                                         spawnPos(),
+                                         dirLight.direction,
+                                         {},
                                          nullptr);
 
     mSceneGraph.addNode(lightNode);
@@ -867,16 +870,18 @@ void Editor::addDirLight()
 
 void Editor::addPointLight()
 {
-    static constexpr PointLight pointLight {
+    PointLight pointLight {
         .color = glm::vec4(1.f),
-        .position = glm::vec4(),
+        .position = glm::vec4(spawnPos(), 1.f),
         .intensity = 0.5f,
         .range = 10.f
     };
 
     GraphNode* lightNode = new GraphNode(NodeType::PointLight,
                                          "Point Light",
-                                         pointLight.position, {}, {},
+                                         pointLight.position,
+                                         {},
+                                         {},
                                          nullptr);
 
     mSceneGraph.addNode(lightNode);
@@ -885,9 +890,9 @@ void Editor::addPointLight()
 
 void Editor::addSpotLight()
 {
-    static constexpr SpotLight spotLight {
+    SpotLight spotLight {
         .color = glm::vec4(1.f),
-        .position = glm::vec4(),
+        .position = glm::vec4(spawnPos(), 1.f),
         .direction = glm::vec4(0.f, -1.f, 0.f, 0.f),
         .intensity = 0.5f,
         .range = 10.f,
@@ -1312,7 +1317,7 @@ void Editor::modelImportPopup()
     static const char* preview = "...";
     static ModelImportData importData {
         .normalize = false,
-        .flipUVs = false,
+        .flipUVs = true,
     };
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -1357,7 +1362,7 @@ void Editor::modelImportPopup()
 
         ImGui::Checkbox("Flip texture coordinates", &importData.flipUVs);
         ImGui::SameLine();
-        helpMarker("Flips Y texture coordinate.");
+        helpMarker("Flips Y texture coordinate on load.");
 
         ImGui::Separator();
 
@@ -1371,7 +1376,7 @@ void Editor::modelImportPopup()
 
         if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
         {
-            importData = {};
+            importData = {.flipUVs = true};
             ImGui::CloseCurrentPopup();
         }
 
@@ -1381,7 +1386,7 @@ void Editor::modelImportPopup()
         if (ImGui::Button("OK", ImVec2(buttonWidth, 0)))
         {
             importModel(importData);
-            importData = {};
+            importData = {.flipUVs = true};
             ImGui::CloseCurrentPopup();
         }
 
@@ -1589,4 +1594,9 @@ void Editor::helpMarker(const char* desc)
         ImGui::PopTextWrapPos();
         ImGui::EndTooltip();
     }
+}
+
+glm::vec3 Editor::spawnPos()
+{
+    return mRenderer.mCamera.position() - mRenderer.mCamera.front() * 3.f;
 }

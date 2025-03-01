@@ -40,6 +40,7 @@ public:
     void markDirty();
 
     void setName(const std::string& name);
+    void setPos(const glm::vec3& pos);
     void setLocalTransform(const glm::mat4& transform);
     void calcLocalTransform();
     virtual void updateGlobalTransform();

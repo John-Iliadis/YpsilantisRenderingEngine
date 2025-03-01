@@ -88,6 +88,7 @@ private:
     GraphNode* copyGraphNode(GraphNode* node);
     std::optional<std::string> renameDialog();
     std::optional<uuid32_t> selectModel();
+    glm::vec3 spawnPos();
     bool lastItemClicked(uuid32_t id);
     bool isNodeSelected();
     bool isModelSelected();

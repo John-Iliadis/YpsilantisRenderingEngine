@@ -168,3 +168,9 @@ void GraphNode::calcLocalTransform()
     mLocalTransform = glm::translate(glm::identity<glm::mat4>(), mTranslation) * rot;
     mLocalTransform = glm::scale(mLocalTransform, mScale);
 }
+
+void GraphNode::setPos(const glm::vec3 &pos)
+{
+    mTranslation = pos;
+    markDirty();
+}
