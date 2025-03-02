@@ -54,9 +54,12 @@ void deleteLight(std::unordered_map<uuid32_t, index_t>& idToIndexMap,
                 break;
             }
         }
+
+        ssbo.copyBuffer(ssbo,
+                        lastIndex * sizeof(T),
+                        removeIndex * sizeof(T),
+                        sizeof(T));
     }
 
     lightVec.pop_back();
-
-    ssbo.update(0, lightVec.size() * sizeof(T), lightVec.data());
 }

@@ -237,7 +237,6 @@ private:
         alignas(4) int32_t flipZ = false;
     } mSkyboxData;
 
-    // grid data
     struct GridData
     {
         alignas(16) glm::vec4 thinLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 80.f / 255.f);
