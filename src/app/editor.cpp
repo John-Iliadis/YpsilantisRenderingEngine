@@ -920,7 +920,7 @@ void Editor::pasteNode(GraphNode *parent)
 {
     GraphNode* copiedNode = mSceneGraph.searchNode(mCopiedNodeID);
 
-    if (copiedNode && !mSceneGraph.hasDescendant(copiedNode, parent))
+    if (copiedNode)
     {
         if (mCopyFlag == CopyFlags::Copy)
         {
@@ -929,7 +929,7 @@ void Editor::pasteNode(GraphNode *parent)
             parent->addChild(newNode);
         }
 
-        if (mCopyFlag == CopyFlags::Cut)
+        if (mCopyFlag == CopyFlags::Cut && !mSceneGraph.hasDescendant(copiedNode, parent))
         {
             copiedNode->orphan();
             parent->addChild(copiedNode);
