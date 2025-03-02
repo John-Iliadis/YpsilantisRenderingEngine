@@ -587,6 +587,8 @@ void Renderer::executeLightIconRenderpass(VkCommandBuffer commandBuffer)
         .pClearValues = clearValues.data()
     };
 
+    getLightIconRenderData();
+
     beginDebugLabel(commandBuffer, "Light Icon Renderpass");
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mLightIconPipeline);
@@ -598,12 +600,38 @@ void Renderer::executeLightIconRenderpass(VkCommandBuffer commandBuffer)
                             0, nullptr);
 
     bindTexture(commandBuffer, mLightIconPipeline, mDepthTexture, 1, 1);
-    renderLightIcons(commandBuffer, mUuidToDirLightIndex, mDirLightIcon, NodeType::DirectionalLight);
-    renderLightIcons(commandBuffer, mUuidToPointLightIndex, mPointLightIcon, NodeType::PointLight);
-    renderLightIcons(commandBuffer, mUuidToSpotLightIndex, mSpotLightIcon, NodeType::SpotLight);
+    for (const auto& renderData : mLightIconRenderData)
+    {
+        bindTexture(commandBuffer, mLightIconPipeline, *renderData.icon, 0, 1);
+        vkCmdPushConstants(commandBuffer,
+                           mLightIconPipeline,
+                           VK_SHADER_STAGE_VERTEX_BIT,
+                           0, sizeof(glm::vec3),
+                           &renderData.pos);
+        vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+    }
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
+}
+
+void Renderer::getLightIconRenderData()
+{
+    mLightIconRenderData.clear();
+    for (const auto& [id, index] : mUuidToDirLightIndex)
+        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
+                                          &mDirLightIcon);
+    for (const auto& [id, index] : mUuidToPointLightIndex)
+        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
+                                          &mPointLightIcon);
+    for (const auto& [id, index] : mUuidToSpotLightIndex)
+        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
+                                          &mSpotLightIcon);
+
+    std::sort(mLightIconRenderData.begin(), mLightIconRenderData.end(),
+              [this] (const auto& a, const auto& b) {
+        return glm::length(a.pos - mCamera.position()) > glm::length(b.pos - mCamera.position());
+    });
 }
 
 void Renderer::setViewport(VkCommandBuffer commandBuffer)
@@ -680,28 +708,6 @@ void Renderer::bindTexture(VkCommandBuffer commandBuffer,
                             pipelineLayout,
                             set,
                             1, &writeDescriptorSet);
-}
-
-void Renderer::renderLightIcons(VkCommandBuffer commandBuffer,
-                                const std::unordered_map<uuid32_t, index_t> &lightMap,
-                                const VulkanTexture &icon,
-                                NodeType lightType)
-{
-    bindTexture(commandBuffer, mLightIconPipeline, icon, 0, 1);
-    for (const auto& [id, index] : lightMap)
-    {
-        auto* node = mSceneGraph.searchNode(id);
-
-        if (node->type() == lightType)
-        {
-            vkCmdPushConstants(commandBuffer,
-                               mLightIconPipeline,
-                               VK_SHADER_STAGE_VERTEX_BIT,
-                               0, sizeof(glm::vec3),
-                               &node->globalT);
-            vkCmdDraw(commandBuffer, 6, 1, 0, 0);
-        }
-    }
 }
 
 void Renderer::createColorTexture32F()
@@ -2295,7 +2301,7 @@ void Renderer::createLightIconPipeline()
         },
         .depthStencil = {
             .enableDepthTest = VK_FALSE,
-            .enableDepthWrite = VK_TRUE,
+            .enableDepthWrite = VK_FALSE,
         },
         .blending = {
             .enable = true,

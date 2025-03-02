@@ -26,6 +26,7 @@ constexpr uint32_t MaxSpotLights = 1024;
 struct TransparentNode;
 struct LightIconRenderData;
 
+// todo: remove light icon depth buffer if not needed
 class Renderer : public SubscriberSNS
 {
 public:
@@ -65,15 +66,12 @@ private:
     void setViewport(VkCommandBuffer commandBuffer);
     void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex, bool opaque);
     void updateCameraUBO();
+    void getLightIconRenderData();
     void bindTexture(VkCommandBuffer commandBuffer,
                      VkPipelineLayout pipelineLayout,
                      const VulkanTexture& texture,
                      uint32_t binding,
                      uint32_t set);
-    void renderLightIcons(VkCommandBuffer commandBuffer,
-                          const std::unordered_map<uuid32_t, index_t>& lightMap,
-                          const VulkanTexture& icon,
-                          NodeType lightType);
 
     void createColorTexture32F();
     void createColorTexture8U();
@@ -232,6 +230,7 @@ private:
     // render data
     glm::vec4 mClearColor = glm::vec4(0.251f, 0.235f, 0.235f, 1.f);
     uint32_t mOitLinkedListLength = 8;
+    std::vector<LightIconRenderData> mLightIconRenderData;
 
     struct SkyboxData
     {
@@ -261,6 +260,12 @@ struct TransparentNode
     alignas(16) glm::vec4 color;
     alignas(4) float depth;
     alignas(4) uint32_t next;
+};
+
+struct LightIconRenderData
+{
+    glm::vec3 pos;
+    VulkanTexture* icon;
 };
 
 #include "renderer.inl"
