@@ -22,11 +22,12 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 
     createDefaultMaterialTextures(mRenderDevice);
 
-    createColorTexture();
+    createColorTexture32F();
     createDepthTexture();
     createNormalTexture();
     createSsaoTexture();
-    createPostProcessTexture();
+    createColorTexture8U();
+    createIconDepthTexture();
 
     createSingleImageDsLayout();
     createCameraRenderDataDsLayout();
@@ -179,18 +180,19 @@ void Renderer::resize(uint32_t width, uint32_t height)
         mDepthNormalDs,
         mSsaoDs,
         mDepthDs,
-        mColorDs,
-        mPostProcessingDs,
+        mColor32FDs,
+        mColor8UDs,
     };
 
     vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, freeDs.size(), freeDs.data());
 
     createOitTextures();
-    createColorTexture();
+    createColorTexture32F();
     createDepthTexture();
     createNormalTexture();
     createSsaoTexture();
-    createPostProcessTexture();
+    createColorTexture8U();
+    createIconDepthTexture();
 
     createPrepassFramebuffer();
     createSkyboxFramebuffer();
@@ -447,7 +449,21 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    { // subpass 0: transparent fragment collection
+    { // subpass 0: opaque pass
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mOpaqueForwardPassPipeline);
+
+        std::array<VkDescriptorSet, 2> ds {mCameraDs, mSsaoDs};
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mOpaqueForwardPassPipeline,
+                                0, ds.size(), ds.data(),
+                                0, nullptr);
+
+        renderModels(commandBuffer, mOpaqueForwardPassPipeline, 2, true);
+    }
+
+    { // subpass 1: transparent fragment collection
+        vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mTransparentCollectionPipeline);
 
         std::array<VkDescriptorSet, 2> ds {mCameraDs, mOitResourcesDs};
@@ -460,7 +476,7 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
         if (mOitOn) renderModels(commandBuffer, mTransparentCollectionPipeline, 2, false);
     }
 
-    { // subpass 1: transparency resolution
+    { // subpass 2: transparency resolution
         vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mTransparencyResolutionPipeline);
         vkCmdBindDescriptorSets(commandBuffer,
@@ -469,20 +485,6 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 0, 1, &mOitResourcesDs,
                                 0, nullptr);
         if (mOitOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-    }
-
-    { // subpass 2: opaque pass
-        vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mOpaqueForwardPassPipeline);
-
-        std::array<VkDescriptorSet, 2> ds {mCameraDs, mSsaoDs};
-        vkCmdBindDescriptorSets(commandBuffer,
-                                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                mOpaqueForwardPassPipeline,
-                                0, ds.size(), ds.data(),
-                                0, nullptr);
-
-        renderModels(commandBuffer, mOpaqueForwardPassPipeline, 2, true);
     }
 
     { // subpass 3: blend pass
@@ -559,7 +561,7 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
     vkCmdBindDescriptorSets(commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             mPostProcessingPipeline,
-                            0, 1, &mColorDs,
+                            0, 1, &mColor32FDs,
                             0, nullptr);
 
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
@@ -570,6 +572,9 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
 
 void Renderer::executeLightIconRenderpass(VkCommandBuffer commandBuffer)
 {
+    std::array<VkClearValue, 2> clearValues;
+    clearValues.at(1) = {.depthStencil = {.depth = 1.f}};
+
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = mLightIconRenderpass,
@@ -577,7 +582,9 @@ void Renderer::executeLightIconRenderpass(VkCommandBuffer commandBuffer)
         .renderArea = {
             .offset = {.x = 0, .y = 0},
             .extent = {.width = mWidth, .height = mHeight}
-        }
+        },
+        .clearValueCount = static_cast<uint32_t>(clearValues.size()),
+        .pClearValues = clearValues.data()
     };
 
     beginDebugLabel(commandBuffer, "Light Icon Renderpass");
@@ -697,7 +704,7 @@ void Renderer::renderLightIcons(VkCommandBuffer commandBuffer,
     }
 }
 
-void Renderer::createColorTexture()
+void Renderer::createColorTexture32F()
 {
     TextureSpecification specification {
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
@@ -716,8 +723,31 @@ void Renderer::createColorTexture()
         .generateMipMaps = false
     };
 
-    mColorTexture = VulkanTexture(mRenderDevice, specification);
-    mColorTexture.setDebugName("Renderer::mColorTexture");
+    mColorTexture32F = VulkanTexture(mRenderDevice, specification);
+    mColorTexture32F.setDebugName("Renderer::mColorTexture32F");
+}
+
+void Renderer::createColorTexture8U()
+{
+    TextureSpecification specification {
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .width = mWidth,
+        .height = mHeight,
+        .layerCount = 1,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Nearest,
+        .minFilter = TextureMinFilter::Nearest,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .generateMipMaps = false
+    };
+
+    mColorTexture8U = VulkanTexture(mRenderDevice, specification);
+    mColorTexture8U.setDebugName("Renderer::mColorTexture8U");
 }
 
 void Renderer::createDepthTexture()
@@ -791,17 +821,16 @@ void Renderer::createSsaoTexture()
     mSsaoTexture.setDebugName("Renderer::mSsaoTexture");
 }
 
-void Renderer::createPostProcessTexture()
+void Renderer::createIconDepthTexture()
 {
     TextureSpecification specification {
-        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .format = VK_FORMAT_D32_SFLOAT,
         .width = mWidth,
         .height = mHeight,
         .layerCount = 1,
         .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-            VK_IMAGE_USAGE_SAMPLED_BIT,
-        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_DEPTH_BIT,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .magFilter = TextureMagFilter::Nearest,
         .minFilter = TextureMinFilter::Nearest,
@@ -810,8 +839,8 @@ void Renderer::createPostProcessTexture()
         .generateMipMaps = false
     };
 
-    mPostProcessingTexture = VulkanTexture(mRenderDevice, specification);
-    mPostProcessingTexture.setDebugName("Renderer::mPostProcessTexture");
+    mIconDepthTexture = VulkanTexture(mRenderDevice, specification);
+    mIconDepthTexture.setDebugName("Renderer::mIconDepthTexture");
 }
 
 void Renderer::createSingleImageDsLayout()
@@ -941,8 +970,8 @@ void Renderer::createSingleImageDescriptorSets()
 {
     createSingleImageDs(mSsaoDs, mSsaoTexture, "Renderer::mSsaoDs");
     createSingleImageDs(mDepthDs, mDepthTexture, "Renderer::mDepthDs");
-    createSingleImageDs(mColorDs, mColorTexture, "Renderer::mColorDs");
-    createSingleImageDs(mPostProcessingDs, mPostProcessingTexture, "Renderer::mPostProcessingDs");
+    createSingleImageDs(mColor32FDs, mColorTexture32F, "Renderer::mColor32FDs");
+    createSingleImageDs(mColor8UDs, mColorTexture8U, "Renderer::mColorTexture8U");
 }
 
 void Renderer::createDepthNormalDs()
@@ -1123,7 +1152,7 @@ void Renderer::createPrepassPipeline()
 void Renderer::createSkyboxRenderpass()
 {
     VkAttachmentDescription colorAttachment {
-        .format = mColorTexture.format,
+        .format = mColorTexture32F.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1180,7 +1209,7 @@ void Renderer::createSkyboxFramebuffer()
     vkDestroyFramebuffer(mRenderDevice.device, mSkyboxFramebuffer, nullptr);
 
     std::array<VkImageView, 2> imageViews {
-        mColorTexture.imageView,
+        mColorTexture32F.imageView,
         mDepthTexture.imageView,
     };
 
@@ -1540,7 +1569,7 @@ void Renderer::createForwardRenderpass()
     };
 
     VkAttachmentDescription colorAttachment {
-        .format = mColorTexture.format,
+        .format = mColorTexture32F.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1583,6 +1612,16 @@ void Renderer::createForwardRenderpass()
         .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     };
 
+    uint32_t opaqueForwardSubpassPreserveAttachment = 0;
+    VkSubpassDescription opaqueForwardSubpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef,
+        .pDepthStencilAttachment = &depthAttachmentRef,
+        .preserveAttachmentCount = 1,
+        .pPreserveAttachments = &opaqueForwardSubpassPreserveAttachment
+    };
+
     std::array<uint32_t, 2> transparentFragmentCollectionSubpassPreserveAttachments {0, 1};
     VkSubpassDescription transparentFragmentCollectionSubpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1600,16 +1639,6 @@ void Renderer::createForwardRenderpass()
         .pPreserveAttachments = transparencyResolutionSubpassPreserveAttachments.data()
     };
 
-    uint32_t opaqueForwardSubpassPreserveAttachment = 0;
-    VkSubpassDescription opaqueForwardSubpass {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachmentRef,
-        .pDepthStencilAttachment = &depthAttachmentRef,
-        .preserveAttachmentCount = 1,
-        .pPreserveAttachments = &opaqueForwardSubpassPreserveAttachment
-    };
-
     uint32_t blendSubpassPreserveAttachment = 2;
     VkSubpassDescription blendSubpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1622,36 +1651,36 @@ void Renderer::createForwardRenderpass()
     };
 
     std::array<VkSubpassDescription, 4> subpasses {
+        opaqueForwardSubpass,
         transparentFragmentCollectionSubpass,
         transparencyResolutionSubpass,
-        opaqueForwardSubpass,
         blendSubpass
     };
 
     std::array<VkSubpassDependency, 3> dependencies;
 
     dependencies.at(0).srcSubpass = 0;
-    dependencies.at(0).dstSubpass = 1;
-    dependencies.at(0).srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies.at(0).dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies.at(0).srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    dependencies.at(0).dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    dependencies.at(0).dstSubpass = 3;
+    dependencies.at(0).srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies.at(0).dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies.at(0).srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies.at(0).dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     dependencies.at(0).dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     dependencies.at(1).srcSubpass = 1;
-    dependencies.at(1).dstSubpass = 3;
-    dependencies.at(1).srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies.at(1).dstSubpass = 2;
+    dependencies.at(1).srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     dependencies.at(1).dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies.at(1).srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies.at(1).dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    dependencies.at(1).srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    dependencies.at(1).dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     dependencies.at(1).dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     dependencies.at(2).srcSubpass = 2;
     dependencies.at(2).dstSubpass = 3;
     dependencies.at(2).srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies.at(2).dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies.at(2).dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     dependencies.at(2).srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies.at(2).dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies.at(2).dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
     dependencies.at(2).dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     VkRenderPassCreateInfo renderPassCreateInfo {
@@ -1675,7 +1704,7 @@ void Renderer::createForwardFramebuffer()
 
     std::array<VkImageView, 3> attachments {
         mTransparencyTexture.imageView,
-        mColorTexture.imageView,
+        mColorTexture32F.imageView,
         mDepthTexture.imageView
     };
 
@@ -1718,7 +1747,7 @@ void Renderer::createOitTransparentCollectionPipeline()
         },
         .depthStencil = {
             .enableDepthTest = VK_TRUE,
-            .enableDepthWrite = VK_FALSE,
+            .enableDepthWrite = VK_TRUE,
             .depthCompareOp = VK_COMPARE_OP_LESS
         },
         .dynamicStates = {
@@ -1733,7 +1762,7 @@ void Renderer::createOitTransparentCollectionPipeline()
             }
         },
         .renderPass = mForwardRenderpass,
-        .subpassIndex = 0,
+        .subpassIndex = 1,
         .debugName = "Renderer::mTransparentCollectionPipeline"
     };
 
@@ -1768,7 +1797,7 @@ void Renderer::createOitTransparencyResolutionPipeline()
             }
         },
         .renderPass = mForwardRenderpass,
-        .subpassIndex = 1,
+        .subpassIndex = 2,
         .debugName = "Renderer::mTransparencyResolutionPipeline"
     };
 
@@ -1822,7 +1851,7 @@ void Renderer::createOpaqueForwardPassPipeline()
             }
         },
         .renderPass = mForwardRenderpass,
-        .subpassIndex = 2,
+        .subpassIndex = 0,
         .debugName = "Renderer::mOpaqueForwardPassPipeline"
     };
 
@@ -1876,7 +1905,7 @@ void Renderer::createForwardPassBlendPipeline()
 void Renderer::createGridRenderpass()
 {
     VkAttachmentDescription colorAttachment {
-        .format = mColorTexture.format,
+        .format = mColorTexture32F.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1933,7 +1962,7 @@ void Renderer::createGridFramebuffer()
     vkDestroyFramebuffer(mRenderDevice.device, mGridFramebuffer, nullptr);
 
     std::array<VkImageView, 2> imageViews {
-        mColorTexture.imageView,
+        mColorTexture32F.imageView,
         mDepthTexture.imageView,
     };
 
@@ -2013,7 +2042,7 @@ void Renderer::createGridPipeline()
 void Renderer::createPostProcessingRenderpass()
 {
     VkAttachmentDescription colorAttachment {
-        .format = mPostProcessingTexture.format,
+        .format = mColorTexture8U.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -2053,7 +2082,7 @@ void Renderer::createPostProcessingFramebuffer()
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = mPostProcessingRenderpass,
         .attachmentCount = 1,
-        .pAttachments = &mPostProcessingTexture.imageView,
+        .pAttachments = &mColorTexture8U.imageView,
         .width = mWidth,
         .height = mHeight,
         .layers = 1
@@ -2121,7 +2150,7 @@ void Renderer::createLightIconTextures()
 {
     stbi_set_flip_vertically_on_load(true);
     LoadedImage dirLightIcon("../assets/textures/lights/directional3.png");
-    LoadedImage pointLightIcon("../assets/textures/lights/lightbulb3.png");
+    LoadedImage pointLightIcon("../assets/textures/lights/lightbulb4.png");
     LoadedImage spotLightIcon("../assets/textures/lights/spotlight2.png");
     stbi_set_flip_vertically_on_load(false);
 
@@ -2172,7 +2201,7 @@ void Renderer::createLightIconTextureDsLayout()
 void Renderer::createLightIconRenderpass()
 {
     VkAttachmentDescription colorAttachment {
-        .format = mPostProcessingTexture.format,
+        .format = mColorTexture8U.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -2180,21 +2209,38 @@ void Renderer::createLightIconRenderpass()
         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
+    VkAttachmentDescription depthAttachment {
+        .format = mIconDepthTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    std::array<VkAttachmentDescription, 2> attachments {colorAttachment, depthAttachment};
+
     VkAttachmentReference colorAttachmentRef {
         .attachment = 0,
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentReference depthAttachmentRef {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     };
 
     VkSubpassDescription subpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
         .colorAttachmentCount = 1,
         .pColorAttachments = &colorAttachmentRef,
+        .pDepthStencilAttachment = &depthAttachmentRef
     };
 
     VkRenderPassCreateInfo renderPassCreateInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &colorAttachment,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
         .subpassCount = 1,
         .pSubpasses = &subpass,
     };
@@ -2208,11 +2254,16 @@ void Renderer::createLightIconFramebuffer()
 {
     vkDestroyFramebuffer(mRenderDevice.device, mLightIconFramebuffer, nullptr);
 
+    std::array<VkImageView, 2> attachments {
+        mColorTexture8U.imageView,
+        mIconDepthTexture.imageView
+    };
+
     VkFramebufferCreateInfo framebufferCreateInfo {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = mLightIconRenderpass,
-        .attachmentCount = 1,
-        .pAttachments = &mPostProcessingTexture.imageView,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
         .width = mWidth,
         .height = mHeight,
         .layers = 1
@@ -2244,7 +2295,7 @@ void Renderer::createLightIconPipeline()
         },
         .depthStencil = {
             .enableDepthTest = VK_FALSE,
-            .enableDepthWrite = VK_FALSE,
+            .enableDepthWrite = VK_TRUE,
         },
         .blending = {
             .enable = true,

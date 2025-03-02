@@ -24,6 +24,7 @@ constexpr uint32_t MaxPointLights = 1024;
 constexpr uint32_t MaxSpotLights = 1024;
 
 struct TransparentNode;
+struct LightIconRenderData;
 
 class Renderer : public SubscriberSNS
 {
@@ -74,11 +75,12 @@ private:
                           const VulkanTexture& icon,
                           NodeType lightType);
 
-    void createColorTexture();
+    void createColorTexture32F();
+    void createColorTexture8U();
     void createDepthTexture();
     void createNormalTexture();
     void createSsaoTexture();
-    void createPostProcessTexture();
+    void createIconDepthTexture();
 
     void createSingleImageDsLayout();
     void createCameraRenderDataDsLayout();
@@ -153,11 +155,12 @@ private:
 
     // render targets
     VulkanTexture mTransparencyTexture;
-    VulkanTexture mColorTexture;
+    VulkanTexture mColorTexture32F;
+    VulkanTexture mColorTexture8U;
     VulkanTexture mDepthTexture;
     VulkanTexture mNormalTexture;
-    VulkanTexture mPostProcessingTexture;
     VulkanTexture mSsaoTexture;
+    VulkanTexture mIconDepthTexture;
     VulkanTexture mSkyboxTexture;
 
     // render passes
@@ -203,8 +206,8 @@ private:
     VkDescriptorSet mSsaoDs{};
     VkDescriptorSet mDepthDs{};
     VkDescriptorSet mSkyboxDs{};
-    VkDescriptorSet mColorDs{};
-    VkDescriptorSet mPostProcessingDs{};
+    VkDescriptorSet mColor32FDs{};
+    VkDescriptorSet mColor8UDs{};
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
