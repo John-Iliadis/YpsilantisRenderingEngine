@@ -8,9 +8,9 @@ GraphNode::GraphNode()
     : mID(UUIDRegistry::generateSceneNodeID())
     , mType(NodeType::Empty)
     , mName("")
-    , mTranslation()
-    , mRotation()
-    , mScale(1.f)
+    , localT()
+    , localR()
+    , localS(1.f)
     , mDirty()
     , mParent()
 {
@@ -24,9 +24,9 @@ GraphNode::GraphNode(NodeType type, const std::string& name,
     , mType(type)
     , mName(name)
     , mModelID(modelID)
-    , mTranslation(translation)
-    , mRotation(rotation)
-    , mScale(scale)
+    , localT(translation)
+    , localR(rotation)
+    , localS(scale)
     , mDirty(true)
     , mParent(parent)
 {
@@ -126,10 +126,18 @@ void GraphNode::updateGlobalTransform()
 
         if (mParent)
         {
+            globalT = mParent->globalT + localT;
+            globalR = mParent->globalR + localR;
+            globalS = mParent->globalS + localS - glm::vec3(1.f);
+
             mGlobalTransform = mParent->mGlobalTransform * mLocalTransform;
         }
         else
         {
+            globalT = localT;
+            globalR = localR;
+            globalS = localS;
+
             mGlobalTransform = mLocalTransform;
         }
 
@@ -140,37 +148,16 @@ void GraphNode::updateGlobalTransform()
         child->updateGlobalTransform();
 }
 
+void GraphNode::calcLocalTransform()
+{
+    glm::quat quat = glm::quat(glm::radians(localR));
+    glm::mat4 rot = glm::toMat4(quat);
+
+    mLocalTransform = glm::translate(glm::identity<glm::mat4>(), localT) * rot;
+    mLocalTransform = glm::scale(mLocalTransform, localS);
+}
+
 void GraphNode::setName(const std::string &name)
 {
     mName = name;
-}
-
-float *GraphNode::translationPtr()
-{
-    return glm::value_ptr(mTranslation);
-}
-
-float *GraphNode::rotationPtr()
-{
-    return glm::value_ptr(mRotation);
-}
-
-float *GraphNode::scalePtr()
-{
-    return glm::value_ptr(mScale);
-}
-
-void GraphNode::calcLocalTransform()
-{
-    glm::quat quat = glm::quat(glm::radians(mRotation));
-    glm::mat4 rot = glm::toMat4(quat);
-
-    mLocalTransform = glm::translate(glm::identity<glm::mat4>(), mTranslation) * rot;
-    mLocalTransform = glm::scale(mLocalTransform, mScale);
-}
-
-void GraphNode::setPos(const glm::vec3 &pos)
-{
-    mTranslation = pos;
-    markDirty();
 }

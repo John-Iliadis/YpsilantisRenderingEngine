@@ -14,7 +14,7 @@ layout (set = 0, binding = 0) uniform CameraUBO {
     float farPlane;
 };
 
-const float quadHalfWidth = 0.1;
+const float quadHalfWidth = 0.2;
 
 const vec3 quadCoords[4] = vec3[4](
     vec3(-1.0, 1.0, 1.0),

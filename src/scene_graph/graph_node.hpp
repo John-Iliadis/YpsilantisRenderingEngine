@@ -26,6 +26,14 @@ enum class NodeType
 class GraphNode
 {
 public:
+    glm::vec3 localT;
+    glm::vec3 localR;
+    glm::vec3 localS;
+    glm::vec3 globalT;
+    glm::vec3 globalR;
+    glm::vec3 globalS;
+
+public:
     GraphNode();
     GraphNode(NodeType type, const std::string& name,
               glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale,
@@ -40,14 +48,10 @@ public:
     void markDirty();
 
     void setName(const std::string& name);
-    void setPos(const glm::vec3& pos);
     void setLocalTransform(const glm::mat4& transform);
     void calcLocalTransform();
     virtual void updateGlobalTransform();
 
-    float* translationPtr();
-    float* rotationPtr();
-    float* scalePtr();
     const glm::mat4& localTransform() const;
     const glm::mat4& globalTransform() const;
 
@@ -64,10 +68,6 @@ protected:
     std::string mName;
     std::optional<uuid32_t> mModelID;
     bool mDirty;
-
-    glm::vec3 mTranslation;
-    glm::vec3 mRotation;
-    glm::vec3 mScale;
 
     glm::mat4 mGlobalTransform;
     glm::mat4 mLocalTransform;

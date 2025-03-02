@@ -691,7 +691,7 @@ void Renderer::renderLightIcons(VkCommandBuffer commandBuffer,
                                mLightIconPipeline,
                                VK_SHADER_STAGE_VERTEX_BIT,
                                0, sizeof(glm::vec3),
-                               node->translationPtr());
+                               &node->globalT);
             vkCmdDraw(commandBuffer, 6, 1, 0, 0);
         }
     }

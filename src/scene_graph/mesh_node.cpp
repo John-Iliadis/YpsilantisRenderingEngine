@@ -35,10 +35,18 @@ void MeshNode::updateGlobalTransform()
 
         if (mParent)
         {
+            globalT = mParent->globalT + localT;
+            globalR = mParent->globalR + localR;
+            globalS = mParent->globalS + localS - glm::vec3(1.f);
+
             mGlobalTransform = mParent->globalTransform() * mLocalTransform;
         }
         else
         {
+            globalT = localT;
+            globalR = localR;
+            globalS = localS;
+
             mGlobalTransform = mLocalTransform;
         }
 

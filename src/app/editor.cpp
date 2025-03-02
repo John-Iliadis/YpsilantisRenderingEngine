@@ -506,21 +506,21 @@ bool Editor::nodeTransform(GraphNode *node)
     {
         ImGui::SeparatorText("Translation");
 
-        if (ImGui::DragFloat("X##Translation", node->translationPtr(), 0.001f)) modified = true;
-        if (ImGui::DragFloat("Y##Translation", node->translationPtr() + 1, 0.001f)) modified = true;
-        if (ImGui::DragFloat("Z##Translation", node->translationPtr() + 2, 0.001f)) modified = true;
+        if (ImGui::DragFloat("X##Translation", &node->localT.x, 0.001f)) modified = true;
+        if (ImGui::DragFloat("Y##Translation", &node->localT.y, 0.001f)) modified = true;
+        if (ImGui::DragFloat("Z##Translation", &node->localT.z, 0.001f)) modified = true;
 
         ImGui::SeparatorText("Rotation");
 
-        if (ImGui::DragFloat("X##Rotation", node->rotationPtr(), 0.1f, 0.f, 0.f, "%.1f")) modified = true;
-        if (ImGui::DragFloat("Y##Rotation", node->rotationPtr() + 1, 0.1f, 0.f, 0.f, "%.1f")) modified = true;
-        if (ImGui::DragFloat("Z##Rotation", node->rotationPtr() + 2, 0.1f, 0.f, 0.f, "%.1f")) modified = true;
+        if (ImGui::DragFloat("X##Rotation", &node->localR.x, 0.1f, 0.f, 0.f, "%.1f")) modified = true;
+        if (ImGui::DragFloat("Y##Rotation", &node->localR.y, 0.1f, 0.f, 0.f, "%.1f")) modified = true;
+        if (ImGui::DragFloat("Z##Rotation", &node->localR.z, 0.1f, 0.f, 0.f, "%.1f")) modified = true;
 
         ImGui::SeparatorText("Scale");
 
-        if (ImGui::DragFloat("X##Scale", node->scalePtr(), 0.001f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
-        if (ImGui::DragFloat("Y##Scale", node->scalePtr() + 1, 0.001f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
-        if (ImGui::DragFloat("Z##Scale", node->scalePtr() + 2, 0.001f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
+        if (ImGui::DragFloat("X##Scale", &node->localS.x, 0.001f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
+        if (ImGui::DragFloat("Y##Scale", &node->localS.y, 0.001f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
+        if (ImGui::DragFloat("Z##Scale", &node->localS.z, 0.001f, 0.001f, 0.f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) modified = true;
     }
 
     if (modified) node->markDirty();
@@ -739,7 +739,7 @@ void Editor::sceneGraphPanel()
 
     bool nodeHovered = ImGui::IsItemHovered();
     ImGui::Dummy(ImVec2(0, 50.f));
-    sceneNodeDragDropTargetWholeWindow(&mSceneGraph.mRoot, nodeHovered);
+    sceneNodeDragDropTargetWholeWindow(nodeHovered);
 
     sceneGraphPopup();
 
@@ -786,7 +786,7 @@ void Editor::sceneNodeRecursive(GraphNode *node)
 void Editor::createModelGraph(Model &model)
 {
     GraphNode* graphNode = createModelGraphRecursive(model, model.root, nullptr);
-    graphNode->setPos(spawnPos());
+    graphNode->localT = spawnPos();
     mSceneGraph.addNode(graphNode);
 }
 
@@ -818,7 +818,7 @@ GraphNode *Editor::createEmptyNode(GraphNode *parent, const std::string& name)
     return new GraphNode(NodeType::Empty, name, spawnPos(), {}, glm::vec3(1.f), parent);
 }
 
-GraphNode* Editor::createMeshNode(Model &model, const SceneNode &sceneNode, GraphNode* parent)
+GraphNode *Editor::createMeshNode(Model &model, const SceneNode &sceneNode, GraphNode* parent)
 {
     std::vector<uuid32_t> meshIDs;
 
@@ -987,6 +987,8 @@ void Editor::sceneNodeDragDropTarget(GraphNode *node)
 
             if (!mSceneGraph.hasDescendant(transferNode, node))
             {
+                transferNode->localT = transferNode->globalT - node->globalT;
+
                 transferNode->orphan();
                 transferNode->markDirty();
 
@@ -998,7 +1000,7 @@ void Editor::sceneNodeDragDropTarget(GraphNode *node)
     }
 }
 
-void Editor::sceneNodeDragDropTargetWholeWindow(GraphNode *node, bool nodeHovered)
+void Editor::sceneNodeDragDropTargetWholeWindow(bool nodeHovered)
 {
     if (nodeHovered)
         return;
@@ -1015,12 +1017,14 @@ void Editor::sceneNodeDragDropTargetWholeWindow(GraphNode *node, bool nodeHovere
             {
                 GraphNode* transferNode = *(GraphNode**)payload->Data;
 
-                if (!mSceneGraph.hasDescendant(transferNode, node))
+                if (!mSceneGraph.hasDescendant(transferNode, &mSceneGraph.mRoot))
                 {
+                    transferNode->localT = transferNode->globalT - mSceneGraph.mRoot.globalT;
+
                     transferNode->orphan();
                     transferNode->markDirty();
 
-                    node->addChild(transferNode);
+                    mSceneGraph.mRoot.addChild(transferNode);
                 }
             }
         }
@@ -1439,9 +1443,9 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
         {
             newNode = new GraphNode(node->type(),
                                     node->name(),
-                                    glm::make_vec3(node->translationPtr()),
-                                    glm::make_vec3(node->rotationPtr()),
-                                    glm::make_vec3(node->scalePtr()),
+                                    node->localT,
+                                    node->localR,
+                                    node->localS,
                                     node->parent(),
                                     node->modelID());
             break;
@@ -1450,9 +1454,9 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
         {
             newNode = new GraphNode(node->type(),
                                     node->name(),
-                                    glm::make_vec3(node->translationPtr()),
-                                    glm::make_vec3(node->rotationPtr()),
-                                    glm::make_vec3(node->scalePtr()),
+                                    node->localT,
+                                    node->localR,
+                                    node->localS,
                                     node->parent());
             mRenderer.addDirLight(newNode->id(), mRenderer.getDirLight(node->id()));
             break;
@@ -1461,9 +1465,9 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
         {
             newNode = new GraphNode(node->type(),
                                     node->name(),
-                                    glm::make_vec3(node->translationPtr()),
-                                    glm::make_vec3(node->rotationPtr()),
-                                    glm::make_vec3(node->scalePtr()),
+                                    node->localT,
+                                    node->localR,
+                                    node->localS,
                                     node->parent());
             mRenderer.addSpotLight(newNode->id(), mRenderer.getSpotLight(node->id()));
             break;
@@ -1472,9 +1476,9 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
         {
             newNode = new GraphNode(node->type(),
                                     node->name(),
-                                    glm::make_vec3(node->translationPtr()),
-                                    glm::make_vec3(node->rotationPtr()),
-                                    glm::make_vec3(node->scalePtr()),
+                                    node->localT,
+                                    node->localR,
+                                    node->localS,
                                     node->parent());
             mRenderer.addPointLight(newNode->id(), mRenderer.getPointLight(node->id()));
             break;
@@ -1490,9 +1494,9 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
 
             newNode = new MeshNode(meshNode->type(),
                                    meshNode->name(),
-                                   glm::make_vec3(node->translationPtr()),
-                                   glm::make_vec3(node->rotationPtr()),
-                                   glm::make_vec3(node->scalePtr()),
+                                   node->localT,
+                                   node->localR,
+                                   node->localS,
                                    meshNode->parent(),
                                    modelID, meshIDs);
 
@@ -1608,5 +1612,5 @@ void Editor::helpMarker(const char* desc)
 
 glm::vec3 Editor::spawnPos()
 {
-    return mRenderer.mCamera.position() - mRenderer.mCamera.front() * 3.f;
+    return mRenderer.mCamera.position() - mRenderer.mCamera.front() * 10.f;
 }
