@@ -40,6 +40,7 @@ public:
     void resize(uint32_t width, uint32_t height);
     void scroll(float x, float y);
     void update(float dt);
+    void updateView(const glm::mat4& view);
 
     const glm::mat4& viewProjection() const;
     const glm::mat4& view() const;

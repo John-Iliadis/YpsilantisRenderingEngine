@@ -176,18 +176,18 @@ namespace ImOGuizmo {
 
 	static struct Config {
 		// in relation to half the rect size
-		float lineThicknessScale = 0.017f;
+		float lineThicknessScale = 0.030f;
 		float axisLengthScale = 0.33f;
 		float positiveRadiusScale = 0.18f;
-		float negativeRadiusScale = 0.09f;
-		float hoverCircleRadiusScale = 0.88f;
+		float negativeRadiusScale = 0.13f;
+		float hoverCircleRadiusScale = 3.f;
 		ImU32 xCircleFrontColor = IM_COL32(255, 54, 83, 255);
 		ImU32 xCircleBackColor = IM_COL32(154, 57, 71, 255);
 		ImU32 yCircleFrontColor = IM_COL32(138, 219, 0, 255);
 		ImU32 yCircleBackColor = IM_COL32(98, 138, 34, 255);
 		ImU32 zCircleFrontColor = IM_COL32(44, 143, 255, 255);
 		ImU32 zCircleBackColor = IM_COL32(52, 100, 154, 255);
-		ImU32 hoverCircleColor = IM_COL32(100, 100, 100, 130);
+		ImU32 hoverCircleColor = IM_COL32(100, 100, 100, 100);
 	} config;
 
 	inline void SetRect(const float x, const float y, const float size)

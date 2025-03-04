@@ -90,6 +90,11 @@ void Camera::update(float dt)
     mPreviousMousePos.y = ImGui::GetMousePos().y;
 }
 
+void Camera::updateView(const glm::mat4 &view)
+{
+
+}
+
 const glm::mat4 &Camera::viewProjection() const
 {
     return mViewProjection;

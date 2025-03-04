@@ -539,6 +539,7 @@ void Editor::viewPort()
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::Begin("Viewport", &mShowViewport, ImGuiWindowFlags_NoScrollbar);
+    modelDragDropTargetWholeWindow();
 
     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 
@@ -551,14 +552,9 @@ void Editor::viewPort()
         mRenderer.resize(viewportSize.x, viewportSize.y);
     }
 
+    ImGui::Image(reinterpret_cast<ImTextureID>(mRenderer.mColor8UDs), viewportSize);
+
     mRenderer.mCamera.update(mDt);
-
-    ImTextureID renderedImageHandle = reinterpret_cast<ImTextureID>(mRenderer.mColor8UDs);
-
-    ImGui::Image(renderedImageHandle, viewportSize);
-
-    modelDragDropTargetWholeWindow();
-
     if (mRenderer.mRenderAxisGizmo)
         drawAxisGizmo(viewportSize);
 
@@ -1397,13 +1393,14 @@ void Editor::modelImportPopup()
 
 void Editor::drawAxisGizmo(ImVec2 viewportSize)
 {
-    ImVec2 windowCoords = ImGui::GetWindowPos();
-    float gizmoSize = 50.f;
-    float paddingX = 70.f;
-    float paddingY = 88.f;
-    float gizmoLeft = windowCoords.x + viewportSize.x - gizmoSize - paddingX;
-    float gizmoTop = windowCoords.y + paddingY;
-    ImOGuizmo::SetRect(gizmoLeft, gizmoTop, gizmoSize);
+    ImGuiWindow* win = ImGui::GetCurrentWindow();
+    ImVec2 windowCoords = ImGui::GetWindowPos() + ImVec2(0, win->TitleBarHeight());
+
+    float gizmoHalfSize = 50.f;
+    float padding = 15.f;
+    float gizmoLeft = windowCoords.x + viewportSize.x - gizmoHalfSize * 2 - padding;
+    float gizmoTop = windowCoords.y + gizmoHalfSize + padding;
+    ImOGuizmo::SetRect(gizmoLeft, gizmoTop, gizmoHalfSize);
 
     glm::mat4 view = mRenderer.mCamera.view();
     static glm::mat4 proj = glm::perspective(glm::radians(30.f), 1.5f, 0.01f, 100.f);
