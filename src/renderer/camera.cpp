@@ -18,7 +18,9 @@ static constexpr glm::mat4 sRightHandedBasis
 
 Camera::Camera(glm::vec3 position, float fovY, float width, float height, float nearZ, float farZ)
     : mView()
-    , mBasis()
+    , mAxisX(1.0, 0.f, 0.f)
+    , mAxisY(0.f, 1.f, 0.f)
+    , mAxisZ(0.f, 0.f, 1.f)
     , mPosition(position)
     , mTheta()
     , mPhi()
@@ -110,7 +112,7 @@ const glm::vec3 &Camera::position() const
 
 const glm::vec3 &Camera::front() const
 {
-    return mBasis[2];
+    return mAxisZ;
 }
 
 const Camera::State Camera::state() const
@@ -164,7 +166,7 @@ void Camera::scroll(float x, float y)
 
     if (mState == VIEW_MODE || mState == EDITOR_MODE)
     {
-        mPosition += mBasis[2] * mZScrollOffset * -glm::sign(y);
+        mPosition += mAxisZ * mZScrollOffset * -glm::sign(y);
     }
 }
 
@@ -197,7 +199,7 @@ void Camera::updateFirstPerson(float dt)
         float xOffset = mFlySpeed * dt * glm::sign(x) / FlySpeedDivisor;
         float zOffset = mFlySpeed * dt * glm::sign(z) / FlySpeedDivisor;
 
-        mPosition += mBasis[0] * xOffset + mBasis[2] * zOffset;
+        mPosition += mAxisX * xOffset + mAxisZ * zOffset;
     }
 
     if (mouseDt.x || mouseDt.y)
@@ -227,7 +229,7 @@ void Camera::updateViewMode(float dt)
             float xOffset = -mPanSpeed * mouseDt.x / PanVarDivisor;
             float yOffset = mPanSpeed * mouseDt.y / PanVarDivisor;
 
-            mPosition += mBasis[0] * xOffset + mBasis[1] * yOffset;
+            mPosition += mAxisX * xOffset + mAxisY * yOffset;
         }
     }
 }
@@ -254,33 +256,33 @@ void Camera::calculateBasis()
     float theta = glm::radians(mTheta);
     float phi = glm::radians(mPhi);
 
-    mBasis[2] = {
+    mAxisZ = {
         glm::sin(theta) * glm::cos(phi),
         glm::sin(phi),
         glm::cos(theta) * glm::cos(phi)
     };
 
-    mBasis[2] *= -1.f;
-    mBasis[0] = glm::normalize(glm::cross(glm::vec3(0.f, 1.f, 0.f), mBasis[2]));
-    mBasis[1] = glm::normalize(glm::cross(mBasis[0], -mBasis[2]));
+    mAxisZ *= -1.f;
+    mAxisX = glm::normalize(glm::cross(glm::vec3(0.f, 1.f, 0.f), mAxisZ));
+    mAxisY = glm::normalize(glm::cross(mAxisX, -mAxisZ));
 }
 
 void Camera::calculateViewProjection()
 {
     calculateBasis();
 
-    mView[0].x = mBasis[0].x;
-    mView[0].y = mBasis[1].x;
-    mView[0].z = mBasis[2].x;
-    mView[1].x = mBasis[0].y;
-    mView[1].y = mBasis[1].y;
-    mView[1].z = mBasis[2].y;
-    mView[2].x = mBasis[0].z;
-    mView[2].y = mBasis[1].z;
-    mView[2].z = mBasis[2].z;
-    mView[3].x = -glm::dot(mPosition, mBasis[0]);
-    mView[3].y = -glm::dot(mPosition, mBasis[1]);
-    mView[3].z = -glm::dot(mPosition, mBasis[2]);
+    mView[0].x = mAxisX.x;
+    mView[0].y = mAxisY.x;
+    mView[0].z = mAxisZ.x;
+    mView[1].x = mAxisX.y;
+    mView[1].y = mAxisY.y;
+    mView[1].z = mAxisZ.y;
+    mView[2].x = mAxisX.z;
+    mView[2].y = mAxisY.z;
+    mView[2].z = mAxisZ.z;
+    mView[3].x = -glm::dot(mPosition, mAxisX);
+    mView[3].y = -glm::dot(mPosition, mAxisY);
+    mView[3].z = -glm::dot(mPosition, mAxisZ);
     mView[3].w = 1.f;
 
     mProjection = glm::perspective(glm::radians(mFovY), mAspectRatio, mNearZ, mFarZ);
@@ -294,7 +296,7 @@ const CameraRenderData Camera::renderData() const
         .projection = mProjection,
         .viewProj = mViewProjection,
         .position = glm::vec4(mPosition, 1.f),
-        .direction = glm::vec4(mBasis[2], 1.f),
+        .direction = glm::vec4(mAxisZ, 1.f),
         .nearPlane = mNearZ,
         .farPlane = mFarZ
     };

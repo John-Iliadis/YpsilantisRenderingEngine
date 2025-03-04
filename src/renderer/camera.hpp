@@ -66,7 +66,9 @@ private:
 
 private:
     glm::mat4 mView;
-    glm::mat3 mBasis;
+    glm::vec3 mAxisX;
+    glm::vec3 mAxisY;
+    glm::vec3 mAxisZ;
     glm::vec3 mPosition;
     float mTheta;
     float mPhi;
