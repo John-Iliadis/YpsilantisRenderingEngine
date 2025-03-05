@@ -76,6 +76,8 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createLightIconFramebuffer();
     createLightIconPipeline();
 
+    createGizmoIconResources();
+
     loadSkybox();
 }
 
@@ -615,25 +617,6 @@ void Renderer::executeLightIconRenderpass(VkCommandBuffer commandBuffer)
     endDebugLabel(commandBuffer);
 }
 
-void Renderer::getLightIconRenderData()
-{
-    mLightIconRenderData.clear();
-    for (const auto& [id, index] : mUuidToDirLightIndex)
-        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
-                                          &mDirLightIcon);
-    for (const auto& [id, index] : mUuidToPointLightIndex)
-        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
-                                          &mPointLightIcon);
-    for (const auto& [id, index] : mUuidToSpotLightIndex)
-        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
-                                          &mSpotLightIcon);
-
-    std::sort(mLightIconRenderData.begin(), mLightIconRenderData.end(),
-              [this] (const auto& a, const auto& b) {
-        return glm::length(a.pos - mCamera.position()) > glm::length(b.pos - mCamera.position());
-    });
-}
-
 void Renderer::setViewport(VkCommandBuffer commandBuffer)
 {
     VkViewport viewport {
@@ -683,6 +666,25 @@ void Renderer::updateCameraUBO()
 {
     CameraRenderData renderData(mCamera.renderData());
     mCameraUBO.mapBufferMemory(0, sizeof(CameraRenderData), &renderData);
+}
+
+void Renderer::getLightIconRenderData()
+{
+    mLightIconRenderData.clear();
+    for (const auto& [id, index] : mUuidToDirLightIndex)
+        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
+                                          &mDirLightIcon);
+    for (const auto& [id, index] : mUuidToPointLightIndex)
+        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
+                                          &mPointLightIcon);
+    for (const auto& [id, index] : mUuidToSpotLightIndex)
+        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
+                                          &mSpotLightIcon);
+
+    std::sort(mLightIconRenderData.begin(), mLightIconRenderData.end(),
+              [this] (const auto& a, const auto& b) {
+                  return glm::length(a.pos - mCamera.position()) > glm::length(b.pos - mCamera.position());
+              });
 }
 
 void Renderer::bindTexture(VkCommandBuffer commandBuffer,
@@ -2160,6 +2162,10 @@ void Renderer::createLightIconTextures()
     LoadedImage spotLightIcon("../assets/textures/lights/spotlight2.png");
     stbi_set_flip_vertically_on_load(false);
 
+    assert(dirLightIcon.success());
+    assert(pointLightIcon.success());
+    assert(spotLightIcon.success());
+
     uint32_t iconWidth = 512;
     uint32_t iconHeight = 512;
 
@@ -2333,6 +2339,60 @@ void Renderer::createLightIconPipeline()
     };
 
     mLightIconPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::createGizmoIconResources()
+{
+    LoadedImage translationIcon("../assets/textures/gizmo/move.png");
+    LoadedImage rotationIcon("../assets/textures/gizmo/rotate.png");
+    LoadedImage scaleIcon("../assets/textures/gizmo/scale.png");
+    LoadedImage globalIcon("../assets/textures/gizmo/global.png");
+    LoadedImage localIcon("../assets/textures/gizmo/local.png");
+
+    assert(translationIcon.success());
+    assert(rotationIcon.success());
+    assert(scaleIcon.success());
+    assert(globalIcon.success());
+    assert(localIcon.success());
+
+    uint32_t iconWidth = 32;
+    uint32_t iconHeight = 32;
+
+    TextureSpecification specification {
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .width = iconWidth,
+        .height = iconHeight,
+        .layerCount = 1,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+        .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Nearest,
+        .minFilter = TextureMinFilter::Nearest,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .generateMipMaps = false
+    };
+
+    mTranslateIcon = {mRenderDevice, specification, translationIcon.data()};
+    mRotateIcon = {mRenderDevice, specification, rotationIcon.data()};
+    mScaleIcon = {mRenderDevice, specification, scaleIcon.data()};
+    mGlobalIcon = {mRenderDevice, specification, globalIcon.data()};
+    mLocalIcon = {mRenderDevice, specification, localIcon.data()};
+
+    mTranslateIcon.setDebugName("Renderer::mTranslateIcon");
+    mRotateIcon.setDebugName("Renderer::mRotateIcon");
+    mScaleIcon.setDebugName("Renderer::mScaleIcon");
+    mGlobalIcon.setDebugName("Renderer::mGlobalIcon");
+    mLocalIcon.setDebugName("Renderer::mLocalIcon");
+
+    createSingleImageDs(mTranslateIconDs, mTranslateIcon, "Renderer::mTranslateIconDs");
+    createSingleImageDs(mRotateIconDs, mRotateIcon, "Renderer::mRotateIconDs");
+    createSingleImageDs(mScaleIconDs, mScaleIcon, "Renderer::mScaleIconDs");
+    createSingleImageDs(mGlobalIconDs, mGlobalIcon, "Renderer::mGlobalIconDs");
+    createSingleImageDs(mLocalIconDs, mLocalIcon, "Renderer::mLocalIconDs");
 }
 
 void Renderer::loadSkybox()

@@ -128,6 +128,8 @@ private:
     void createLightIconFramebuffer();
     void createLightIconPipeline();
 
+    void createGizmoIconResources();
+
     void loadSkybox();
 
 private:
@@ -207,6 +209,19 @@ private:
     VkDescriptorSet mColor32FDs{};
     VkDescriptorSet mColor8UDs{};
 
+    // gizmo icons
+    VulkanTexture mTranslateIcon;
+    VulkanTexture mRotateIcon;
+    VulkanTexture mScaleIcon;
+    VulkanTexture mGlobalIcon;
+    VulkanTexture mLocalIcon;
+
+    VkDescriptorSet mTranslateIconDs;
+    VkDescriptorSet mRotateIconDs;
+    VkDescriptorSet mScaleIconDs;
+    VkDescriptorSet mGlobalIconDs;
+    VkDescriptorSet mLocalIconDs;
+
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
 
@@ -249,7 +264,6 @@ private:
     bool mSsaoOn = false;
     bool mOitOn = true;
     bool mRenderGrid = true;
-    bool mRenderAxisGizmo = true;
 
 private:
     friend class Editor;

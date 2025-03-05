@@ -81,6 +81,10 @@ private:
     void modelImportPopup();
 
     void drawAxisGizmo(ImVec2 viewportSize);
+    void gizmoOptions();
+    void gizmoOpIcon(ImTextureID iconDs, ImGuizmo::OPERATION op, const char* tooltip);
+    void gizmoModeIcon(ImTextureID iconDs, ImGuizmo::MODE mode, const char* tooltip);
+
     void importModel(const ModelImportData& importData);
     std::filesystem::path selectModelFileDialog();
     void checkPayloadType(const char* type);
@@ -110,6 +114,8 @@ private:
     bool mShowRendererPanel = true;
     bool mShowDebugPanel = true;
     bool mModelImportPopup = false;
+    bool mViewGizmoControls = true;
+    bool mViewAxisGizmo = true;
 
     ImVec2 mViewportSize;
     uuid32_t mSelectedObjectID;
@@ -119,6 +125,8 @@ private:
     std::array<char, 256> mBuffer;
     CopyFlags mCopyFlag;
     uuid32_t mCopiedNodeID;
+    ImGuizmo::MODE mGizmoMode = ImGuizmo::WORLD;
+    ImGuizmo::OPERATION mGizmoOp = ImGuizmo::TRANSLATE;
 };
 
 enum class CopyFlags

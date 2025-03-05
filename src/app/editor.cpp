@@ -56,6 +56,7 @@ void Editor::update(float dt)
         debugPanel();
 
     sharedPopups();
+    mSceneGraph.updateTransforms();
 }
 
 void Editor::imguiEvents()
@@ -162,6 +163,117 @@ void Editor::cameraPanel()
     ImGui::End();
 }
 
+void Editor::assetPanel()
+{
+    ImGui::Begin("Assets", &mShowAssetPanel);
+
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        ImGui::OpenPopup("assetPanelPopup");
+
+    for (const auto& [modelID, model] : mRenderer.mModels)
+    {
+        ImGui::Selectable(model->name.c_str(), mSelectedObjectID == modelID);
+        lastItemClicked(modelID);
+        modelDragDropSource(modelID);
+    }
+
+    assetPanelPopup();
+
+    ImGui::End();
+}
+
+void Editor::sceneGraphPanel()
+{
+    ImGui::Begin("Scene Graph", &mShowSceneGraph);
+
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        ImGui::OpenPopup("sceneGraphPopup");
+
+    for (auto child : mSceneGraph.mRoot.children())
+        sceneNodeRecursive(child);
+
+    bool nodeHovered = ImGui::IsItemHovered();
+    ImGui::Dummy(ImVec2(0, 50.f));
+    sceneNodeDragDropTargetWholeWindow(nodeHovered);
+
+    sceneGraphPopup();
+
+    ImGui::End();
+}
+
+void Editor::rendererPanel()
+{
+    static constexpr ImGuiColorEditFlags colorEditFlags = ImGuiColorEditFlags_DisplayRGB |
+                                                          ImGuiColorEditFlags_AlphaBar;
+
+    ImGui::Begin("Renderer", &mShowRendererPanel);
+
+    if (ImGui::CollapsingHeader("General", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("View Gizmo Controls", &mViewGizmoControls);
+        ImGui::Checkbox("View Axis Gizmo", &mViewAxisGizmo);
+        ImGui::ColorEdit3("Clear Color", glm::value_ptr(mRenderer.mClearColor));
+    }
+
+    if (ImGui::CollapsingHeader("Grid", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("Render Grid", &mRenderer.mRenderGrid);
+        ImGui::Separator();
+
+        ImGui::ColorEdit4("Thin line color", glm::value_ptr(mRenderer.mGridData.thinLineColor), colorEditFlags);
+        ImGui::ColorEdit4("Thick line color", glm::value_ptr(mRenderer.mGridData.thickLineColor), colorEditFlags);
+    }
+
+    if (ImGui::CollapsingHeader("Skybox", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("Render Skybox", &mRenderer.mRenderSkybox);
+        ImGui::Separator();
+
+        ImGui::Checkbox("Flip X-axis##skyboxX", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipX));
+        ImGui::Checkbox("Flip Y-axis##skyboxY", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipY));
+        ImGui::Checkbox("Flip Z-axis##skyboxZ", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipZ));
+        ImGui::Separator();
+
+        if (ImGui::Button("Import New"))
+            ImGui::OpenPopup("skyboxImportPopup");
+    }
+
+    if (ImGui::CollapsingHeader("Order Independent Transparency", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("Enable", &mRenderer.mOitOn);
+        ImGui::Separator();
+
+        std::string val = std::to_string(mRenderer.mOitLinkedListLength) + "x";
+        if (ImGui::BeginCombo("Memory Multiplier", val.data(), ImGuiComboFlags_WidthFitPreview))
+        {
+            for (uint32_t i = 1; i <= 64; i <<= 1)
+            {
+                std::string preview = std::to_string(i) + "x";
+                if (ImGui::Selectable(preview.data(), mRenderer.mOitLinkedListLength == i))
+                {
+                    if (i == mRenderer.mOitLinkedListLength)
+                        continue;
+
+                    mRenderer.mOitLinkedListLength = i;
+                    mRenderer.createOitBuffers();
+                    mRenderer.updateOitResourcesDs();
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+
+        ImGui::SameLine();
+        uint32_t memUsage = mRenderer.mWidth * mRenderer.mHeight * sizeof(TransparentNode) * mRenderer.mOitLinkedListLength / 1000000;
+        std::string mem = std::format("Higher memory = more transparent fragments\nMemory usage: {} MB", memUsage);
+        helpMarker(mem.data());
+    }
+
+    skyboxImportPopup();
+
+    ImGui::End();
+}
+
 void Editor::inspectorPanel()
 {
     ImGui::Begin("Inspector", &mShowInspectorPanel);
@@ -178,6 +290,269 @@ void Editor::inspectorPanel()
     }
 
     ImGui::End();
+}
+
+void Editor::viewPort()
+{
+    static constexpr ImVec2 sInitialViewportSize {
+        InitialViewportWidth,
+        InitialViewportHeight
+    };
+
+    static constexpr ImGuiWindowFlags sWindowFlags {
+        ImGuiWindowFlags_NoScrollbar
+    };
+
+    ImGui::SetNextWindowSize(sInitialViewportSize, ImGuiCond_FirstUseEver);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+    ImGui::Begin("Scene", &mShowViewport, sWindowFlags);
+    ImGui::PopStyleVar(2);
+
+    modelDragDropTargetWholeWindow();
+
+    ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+
+    viewportSize.x = glm::clamp(viewportSize.x, 1.f, FLT_MAX);
+    viewportSize.y = glm::clamp(viewportSize.y, 1.f, FLT_MAX);
+
+    if (mViewportSize != viewportSize && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    {
+        mViewportSize = viewportSize;
+        mRenderer.resize(viewportSize.x, viewportSize.y);
+    }
+
+    ImGui::Image(reinterpret_cast<ImTextureID>(mRenderer.mColor8UDs), viewportSize);
+
+    mRenderer.mCamera.update(mDt);
+
+    if (mViewGizmoControls)
+        gizmoOptions();
+
+    if (mViewAxisGizmo)
+        drawAxisGizmo(viewportSize);
+
+    ImGui::End();
+}
+
+void Editor::debugPanel()
+{
+    ImGui::Begin("Debug", &mShowDebugPanel);
+
+    ImGui::Text("GPU: %s", mRenderer.mRenderDevice.getDeviceProperties().deviceName);
+    ImGui::Separator();
+
+    ImGui::Text("Window size: %lux%lu px",
+                static_cast<uint32_t>(ImGui::GetIO().DisplaySize.x),
+                static_cast<uint32_t>(ImGui::GetIO().DisplaySize.y));
+    ImGui::Text("Rendering viewport size: %lux%lu px",
+                static_cast<uint32_t>(mViewportSize.x),
+                static_cast<uint32_t>(mViewportSize.y));
+    ImGui::Separator();
+
+    plotPerformanceGraphs();
+
+    ImGui::Separator();
+
+    ImGui::End();
+}
+
+void Editor::sceneNodeRecursive(GraphNode *node)
+{
+    static std::unordered_map<GraphNode*, bool> sOpenedState;
+    if (!sOpenedState.contains(node))
+        sOpenedState.emplace(node, false);
+
+    ImGuiTreeNodeFlags treeNodeFlags {
+        ImGuiTreeNodeFlags_OpenOnArrow |
+        ImGuiTreeNodeFlags_OpenOnDoubleClick |
+        ImGuiTreeNodeFlags_SpanFullWidth |
+        ImGuiTreeNodeFlags_FramePadding
+    };
+
+    if (mSelectedObjectID == node->id()) treeNodeFlags |= ImGuiTreeNodeFlags_Selected;
+    if (node->children().empty()) treeNodeFlags |= ImGuiTreeNodeFlags_Leaf;
+    if (sOpenedState.at(node)) treeNodeFlags |= ImGuiTreeNodeFlags_DefaultOpen;
+
+    bool nodeOpen = ImGui::TreeNodeEx((void*)(intptr_t)node, treeNodeFlags, node->name().c_str());
+
+    sOpenedState.at(node) = nodeOpen;
+
+    lastItemClicked(node->id());
+
+    sceneNodeDragDropSource(node);
+    sceneNodeDragDropTarget(node);
+
+    if (nodeOpen)
+    {
+        for (auto child : node->children())
+            sceneNodeRecursive(child);
+
+        ImGui::TreePop();
+    }
+}
+
+void Editor::createModelGraph(Model &model)
+{
+    GraphNode* graphNode = createModelGraphRecursive(model, model.root, nullptr);
+    graphNode->localT = spawnPos();
+    mSceneGraph.addNode(graphNode);
+}
+
+GraphNode *Editor::createModelGraphRecursive(Model &model, const SceneNode &sceneNode, GraphNode *parent)
+{
+    GraphNode* graphNode;
+
+    if (!sceneNode.meshIndices.empty())
+        graphNode = createMeshNode(model, sceneNode, parent);
+    else
+    {
+        graphNode = new GraphNode(NodeType::Empty,
+                                  sceneNode.name,
+                                  sceneNode.translation,
+                                  sceneNode.rotation,
+                                  sceneNode.scale,
+                                  parent,
+                                  model.id);
+    }
+
+    for (const auto& child : sceneNode.children)
+        graphNode->addChild(createModelGraphRecursive(model, child, graphNode));
+
+    return graphNode;
+}
+
+GraphNode *Editor::createEmptyNode(GraphNode *parent, const std::string& name)
+{
+    return new GraphNode(NodeType::Empty, name, spawnPos(), {}, glm::vec3(1.f), parent);
+}
+
+GraphNode *Editor::createMeshNode(Model &model, const SceneNode &sceneNode, GraphNode* parent)
+{
+    std::vector<uuid32_t> meshIDs;
+
+    for (uint32_t i = 0; i < sceneNode.meshIndices.size(); ++i)
+    {
+        uint32_t meshIndex = sceneNode.meshIndices.at(i);
+        const Mesh& mesh = model.meshes.at(meshIndex);
+        meshIDs.push_back(mesh.meshID);
+    }
+
+    GraphNode* graphNode = new MeshNode(NodeType::Mesh,
+                                        sceneNode.name,
+                                        sceneNode.translation,
+                                        sceneNode.rotation,
+                                        sceneNode.scale,
+                                        parent,
+                                        model.id,
+                                        meshIDs);
+
+    for (uuid32_t meshID : meshIDs)
+        model.getMesh(meshID)->mesh.addInstance(graphNode->id());
+
+    return graphNode;
+}
+
+void Editor::addDirLight()
+{
+    DirectionalLight dirLight {
+        .color = glm::vec4(1.f),
+        .direction = glm::vec4(1.f, -1.f, 1.f, 1.f),
+        .intensity = 0.5f
+    };
+
+    GraphNode* lightNode = new GraphNode(NodeType::DirectionalLight,
+                                         "Directional Light",
+                                         spawnPos(),
+                                         dirLight.direction,
+                                         {},
+                                         nullptr);
+
+    mSceneGraph.addNode(lightNode);
+    mRenderer.addDirLight(lightNode->id(), dirLight);
+}
+
+void Editor::addPointLight()
+{
+    PointLight pointLight {
+        .color = glm::vec4(1.f),
+        .position = glm::vec4(spawnPos(), 1.f),
+        .intensity = 0.5f,
+        .range = 10.f
+    };
+
+    GraphNode* lightNode = new GraphNode(NodeType::PointLight,
+                                         "Point Light",
+                                         pointLight.position,
+                                         {},
+                                         {},
+                                         nullptr);
+
+    mSceneGraph.addNode(lightNode);
+    mRenderer.addPointLight(lightNode->id(), pointLight);
+}
+
+void Editor::addSpotLight()
+{
+    SpotLight spotLight {
+        .color = glm::vec4(1.f),
+        .position = glm::vec4(spawnPos(), 1.f),
+        .direction = glm::vec4(0.f, -1.f, 0.f, 0.f),
+        .intensity = 0.5f,
+        .range = 10.f,
+        .innerAngle = 45.f,
+        .outerAngle = 60.f
+    };
+
+    GraphNode* lightNode = new GraphNode(NodeType::SpotLight,
+                                         "Spot Light",
+                                         spotLight.position, spotLight.direction, {},
+                                         nullptr);
+
+    mSceneGraph.addNode(lightNode);
+    mRenderer.addSpotLight(lightNode->id(), spotLight);
+}
+
+void Editor::copyNode(uuid32_t nodeID)
+{
+    mCopyFlag = CopyFlags::Copy;
+    mCopiedNodeID = nodeID;
+}
+
+void Editor::cutNode(uuid32_t nodeID)
+{
+    mCopyFlag = CopyFlags::Cut;
+    mCopiedNodeID = nodeID;
+}
+
+void Editor::pasteNode(GraphNode *parent)
+{
+    GraphNode* copiedNode = mSceneGraph.searchNode(mCopiedNodeID);
+
+    if (copiedNode)
+    {
+        if (mCopyFlag == CopyFlags::Copy)
+        {
+            GraphNode* newNode = copyGraphNode(copiedNode);
+            newNode->orphan();
+            parent->addChild(newNode);
+        }
+
+        if (mCopyFlag == CopyFlags::Cut && !mSceneGraph.hasDescendant(copiedNode, parent))
+        {
+            copiedNode->orphan();
+            parent->addChild(copiedNode);
+        }
+    }
+
+    mCopyFlag = CopyFlags::None;
+    mCopiedNodeID = 0;
+}
+
+void Editor::duplicateNode(GraphNode *node)
+{
+    GraphNode* copyNode = copyGraphNode(node);
+    copyNode->parent()->addChild(copyNode);
 }
 
 void Editor::modelInspector(uuid32_t modelID)
@@ -528,40 +903,6 @@ bool Editor::nodeTransform(GraphNode *node)
     return modified;
 }
 
-void Editor::viewPort()
-{
-    static constexpr ImVec2 sInitialViewportSize {
-        InitialViewportWidth,
-        InitialViewportHeight
-    };
-
-    ImGui::SetNextWindowSize(sInitialViewportSize, ImGuiCond_FirstUseEver);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-    ImGui::Begin("Viewport", &mShowViewport, ImGuiWindowFlags_NoScrollbar);
-    modelDragDropTargetWholeWindow();
-
-    ImVec2 viewportSize = ImGui::GetContentRegionAvail();
-
-    viewportSize.x = glm::clamp(viewportSize.x, 1.f, FLT_MAX);
-    viewportSize.y = glm::clamp(viewportSize.y, 1.f, FLT_MAX);
-
-    if (mViewportSize != viewportSize && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
-    {
-        mViewportSize = viewportSize;
-        mRenderer.resize(viewportSize.x, viewportSize.y);
-    }
-
-    ImGui::Image(reinterpret_cast<ImTextureID>(mRenderer.mColor8UDs), viewportSize);
-
-    mRenderer.mCamera.update(mDt);
-    if (mRenderer.mRenderAxisGizmo)
-        drawAxisGizmo(viewportSize);
-
-    ImGui::End();
-    ImGui::PopStyleVar(2);
-}
-
 void Editor::deleteSelectedObject()
 {
     if (mSelectedObjectID)
@@ -596,369 +937,6 @@ void Editor::deleteSelectedModel()
 {
     mRenderer.deleteModel(mSelectedObjectID);
     mSelectedObjectID = 0;
-}
-
-void Editor::debugPanel()
-{
-    ImGui::Begin("Debug", &mShowDebugPanel);
-
-    ImGui::Text("GPU: %s", mRenderer.mRenderDevice.getDeviceProperties().deviceName);
-    ImGui::Separator();
-
-    ImGui::Text("Window size: %lux%lu px",
-                static_cast<uint32_t>(ImGui::GetIO().DisplaySize.x),
-                static_cast<uint32_t>(ImGui::GetIO().DisplaySize.y));
-    ImGui::Text("Rendering viewport size: %lux%lu px",
-                static_cast<uint32_t>(mViewportSize.x),
-                static_cast<uint32_t>(mViewportSize.y));
-    ImGui::Separator();
-
-    plotPerformanceGraphs();
-
-    ImGui::Separator();
-
-    ImGui::End();
-}
-
-void Editor::plotPerformanceGraphs()
-{
-    static constexpr uint32_t maxSamples = 200;
-    static std::vector<float> fpsValues(maxSamples, 0.f);
-    static std::vector<float> dtValues(maxSamples, 0.f);
-
-    float dt = mDt * 1000.0f;
-    float fps = 1.0f / mDt;
-
-    if (dt > 33.f)
-        debugLog(std::format("Large dt: {}ms", dt));
-
-    if (dtValues.size() >= maxSamples)
-        dtValues.erase(dtValues.begin());
-
-    if (fpsValues.size() >= maxSamples)
-        fpsValues.erase(fpsValues.begin());
-
-    dtValues.push_back(dt);
-    fpsValues.push_back(fps);
-
-    ImGui::Text("FPS: %lu", mFPS);
-    ImGui::SetNextItemWidth(-1);
-    ImGui::PlotLines("##FPS", fpsValues.data(), fpsValues.size(), 0, nullptr, 0, 1000, ImVec2(0, 50));
-    ImGui::Separator();
-
-    ImGui::Text("Frame time: %.2f ms", mFrametimeMs);
-    ImGui::SetNextItemWidth(-1);
-    ImGui::PlotLines("##Frametime", dtValues.data(), dtValues.size(),  0, nullptr, 0, 100, ImVec2(0, 50));
-}
-
-void Editor::rendererPanel()
-{
-    static constexpr ImGuiColorEditFlags colorEditFlags = ImGuiColorEditFlags_DisplayRGB |
-        ImGuiColorEditFlags_AlphaBar;
-
-    ImGui::Begin("Renderer", &mShowRendererPanel);
-
-    if (ImGui::CollapsingHeader("General", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::Checkbox("View Axis Gizmo", &mRenderer.mRenderAxisGizmo);
-        ImGui::ColorEdit3("Clear Color", glm::value_ptr(mRenderer.mClearColor));
-    }
-
-    if (ImGui::CollapsingHeader("Grid", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::Checkbox("Render Grid", &mRenderer.mRenderGrid);
-        ImGui::Separator();
-
-        ImGui::ColorEdit4("Thin line color", glm::value_ptr(mRenderer.mGridData.thinLineColor), colorEditFlags);
-        ImGui::ColorEdit4("Thick line color", glm::value_ptr(mRenderer.mGridData.thickLineColor), colorEditFlags);
-    }
-
-    if (ImGui::CollapsingHeader("Skybox", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::Checkbox("Render Skybox", &mRenderer.mRenderSkybox);
-        ImGui::Separator();
-
-        ImGui::Checkbox("Flip X-axis##skyboxX", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipX));
-        ImGui::Checkbox("Flip Y-axis##skyboxY", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipY));
-        ImGui::Checkbox("Flip Z-axis##skyboxZ", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipZ));
-        ImGui::Separator();
-
-        if (ImGui::Button("Import New"))
-            ImGui::OpenPopup("skyboxImportPopup");
-    }
-
-    if (ImGui::CollapsingHeader("Order Independent Transparency", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::Checkbox("Enable", &mRenderer.mOitOn);
-        ImGui::Separator();
-
-        std::string val = std::to_string(mRenderer.mOitLinkedListLength) + "x";
-        if (ImGui::BeginCombo("Memory Multiplier", val.data(), ImGuiComboFlags_WidthFitPreview))
-        {
-            for (uint32_t i = 1; i <= 64; i <<= 1)
-            {
-                std::string preview = std::to_string(i) + "x";
-                if (ImGui::Selectable(preview.data(), mRenderer.mOitLinkedListLength == i))
-                {
-                    if (i == mRenderer.mOitLinkedListLength)
-                        continue;
-
-                    mRenderer.mOitLinkedListLength = i;
-                    mRenderer.createOitBuffers();
-                    mRenderer.updateOitResourcesDs();
-                }
-            }
-
-            ImGui::EndCombo();
-        }
-
-        ImGui::SameLine();
-        uint32_t memUsage = mRenderer.mWidth * mRenderer.mHeight * sizeof(TransparentNode) * mRenderer.mOitLinkedListLength / 1000000;
-        std::string mem = std::format("Higher memory = more transparent fragments\nMemory usage: {} MB", memUsage);
-        helpMarker(mem.data());
-    }
-
-    skyboxImportPopup();
-
-    ImGui::End();
-}
-
-void Editor::sceneGraphPanel()
-{
-    ImGui::Begin("Scene Graph", &mShowSceneGraph);
-
-    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        ImGui::OpenPopup("sceneGraphPopup");
-
-    for (auto child : mSceneGraph.mRoot.children())
-        sceneNodeRecursive(child);
-
-    bool nodeHovered = ImGui::IsItemHovered();
-    ImGui::Dummy(ImVec2(0, 50.f));
-    sceneNodeDragDropTargetWholeWindow(nodeHovered);
-
-    sceneGraphPopup();
-
-    ImGui::End();
-
-    mSceneGraph.updateTransforms();
-}
-
-void Editor::sceneNodeRecursive(GraphNode *node)
-{
-    static std::unordered_map<GraphNode*, bool> sOpenedState;
-    if (!sOpenedState.contains(node))
-        sOpenedState.emplace(node, false);
-
-    ImGuiTreeNodeFlags treeNodeFlags {
-        ImGuiTreeNodeFlags_OpenOnArrow |
-        ImGuiTreeNodeFlags_OpenOnDoubleClick |
-        ImGuiTreeNodeFlags_SpanFullWidth |
-        ImGuiTreeNodeFlags_FramePadding
-    };
-
-    if (mSelectedObjectID == node->id()) treeNodeFlags |= ImGuiTreeNodeFlags_Selected;
-    if (node->children().empty()) treeNodeFlags |= ImGuiTreeNodeFlags_Leaf;
-    if (sOpenedState.at(node)) treeNodeFlags |= ImGuiTreeNodeFlags_DefaultOpen;
-
-    bool nodeOpen = ImGui::TreeNodeEx((void*)(intptr_t)node, treeNodeFlags, node->name().c_str());
-
-    sOpenedState.at(node) = nodeOpen;
-
-    lastItemClicked(node->id());
-
-    sceneNodeDragDropSource(node);
-    sceneNodeDragDropTarget(node);
-
-    if (nodeOpen)
-    {
-        for (auto child : node->children())
-            sceneNodeRecursive(child);
-
-        ImGui::TreePop();
-    }
-}
-
-void Editor::createModelGraph(Model &model)
-{
-    GraphNode* graphNode = createModelGraphRecursive(model, model.root, nullptr);
-    graphNode->localT = spawnPos();
-    mSceneGraph.addNode(graphNode);
-}
-
-GraphNode *Editor::createModelGraphRecursive(Model &model, const SceneNode &sceneNode, GraphNode *parent)
-{
-    GraphNode* graphNode;
-
-    if (!sceneNode.meshIndices.empty())
-        graphNode = createMeshNode(model, sceneNode, parent);
-    else
-    {
-        graphNode = new GraphNode(NodeType::Empty,
-                                  sceneNode.name,
-                                  sceneNode.translation,
-                                  sceneNode.rotation,
-                                  sceneNode.scale,
-                                  parent,
-                                  model.id);
-    }
-
-    for (const auto& child : sceneNode.children)
-        graphNode->addChild(createModelGraphRecursive(model, child, graphNode));
-
-    return graphNode;
-}
-
-GraphNode *Editor::createEmptyNode(GraphNode *parent, const std::string& name)
-{
-    return new GraphNode(NodeType::Empty, name, spawnPos(), {}, glm::vec3(1.f), parent);
-}
-
-GraphNode *Editor::createMeshNode(Model &model, const SceneNode &sceneNode, GraphNode* parent)
-{
-    std::vector<uuid32_t> meshIDs;
-
-    for (uint32_t i = 0; i < sceneNode.meshIndices.size(); ++i)
-    {
-        uint32_t meshIndex = sceneNode.meshIndices.at(i);
-        const Mesh& mesh = model.meshes.at(meshIndex);
-        meshIDs.push_back(mesh.meshID);
-    }
-
-    GraphNode* graphNode = new MeshNode(NodeType::Mesh,
-                                        sceneNode.name,
-                                        sceneNode.translation,
-                                        sceneNode.rotation,
-                                        sceneNode.scale,
-                                        parent,
-                                        model.id,
-                                        meshIDs);
-
-    for (uuid32_t meshID : meshIDs)
-        model.getMesh(meshID)->mesh.addInstance(graphNode->id());
-
-    return graphNode;
-}
-
-void Editor::addDirLight()
-{
-    DirectionalLight dirLight {
-        .color = glm::vec4(1.f),
-        .direction = glm::vec4(1.f, -1.f, 1.f, 1.f),
-        .intensity = 0.5f
-    };
-
-    GraphNode* lightNode = new GraphNode(NodeType::DirectionalLight,
-                                         "Directional Light",
-                                         spawnPos(),
-                                         dirLight.direction,
-                                         {},
-                                         nullptr);
-
-    mSceneGraph.addNode(lightNode);
-    mRenderer.addDirLight(lightNode->id(), dirLight);
-}
-
-void Editor::addPointLight()
-{
-    PointLight pointLight {
-        .color = glm::vec4(1.f),
-        .position = glm::vec4(spawnPos(), 1.f),
-        .intensity = 0.5f,
-        .range = 10.f
-    };
-
-    GraphNode* lightNode = new GraphNode(NodeType::PointLight,
-                                         "Point Light",
-                                         pointLight.position,
-                                         {},
-                                         {},
-                                         nullptr);
-
-    mSceneGraph.addNode(lightNode);
-    mRenderer.addPointLight(lightNode->id(), pointLight);
-}
-
-void Editor::addSpotLight()
-{
-    SpotLight spotLight {
-        .color = glm::vec4(1.f),
-        .position = glm::vec4(spawnPos(), 1.f),
-        .direction = glm::vec4(0.f, -1.f, 0.f, 0.f),
-        .intensity = 0.5f,
-        .range = 10.f,
-        .innerAngle = 45.f,
-        .outerAngle = 60.f
-    };
-
-    GraphNode* lightNode = new GraphNode(NodeType::SpotLight,
-                                         "Spot Light",
-                                         spotLight.position, spotLight.direction, {},
-                                         nullptr);
-
-    mSceneGraph.addNode(lightNode);
-    mRenderer.addSpotLight(lightNode->id(), spotLight);
-}
-
-void Editor::copyNode(uuid32_t nodeID)
-{
-    mCopyFlag = CopyFlags::Copy;
-    mCopiedNodeID = nodeID;
-}
-
-void Editor::cutNode(uuid32_t nodeID)
-{
-    mCopyFlag = CopyFlags::Cut;
-    mCopiedNodeID = nodeID;
-}
-
-void Editor::pasteNode(GraphNode *parent)
-{
-    GraphNode* copiedNode = mSceneGraph.searchNode(mCopiedNodeID);
-
-    if (copiedNode)
-    {
-        if (mCopyFlag == CopyFlags::Copy)
-        {
-            GraphNode* newNode = copyGraphNode(copiedNode);
-            newNode->orphan();
-            parent->addChild(newNode);
-        }
-
-        if (mCopyFlag == CopyFlags::Cut && !mSceneGraph.hasDescendant(copiedNode, parent))
-        {
-            copiedNode->orphan();
-            parent->addChild(copiedNode);
-        }
-    }
-
-    mCopyFlag = CopyFlags::None;
-    mCopiedNodeID = 0;
-}
-
-void Editor::duplicateNode(GraphNode *node)
-{
-    GraphNode* copyNode = copyGraphNode(node);
-    copyNode->parent()->addChild(copyNode);
-}
-
-void Editor::assetPanel()
-{
-    ImGui::Begin("Assets", &mShowAssetPanel);
-
-    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        ImGui::OpenPopup("assetPanelPopup");
-
-    for (const auto& [modelID, model] : mRenderer.mModels)
-    {
-        ImGui::Selectable(model->name.c_str(), mSelectedObjectID == modelID);
-        lastItemClicked(modelID);
-        modelDragDropSource(modelID);
-    }
-
-    assetPanelPopup();
-
-    ImGui::End();
 }
 
 void Editor::sceneNodeDragDropSource(GraphNode *node)
@@ -1396,8 +1374,8 @@ void Editor::drawAxisGizmo(ImVec2 viewportSize)
     ImGuiWindow* win = ImGui::GetCurrentWindow();
     ImVec2 windowCoords = ImGui::GetWindowPos() + ImVec2(0, win->TitleBarHeight());
 
-    float gizmoHalfSize = 50.f;
-    float padding = 15.f;
+    const float gizmoHalfSize = 50.f;
+    const float padding = 15.f;
     float gizmoLeft = windowCoords.x + viewportSize.x - gizmoHalfSize * 2 - padding;
     float gizmoTop = windowCoords.y + gizmoHalfSize + padding;
     ImOGuizmo::SetRect(gizmoLeft, gizmoTop, gizmoHalfSize);
@@ -1405,6 +1383,104 @@ void Editor::drawAxisGizmo(ImVec2 viewportSize)
     glm::mat4 view = mRenderer.mCamera.view();
     static glm::mat4 proj = glm::perspective(glm::radians(30.f), 1.5f, 0.01f, 100.f);
     ImOGuizmo::DrawGizmo(glm::value_ptr(view), glm::value_ptr(proj));
+}
+
+void Editor::gizmoOptions()
+{
+    float titleBarHeight = ImGui::GetCurrentWindow()->TitleBarHeight();
+
+    static constexpr ImVec2 sIconSize(40.f, 40.f);
+    static constexpr ImVec2 sWindowPadding(6.f, 6.f);
+    static constexpr float sIconVertSpacing = 4.f;
+
+    // gizmo op
+    ImVec2 transformIconWindowPos(10.f, 10.f + titleBarHeight);
+    ImVec2 transformIconWindowSize {
+        sIconSize.x + sWindowPadding.x * 2.f,
+        sIconSize.y * 3.f + sWindowPadding.y * 2.f + 2.f
+    };
+
+    ImGui::SetCursorPos(transformIconWindowPos);
+    ImGui::SetNextWindowBgAlpha(1.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, sWindowPadding);
+    ImGui::BeginChild("Gizmo Op", transformIconWindowSize, true, ImGuiWindowFlags_NoDecoration);
+    ImGui::PopStyleVar(2);
+
+    gizmoOpIcon(reinterpret_cast<ImTextureID>(mRenderer.mTranslateIconDs),
+                ImGuizmo::OPERATION::TRANSLATE,
+                "Translation");
+
+    gizmoOpIcon(reinterpret_cast<ImTextureID>(mRenderer.mRotateIconDs),
+                ImGuizmo::OPERATION::ROTATE,
+                "Rotate");
+
+    gizmoOpIcon(reinterpret_cast<ImTextureID>(mRenderer.mScaleIconDs),
+                ImGuizmo::OPERATION::SCALE,
+                "Scale");
+
+    ImGui::EndChild();
+
+    // Gizmo mode
+    ImVec2 modeWindowPos(10.f, 10.f + titleBarHeight + transformIconWindowSize.y + 10.f);
+    ImVec2 modeWindowSize {
+        transformIconWindowSize.x,
+        sIconSize.y * 2.f + sWindowPadding.y + 6.f
+    };
+
+    ImGui::SetCursorPos(modeWindowPos);
+    ImGui::SetNextWindowBgAlpha(1.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, sWindowPadding);
+    ImGui::BeginChild("GizmoMode", modeWindowSize, true, ImGuiWindowFlags_NoDecoration);
+    ImGui::PopStyleVar(2);
+
+    gizmoModeIcon(reinterpret_cast<ImTextureID>(mRenderer.mGlobalIconDs), ImGuizmo::MODE::WORLD, "Global");
+    gizmoModeIcon(reinterpret_cast<ImTextureID>(mRenderer.mLocalIconDs), ImGuizmo::MODE::LOCAL, "Local");
+
+    ImGui::EndChild();
+}
+
+void Editor::gizmoOpIcon(ImTextureID iconDs, ImGuizmo::OPERATION op, const char *tooltip)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.f);
+
+    bool selected = mGizmoOp == op;
+
+    if (selected)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonHovered]);
+
+    if (ImGui::ImageButton(iconDs, ImVec2(32, 32)))
+        mGizmoOp = op;
+
+    ImGui::PopStyleVar();
+
+    if (selected)
+        ImGui::PopStyleColor();
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay))
+        ImGui::SetTooltip(tooltip);
+}
+
+void Editor::gizmoModeIcon(ImTextureID iconDs, ImGuizmo::MODE mode, const char *tooltip)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.f);
+
+    bool selected = mGizmoMode == mode;
+
+    if (selected)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_ButtonHovered]);
+
+    if (ImGui::ImageButton(iconDs, ImVec2(32, 32)))
+        mGizmoMode = mode;
+
+    ImGui::PopStyleVar();
+
+    if (selected)
+        ImGui::PopStyleColor();
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay))
+        ImGui::SetTooltip(tooltip);
 }
 
 void Editor::importModel(const ModelImportData &importData)
@@ -1428,6 +1504,18 @@ void Editor::checkPayloadType(const char *type)
 void Editor::resetBuffer()
 {
     mBuffer.fill('\0');
+}
+
+void Editor::helpMarker(const char* desc)
+{
+    ImGui::TextDisabled("(?)");
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(desc);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
 }
 
 GraphNode *Editor::copyGraphNode(GraphNode *node)
@@ -1512,19 +1600,6 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
     return newNode;
 }
 
-std::optional<uuid32_t> Editor::selectModel()
-{
-    ImGui::SeparatorText("Select Model:");
-
-    for (const auto& [modelID, model] : mRenderer.mModels)
-    {
-        if (ImGui::MenuItem(model->name.c_str()))
-            return modelID;
-    }
-
-    return std::nullopt;
-}
-
 std::optional<std::string> Editor::renameDialog()
 {
     std::optional<std::string> str;
@@ -1542,6 +1617,24 @@ std::optional<std::string> Editor::renameDialog()
     ImGui::EndDisabled();
 
     return str;
+}
+
+std::optional<uuid32_t> Editor::selectModel()
+{
+    ImGui::SeparatorText("Select Model:");
+
+    for (const auto& [modelID, model] : mRenderer.mModels)
+    {
+        if (ImGui::MenuItem(model->name.c_str()))
+            return modelID;
+    }
+
+    return std::nullopt;
+}
+
+glm::vec3 Editor::spawnPos()
+{
+    return mRenderer.mCamera.position() - mRenderer.mCamera.front() * 10.f;
 }
 
 bool Editor::lastItemClicked(uuid32_t id)
@@ -1595,19 +1688,33 @@ void Editor::updateFrametimeStats()
     }
 }
 
-void Editor::helpMarker(const char* desc)
+void Editor::plotPerformanceGraphs()
 {
-    ImGui::TextDisabled("(?)");
-    if (ImGui::BeginItemTooltip())
-    {
-        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-        ImGui::TextUnformatted(desc);
-        ImGui::PopTextWrapPos();
-        ImGui::EndTooltip();
-    }
-}
+    static constexpr uint32_t maxSamples = 200;
+    static std::vector<float> fpsValues(maxSamples, 0.f);
+    static std::vector<float> dtValues(maxSamples, 0.f);
 
-glm::vec3 Editor::spawnPos()
-{
-    return mRenderer.mCamera.position() - mRenderer.mCamera.front() * 10.f;
+    float dt = mDt * 1000.0f;
+    float fps = 1.0f / mDt;
+
+    if (dt > 33.f)
+        debugLog(std::format("Large dt: {}ms", dt));
+
+    if (dtValues.size() >= maxSamples)
+        dtValues.erase(dtValues.begin());
+
+    if (fpsValues.size() >= maxSamples)
+        fpsValues.erase(fpsValues.begin());
+
+    dtValues.push_back(dt);
+    fpsValues.push_back(fps);
+
+    ImGui::Text("FPS: %lu", mFPS);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::PlotLines("##FPS", fpsValues.data(), fpsValues.size(), 0, nullptr, 0, 1000, ImVec2(0, 50));
+    ImGui::Separator();
+
+    ImGui::Text("Frame time: %.2f ms", mFrametimeMs);
+    ImGui::SetNextItemWidth(-1);
+    ImGui::PlotLines("##Frametime", dtValues.data(), dtValues.size(),  0, nullptr, 0, 100, ImVec2(0, 50));
 }
