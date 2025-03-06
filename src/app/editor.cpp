@@ -189,7 +189,7 @@ void Editor::sceneGraphPanel()
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
         ImGui::OpenPopup("sceneGraphPopup");
 
-    for (auto child : mSceneGraph.mRoot.children())
+    for (auto child : mSceneGraph.topLevelNodes())
         sceneNodeRecursive(child);
 
     bool nodeHovered = ImGui::IsItemHovered();
@@ -991,15 +991,10 @@ void Editor::sceneNodeDragDropTargetWholeWindow(bool nodeHovered)
             {
                 GraphNode* transferNode = *(GraphNode**)payload->Data;
 
-                if (!mSceneGraph.hasDescendant(transferNode, &mSceneGraph.mRoot))
-                {
-                    transferNode->localT = transferNode->globalT - mSceneGraph.mRoot.globalT;
+                transferNode->orphan();
+                transferNode->markDirty();
 
-                    transferNode->orphan();
-                    transferNode->markDirty();
-
-                    mSceneGraph.mRoot.addChild(transferNode);
-                }
+                mSceneGraph.addNode(transferNode);
             }
         }
 
@@ -1106,7 +1101,7 @@ void Editor::sceneGraphPopup()
             copyNode(mSelectedObjectID);
 
         if (ImGui::MenuItem("Paste##sceneGraph", nullptr, false, mCopyFlag != CopyFlags::None))
-            pasteNode(&mSceneGraph.mRoot);
+            pasteNode(mSceneGraph.root());
 
         bool enablePasteAsChild = (mCopyFlag != CopyFlags::None) && nodeSelected && (mSelectedObjectID != mCopiedNodeID);
         if (ImGui::MenuItem("Paste as Child##sceneGraph", nullptr, false, enablePasteAsChild))

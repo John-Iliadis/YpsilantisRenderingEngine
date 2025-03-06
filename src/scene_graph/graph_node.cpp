@@ -102,20 +102,9 @@ const std::vector<GraphNode*>& GraphNode::children() const
     return mChildren;
 }
 
-const glm::mat4 &GraphNode::localTransform() const
-{
-    return mLocalTransform;
-}
-
 const glm::mat4 &GraphNode::globalTransform() const
 {
     return mGlobalTransform;
-}
-
-void GraphNode::setLocalTransform(const glm::mat4 &transform)
-{
-    mLocalTransform = transform;
-    markDirty();
 }
 
 void GraphNode::updateGlobalTransform()

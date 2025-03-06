@@ -48,18 +48,15 @@ public:
     void markDirty();
 
     void setName(const std::string& name);
-    void setLocalTransform(const glm::mat4& transform);
     void calcLocalTransform();
     virtual void updateGlobalTransform();
-
-    const glm::mat4& localTransform() const;
-    const glm::mat4& globalTransform() const;
 
     uuid32_t id() const;
     NodeType type() const;
     const std::string& name() const;
     std::optional<uuid32_t> modelID() const;
     GraphNode* parent() const;
+    const glm::mat4& globalTransform() const;
     const std::vector<GraphNode*>& children() const;
 
 protected:
@@ -69,8 +66,8 @@ protected:
     std::optional<uuid32_t> mModelID;
     bool mDirty;
 
-    glm::mat4 mGlobalTransform;
     glm::mat4 mLocalTransform;
+    glm::mat4 mGlobalTransform;
 
     GraphNode* mParent;
     std::vector<GraphNode*> mChildren;

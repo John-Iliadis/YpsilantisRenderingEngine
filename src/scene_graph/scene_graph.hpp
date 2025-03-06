@@ -22,7 +22,10 @@ public:
     GraphNode* searchNode(uuid32_t nodeID);
     bool hasDescendant(GraphNode* current, GraphNode* descendant);
 
-public:
+    GraphNode* root();
+    std::vector<GraphNode*>& topLevelNodes();
+
+private:
     GraphNode mRoot;
 };
 

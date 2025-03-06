@@ -80,3 +80,13 @@ bool SceneGraph::hasDescendant(GraphNode *current, GraphNode *descendant)
 
     return false;
 }
+
+GraphNode *SceneGraph::root()
+{
+    return &mRoot;
+}
+
+std::vector<GraphNode *> &SceneGraph::topLevelNodes()
+{
+    return const_cast<std::vector<GraphNode*>&>(mRoot.children());
+}
