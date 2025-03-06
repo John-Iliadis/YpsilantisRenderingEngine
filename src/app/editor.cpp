@@ -56,7 +56,7 @@ void Editor::update(float dt)
         debugPanel();
 
     sharedPopups();
-    mSceneGraph.updateTransforms();
+    mSceneGraph->updateTransforms();
 }
 
 void Editor::imguiEvents()
@@ -189,7 +189,7 @@ void Editor::sceneGraphPanel()
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
         ImGui::OpenPopup("sceneGraphPopup");
 
-    for (auto child : mSceneGraph.topLevelNodes())
+    for (auto child : mSceneGraph->topLevelNodes())
         sceneNodeRecursive(child);
 
     bool nodeHovered = ImGui::IsItemHovered();
@@ -284,7 +284,7 @@ void Editor::inspectorPanel()
         {
             case ObjectType::Model: modelInspector(mSelectedObjectID); break;
             case ObjectType::Mesh: assert(false);
-            case ObjectType::SceneNode: sceneNodeInspector(mSceneGraph.searchNode(mSelectedObjectID)); break;
+            case ObjectType::SceneNode: sceneNodeInspector(mSceneGraph->searchNode(mSelectedObjectID)); break;
             default: assert(false);
         }
     }
@@ -396,7 +396,7 @@ void Editor::createModelGraph(Model &model)
 {
     GraphNode* graphNode = createModelGraphRecursive(model, model.root, nullptr);
     graphNode->localT = spawnPos();
-    mSceneGraph.addNode(graphNode);
+    mSceneGraph->addNode(graphNode);
 }
 
 GraphNode *Editor::createModelGraphRecursive(Model &model, const SceneNode &sceneNode, GraphNode *parent)
@@ -468,7 +468,7 @@ void Editor::addDirLight()
                                          {},
                                          nullptr);
 
-    mSceneGraph.addNode(lightNode);
+    mSceneGraph->addNode(lightNode);
     mRenderer.addDirLight(lightNode->id(), dirLight);
 }
 
@@ -488,7 +488,7 @@ void Editor::addPointLight()
                                          {},
                                          nullptr);
 
-    mSceneGraph.addNode(lightNode);
+    mSceneGraph->addNode(lightNode);
     mRenderer.addPointLight(lightNode->id(), pointLight);
 }
 
@@ -509,7 +509,7 @@ void Editor::addSpotLight()
                                          spotLight.position, spotLight.direction, {},
                                          nullptr);
 
-    mSceneGraph.addNode(lightNode);
+    mSceneGraph->addNode(lightNode);
     mRenderer.addSpotLight(lightNode->id(), spotLight);
 }
 
@@ -527,7 +527,7 @@ void Editor::cutNode(uuid32_t nodeID)
 
 void Editor::pasteNode(GraphNode *parent)
 {
-    GraphNode* copiedNode = mSceneGraph.searchNode(mCopiedNodeID);
+    GraphNode* copiedNode = mSceneGraph->searchNode(mCopiedNodeID);
 
     if (copiedNode)
     {
@@ -538,7 +538,7 @@ void Editor::pasteNode(GraphNode *parent)
             parent->addChild(newNode);
         }
 
-        if (mCopyFlag == CopyFlags::Cut && !mSceneGraph.hasDescendant(copiedNode, parent))
+        if (mCopyFlag == CopyFlags::Cut && !mSceneGraph->hasDescendant(copiedNode, parent))
         {
             copiedNode->orphan();
             parent->addChild(copiedNode);
@@ -923,13 +923,13 @@ void Editor::deleteSelectedNode()
         mCopiedNodeID = 0;
     }
 
-    GraphNode* node = mSceneGraph.searchNode(mSelectedObjectID);
+    GraphNode* node = mSceneGraph->searchNode(mSelectedObjectID);
 
     if (node->type() == NodeType::DirectionalLight) mRenderer.deleteDirLight(node->id());
     if (node->type() == NodeType::PointLight) mRenderer.deletePointLight(node->id());
     if (node->type() == NodeType::SpotLight) mRenderer.deleteSpotLight(node->id());
 
-    mSceneGraph.deleteNode(mSelectedObjectID);
+    mSceneGraph->deleteNode(mSelectedObjectID);
     mSelectedObjectID = 0;
 }
 
@@ -959,7 +959,7 @@ void Editor::sceneNodeDragDropTarget(GraphNode *node)
         {
             GraphNode* transferNode = *(GraphNode**)payload->Data;
 
-            if (!mSceneGraph.hasDescendant(transferNode, node))
+            if (!mSceneGraph->hasDescendant(transferNode, node))
             {
                 transferNode->localT = transferNode->globalT - node->globalT;
 
@@ -994,7 +994,7 @@ void Editor::sceneNodeDragDropTargetWholeWindow(bool nodeHovered)
                 transferNode->orphan();
                 transferNode->markDirty();
 
-                mSceneGraph.addNode(transferNode);
+                mSceneGraph->addNode(transferNode);
             }
         }
 
@@ -1101,11 +1101,11 @@ void Editor::sceneGraphPopup()
             copyNode(mSelectedObjectID);
 
         if (ImGui::MenuItem("Paste##sceneGraph", nullptr, false, mCopyFlag != CopyFlags::None))
-            pasteNode(mSceneGraph.root());
+            pasteNode(mSceneGraph->root());
 
         bool enablePasteAsChild = (mCopyFlag != CopyFlags::None) && nodeSelected && (mSelectedObjectID != mCopiedNodeID);
         if (ImGui::MenuItem("Paste as Child##sceneGraph", nullptr, false, enablePasteAsChild))
-            pasteNode(mSceneGraph.searchNode(mSelectedObjectID));
+            pasteNode(mSceneGraph->searchNode(mSelectedObjectID));
 
         ImGui::Separator();
 
@@ -1117,7 +1117,7 @@ void Editor::sceneGraphPopup()
         }
 
         if (ImGui::MenuItem("Duplicate##sceneGraph", nullptr, false, nodeSelected))
-            duplicateNode(mSceneGraph.searchNode(mSelectedObjectID));
+            duplicateNode(mSceneGraph->searchNode(mSelectedObjectID));
 
         if (ImGui::MenuItem("Delete##sceneGraph", nullptr, false, nodeSelected))
             deleteSelectedNode();
@@ -1125,7 +1125,7 @@ void Editor::sceneGraphPopup()
         ImGui::Separator();
 
         if (ImGui::MenuItem("Create Empty##sceneGraph"))
-            mSceneGraph.addNode(createEmptyNode(nullptr, "Empty Node"));
+            mSceneGraph->addNode(createEmptyNode(nullptr, "Empty Node"));
 
         ImGui::MenuItem("Create from Model##sceneGraph", nullptr, false, !mRenderer.mModels.empty());
         if (ImGui::IsItemClicked())
@@ -1153,7 +1153,7 @@ void Editor::sceneGraphPopup()
 
             if (newName)
             {
-                GraphNode& node = *mSceneGraph.searchNode(mSelectedObjectID);
+                GraphNode& node = *mSceneGraph->searchNode(mSelectedObjectID);
                 node.setName(newName.value());
                 ImGui::CloseCurrentPopup();
             }

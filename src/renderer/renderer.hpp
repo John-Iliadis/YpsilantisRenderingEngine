@@ -135,7 +135,7 @@ private:
 private:
     const VulkanRenderDevice& mRenderDevice;
     SaveData& mSaveData;
-    SceneGraph mSceneGraph;
+    std::shared_ptr<SceneGraph> mSceneGraph;
 
     uint32_t mWidth;
     uint32_t mHeight;

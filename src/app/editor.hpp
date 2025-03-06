@@ -104,7 +104,7 @@ private:
 private:
     Renderer& mRenderer;
     SaveData& mSaveData;
-    SceneGraph& mSceneGraph;
+    std::shared_ptr<SceneGraph> mSceneGraph;
 
     bool mShowViewport = true;
     bool mShowAssetPanel = true;

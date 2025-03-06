@@ -8,6 +8,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     : SubscriberSNS({Topic::Type::Resource})
     , mRenderDevice(renderDevice)
     , mSaveData(saveData)
+    , mSceneGraph(std::make_shared<SceneGraph>())
     , mWidth(InitialViewportWidth)
     , mHeight(InitialViewportHeight)
     , mCameraUBO(renderDevice, sizeof(CameraRenderData), BufferType::Uniform, MemoryType::HostCoherent)
@@ -672,13 +673,13 @@ void Renderer::getLightIconRenderData()
 {
     mLightIconRenderData.clear();
     for (const auto& [id, index] : mUuidToDirLightIndex)
-        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
+        mLightIconRenderData.emplace_back(mSceneGraph->searchNode(id)->globalT,
                                           &mDirLightIcon);
     for (const auto& [id, index] : mUuidToPointLightIndex)
-        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
+        mLightIconRenderData.emplace_back(mSceneGraph->searchNode(id)->globalT,
                                           &mPointLightIcon);
     for (const auto& [id, index] : mUuidToSpotLightIndex)
-        mLightIconRenderData.emplace_back(mSceneGraph.searchNode(id)->globalT,
+        mLightIconRenderData.emplace_back(mSceneGraph->searchNode(id)->globalT,
                                           &mSpotLightIcon);
 
     std::sort(mLightIconRenderData.begin(), mLightIconRenderData.end(),
