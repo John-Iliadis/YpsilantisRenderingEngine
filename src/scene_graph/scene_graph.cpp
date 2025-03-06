@@ -29,7 +29,7 @@ GraphNode *SceneGraph::searchNode(uuid32_t nodeID)
     return nullptr;
 }
 
-void SceneGraph::updateTransforms()
+void SceneGraph::update()
 {
     mRoot.updateGlobalTransform();
 }

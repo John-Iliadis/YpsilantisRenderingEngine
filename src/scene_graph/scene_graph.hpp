@@ -15,7 +15,7 @@ public:
 
     void addNode(GraphNode* node);
     void deleteNode(uuid32_t nodeID);
-    void updateTransforms();
+    void update();
 
     void notify(const Message &message) override;
 

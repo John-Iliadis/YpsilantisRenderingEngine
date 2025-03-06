@@ -57,6 +57,7 @@ public:
     std::optional<uuid32_t> modelID() const;
     GraphNode* parent() const;
     const glm::mat4& globalTransform() const;
+    const glm::mat4& localTransform() const;
     const std::vector<GraphNode*>& children() const;
 
 protected:

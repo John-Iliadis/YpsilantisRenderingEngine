@@ -56,7 +56,7 @@ void Editor::update(float dt)
         debugPanel();
 
     sharedPopups();
-    mSceneGraph->updateTransforms();
+    mSceneGraph->update();
 }
 
 void Editor::imguiEvents()
@@ -324,13 +324,16 @@ void Editor::viewPort()
 
     ImGui::Image(reinterpret_cast<ImTextureID>(mRenderer.mColor8UDs), viewportSize);
 
-    mRenderer.mCamera.update(mDt);
+    bool usingGizmo = transformGizmo();
 
     if (mViewGizmoControls)
         gizmoOptions();
 
     if (mViewAxisGizmo)
-        drawAxisGizmo(viewportSize);
+        drawAxisGizmo();
+
+    if (!usingGizmo)
+        mRenderer.mCamera.update(mDt);
 
     ImGui::End();
 }
@@ -465,7 +468,7 @@ void Editor::addDirLight()
                                          "Directional Light",
                                          spawnPos(),
                                          dirLight.direction,
-                                         {},
+                                         glm::vec3(1.f),
                                          nullptr);
 
     mSceneGraph->addNode(lightNode);
@@ -485,7 +488,7 @@ void Editor::addPointLight()
                                          "Point Light",
                                          pointLight.position,
                                          {},
-                                         {},
+                                         glm::vec3(1.f),
                                          nullptr);
 
     mSceneGraph->addNode(lightNode);
@@ -506,7 +509,9 @@ void Editor::addSpotLight()
 
     GraphNode* lightNode = new GraphNode(NodeType::SpotLight,
                                          "Spot Light",
-                                         spotLight.position, spotLight.direction, {},
+                                         spotLight.position,
+                                         spotLight.direction,
+                                         glm::vec3(1.f),
                                          nullptr);
 
     mSceneGraph->addNode(lightNode);
@@ -1364,14 +1369,68 @@ void Editor::modelImportPopup()
     }
 }
 
-void Editor::drawAxisGizmo(ImVec2 viewportSize)
+bool Editor::transformGizmo()
+{
+    if (!isNodeSelected())
+        return false;
+
+    ImGuiWindow* win = ImGui::GetCurrentWindow();
+    ImVec2 windowPos = ImGui::GetWindowPos();
+    ImVec2 windowSize = ImGui::GetWindowSize();
+    float titleBarHeight = win->TitleBarHeight();
+
+    GraphNode* node = mSceneGraph->searchNode(mSelectedObjectID);
+
+    ImGuizmo::SetOrthographic(false);
+    ImGuizmo::SetGizmoSizeClipSpace(0.2f);
+    ImGuizmo::SetDrawlist();
+
+    ImGuizmo::SetRect(windowPos.x,
+                      windowPos.y + titleBarHeight,
+                      windowSize.x,
+                      windowSize.y - titleBarHeight);
+
+    glm::mat4 globalMatrix = node->globalTransform();
+
+    if (ImGuizmo::Manipulate(glm::value_ptr(mRenderer.mCamera.view()),
+                             glm::value_ptr(mRenderer.mCamera.projection()),
+                             mGizmoOp, mGizmoMode,
+                             glm::value_ptr(globalMatrix)))
+    {
+        glm::mat4 parentGlobal = node->parent()->globalTransform();
+        glm::mat4 local = glm::inverse(parentGlobal) * globalMatrix;
+
+        glm::vec3 translation;
+        glm::vec3 rotation;
+        glm::vec3 scale;
+
+        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(local),
+                                              glm::value_ptr(translation),
+                                              glm::value_ptr(rotation),
+                                              glm::value_ptr(scale));
+
+        switch (mGizmoOp)
+        {
+            case ImGuizmo::TRANSLATE: node->localT = translation; break;
+            case ImGuizmo::ROTATE: node->localR = rotation; break;
+            case ImGuizmo::SCALE: node->localS = scale; break;
+            default: assert(false);
+        }
+
+        node->markDirty();
+    }
+
+    return ImGuizmo::IsUsing();
+}
+
+void Editor::drawAxisGizmo()
 {
     ImGuiWindow* win = ImGui::GetCurrentWindow();
     ImVec2 windowCoords = ImGui::GetWindowPos() + ImVec2(0, win->TitleBarHeight());
 
     const float gizmoHalfSize = 50.f;
     const float padding = 15.f;
-    float gizmoLeft = windowCoords.x + viewportSize.x - gizmoHalfSize * 2 - padding;
+    float gizmoLeft = windowCoords.x + mViewportSize.x - gizmoHalfSize * 2 - padding;
     float gizmoTop = windowCoords.y + gizmoHalfSize + padding;
     ImOGuizmo::SetRect(gizmoLeft, gizmoTop, gizmoHalfSize);
 

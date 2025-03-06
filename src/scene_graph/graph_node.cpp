@@ -150,3 +150,8 @@ void GraphNode::setName(const std::string &name)
 {
     mName = name;
 }
+
+const glm::mat4 &GraphNode::localTransform() const
+{
+    return mLocalTransform;
+}

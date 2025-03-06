@@ -22,6 +22,8 @@
 
 enum class CopyFlags;
 
+// todo: add keyboard shortcut for gizmo ops
+// todo: change gizmo colors
 class Editor
 {
 public:
@@ -80,7 +82,8 @@ private:
     void skyboxImportPopup();
     void modelImportPopup();
 
-    void drawAxisGizmo(ImVec2 viewportSize);
+    bool transformGizmo();
+    void drawAxisGizmo();
     void gizmoOptions();
     void gizmoOpIcon(ImTextureID iconDs, ImGuizmo::OPERATION op, const char* tooltip);
     void gizmoModeIcon(ImTextureID iconDs, ImGuizmo::MODE mode, const char* tooltip);
