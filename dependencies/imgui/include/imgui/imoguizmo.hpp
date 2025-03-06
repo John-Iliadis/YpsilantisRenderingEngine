@@ -181,12 +181,12 @@ namespace ImOGuizmo {
 		float positiveRadiusScale = 0.18f;
 		float negativeRadiusScale = 0.13f;
 		float hoverCircleRadiusScale = 3.f;
-		ImU32 xCircleFrontColor = IM_COL32(255, 54, 83, 255);
-		ImU32 xCircleBackColor = IM_COL32(154, 57, 71, 255);
-		ImU32 yCircleFrontColor = IM_COL32(138, 219, 0, 255);
-		ImU32 yCircleBackColor = IM_COL32(98, 138, 34, 255);
-		ImU32 zCircleFrontColor = IM_COL32(44, 143, 255, 255);
-		ImU32 zCircleBackColor = IM_COL32(52, 100, 154, 255);
+		ImU32 xCircleFrontColor = IM_COL32(246, 54, 82, 255);
+		ImU32 xCircleBackColor = xCircleFrontColor;
+		ImU32 yCircleFrontColor = IM_COL32(111, 190, 27, 255);
+		ImU32 yCircleBackColor = yCircleFrontColor;
+		ImU32 zCircleFrontColor = IM_COL32(47, 131, 227, 255);
+		ImU32 zCircleBackColor = zCircleFrontColor;
 		ImU32 hoverCircleColor = IM_COL32(100, 100, 100, 100);
 	} config;
 

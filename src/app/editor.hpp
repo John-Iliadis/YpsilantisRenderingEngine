@@ -23,7 +23,6 @@
 enum class CopyFlags;
 
 // todo: add keyboard shortcut for gizmo ops
-// todo: change gizmo colors
 class Editor
 {
 public:
