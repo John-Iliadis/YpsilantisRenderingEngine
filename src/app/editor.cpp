@@ -180,6 +180,9 @@ void Editor::assetPanel()
 
     assetPanelPopup();
 
+    if (emptySpaceClicked())
+        deselectAll();
+
     ImGui::End();
 }
 
@@ -198,6 +201,9 @@ void Editor::sceneGraphPanel()
     sceneNodeDragDropTargetWholeWindow(nodeHovered);
 
     sceneGraphPopup();
+
+    if (emptySpaceClicked())
+        deselectAll();
 
     ImGui::End();
 }
@@ -1783,6 +1789,18 @@ bool Editor::isNodeSelected()
 bool Editor::isModelSelected()
 {
     return UUIDRegistry::isModel(mSelectedObjectID);
+}
+
+bool Editor::emptySpaceClicked()
+{
+    return ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) &&
+           !ImGui::IsAnyItemHovered() &&
+           ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+}
+
+void Editor::deselectAll()
+{
+    mSelectedObjectID = 0;
 }
 
 void Editor::countFPS()

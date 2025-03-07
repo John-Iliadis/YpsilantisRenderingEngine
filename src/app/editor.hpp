@@ -22,8 +22,6 @@
 
 enum class CopyFlags;
 
-// todo: check gizmo delta mat
-// todo: implement selection deselect when clicking no element
 class Editor
 {
 public:
@@ -103,6 +101,8 @@ private:
     bool lastItemClicked(uuid32_t id);
     bool isNodeSelected();
     bool isModelSelected();
+    bool emptySpaceClicked();
+    void deselectAll();
     void countFPS();
     void updateFrametimeStats();
     void plotPerformanceGraphs();
