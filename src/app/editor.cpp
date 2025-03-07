@@ -1001,6 +1001,14 @@ void Editor::sceneNodeDragDropTarget(GraphNode *node)
 
             if (!mSceneGraph->hasDescendant(transferNode, node))
             {
+                glm::mat4 parentInverseMat = glm::inverse(node->globalTransform());
+                glm::mat4 childCoordSystem = parentInverseMat * transferNode->globalTransform();
+
+                ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(childCoordSystem),
+                                                      glm::value_ptr(transferNode->localT),
+                                                      glm::value_ptr(transferNode->localR),
+                                                      glm::value_ptr(transferNode->localS));
+
                 transferNode->orphan();
                 transferNode->markDirty();
 
@@ -1028,6 +1036,11 @@ void Editor::sceneNodeDragDropTargetWholeWindow(bool nodeHovered)
             if (payload->IsDelivery())
             {
                 GraphNode* transferNode = *(GraphNode**)payload->Data;
+
+                ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transferNode->globalTransform()),
+                                                      glm::value_ptr(transferNode->localT),
+                                                      glm::value_ptr(transferNode->localR),
+                                                      glm::value_ptr(transferNode->localS));
 
                 transferNode->orphan();
                 transferNode->markDirty();

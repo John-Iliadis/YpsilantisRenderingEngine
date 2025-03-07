@@ -22,6 +22,8 @@
 
 enum class CopyFlags;
 
+// todo: check gizmo delta mat
+// todo: implement selection deselect when clicking no element
 class Editor
 {
 public:
