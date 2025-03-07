@@ -38,7 +38,6 @@ public:
 
     void importModel(const ModelImportData& importData);
     void importSkybox(const std::array<std::string, 6>& paths);
-    void deleteModel(uuid32_t id);
     void resize(uint32_t width, uint32_t height);
     void notify(const Message &message) override;
 

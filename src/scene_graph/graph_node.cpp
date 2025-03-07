@@ -52,8 +52,13 @@ void GraphNode::addChild(GraphNode* child)
 void GraphNode::removeChild(GraphNode *child)
 {
     for (uint32_t i = 0; i < mChildren.size(); ++i)
+    {
         if (mChildren.at(i) == child)
+        {
             mChildren.erase(mChildren.begin() + i);
+            break;
+        }
+    }
 }
 
 void GraphNode::orphan()

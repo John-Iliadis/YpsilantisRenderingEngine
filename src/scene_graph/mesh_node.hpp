@@ -15,10 +15,8 @@ public:
              glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale,
              GraphNode* parent,
              uuid32_t modelID, std::vector<uuid32_t> meshIDs);
-    ~MeshNode();
 
     void updateGlobalTransform() override;
-
     const std::vector<uuid32_t>& meshIDs() const;
 
 private:

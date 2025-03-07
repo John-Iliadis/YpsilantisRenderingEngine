@@ -166,12 +166,6 @@ void Renderer::importSkybox(const std::array<std::string, 6> &paths)
     vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
 }
 
-void Renderer::deleteModel(uuid32_t id)
-{
-    SNS::publishMessage(Topic::Type::Renderer, Message::modelDeleted(id));
-    mModels.erase(id);
-}
-
 void Renderer::resize(uint32_t width, uint32_t height)
 {
     mWidth = width;

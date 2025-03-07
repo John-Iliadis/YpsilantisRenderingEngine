@@ -34,40 +34,9 @@ void SceneGraph::update()
     mRoot.updateGlobalTransform();
 }
 
-void SceneGraph::notify(const Message &message)
-{
-    if (const auto& m = message.getIf<Message::ModelDeleted>())
-    {
-        std::vector<GraphNode*> stack(1, &mRoot);
-
-        while (!stack.empty())
-        {
-            GraphNode* node = stack.back();
-            stack.pop_back();
-
-            if (node->modelID().has_value() && node->modelID() == m->modelID)
-            {
-                node->orphan();
-                delete node;
-                continue;
-            }
-
-            for (auto child : node->children())
-                stack.push_back(child);
-        }
-    }
-}
-
 void SceneGraph::addNode(GraphNode *node)
 {
     mRoot.addChild(node);
-}
-
-void SceneGraph::deleteNode(uuid32_t nodeID)
-{
-    GraphNode* node = searchNode(nodeID);
-    node->orphan();
-    delete node;
 }
 
 bool SceneGraph::hasDescendant(GraphNode *current, GraphNode *descendant)

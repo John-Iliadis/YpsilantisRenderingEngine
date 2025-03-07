@@ -18,15 +18,6 @@ MeshNode::MeshNode(NodeType type, const std::string &name,
 {
 }
 
-MeshNode::~MeshNode()
-{
-    for (uint32_t meshID : mMeshIDs)
-    {
-        Message message = Message::RemoveMeshInstance(meshID, mID);
-        SNS::publishMessage(Topic::Type::SceneGraph, message);
-    }
-}
-
 void MeshNode::updateGlobalTransform()
 {
     if (mDirty)

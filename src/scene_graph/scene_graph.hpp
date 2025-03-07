@@ -14,10 +14,7 @@ public:
     SceneGraph();
 
     void addNode(GraphNode* node);
-    void deleteNode(uuid32_t nodeID);
     void update();
-
-    void notify(const Message &message) override;
 
     GraphNode* searchNode(uuid32_t nodeID);
     bool hasDescendant(GraphNode* current, GraphNode* descendant);

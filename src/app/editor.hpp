@@ -23,6 +23,7 @@
 enum class CopyFlags;
 
 // todo: add keyboard shortcut for gizmo ops
+// todo: mesh node shouldn't send delete mesh from destructor
 class Editor
 {
 public:
@@ -68,6 +69,7 @@ private:
     void deleteSelectedObject();
     void deleteSelectedNode();
     void deleteSelectedModel();
+    void deleteNode(GraphNode* node);
 
     void sceneNodeDragDropSource(GraphNode* node);
     void sceneNodeDragDropTarget(GraphNode* node);

@@ -922,26 +922,60 @@ void Editor::deleteSelectedObject()
 
 void Editor::deleteSelectedNode()
 {
+    GraphNode* node = mSceneGraph->searchNode(mSelectedObjectID);
+    deleteNode(node);
+}
+
+void Editor::deleteSelectedModel()
+{
+    std::vector<GraphNode*> nodes(1, mSceneGraph->root());
+
+    while (!nodes.empty())
+    {
+        GraphNode* node = nodes.back();
+        nodes.pop_back();
+
+        if (auto modelID = node->modelID())
+            if (*modelID == mSelectedObjectID)
+                deleteNode(node);
+
+        for (auto child : node->children())
+            nodes.push_back(child);
+    }
+
+    mRenderer.mModels.erase(mSelectedObjectID);
+    mSelectedObjectID = 0;
+}
+
+void Editor::deleteNode(GraphNode *node)
+{
     if (mSelectedObjectID == mCopiedNodeID)
     {
         mCopyFlag = CopyFlags::None;
         mCopiedNodeID = 0;
     }
 
-    GraphNode* node = mSceneGraph->searchNode(mSelectedObjectID);
+    if (node->id() == mSelectedObjectID)
+        mSelectedObjectID = 0;
 
     if (node->type() == NodeType::DirectionalLight) mRenderer.deleteDirLight(node->id());
     if (node->type() == NodeType::PointLight) mRenderer.deletePointLight(node->id());
     if (node->type() == NodeType::SpotLight) mRenderer.deleteSpotLight(node->id());
 
-    mSceneGraph->deleteNode(mSelectedObjectID);
-    mSelectedObjectID = 0;
-}
+    if (auto meshNode = dynamic_cast<MeshNode*>(node))
+    {
+        for (uuid32_t meshID : meshNode->meshIDs())
+        {
+            Message msg = Message::RemoveMeshInstance(meshID, meshNode->id());
+            SNS::publishMessage(Topic::Type::SceneGraph, msg);
+        }
+    }
 
-void Editor::deleteSelectedModel()
-{
-    mRenderer.deleteModel(mSelectedObjectID);
-    mSelectedObjectID = 0;
+    for (size_t i = node->children().size(); i > 0; --i)
+        deleteNode(node->children().at(i - 1));
+
+    node->orphan();
+    delete node;
 }
 
 void Editor::sceneNodeDragDropSource(GraphNode *node)
