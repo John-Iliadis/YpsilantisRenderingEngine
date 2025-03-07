@@ -30,6 +30,7 @@ void Editor::update(float dt)
 
     countFPS();
     updateFrametimeStats();
+    keyboardShortcuts();
 
     imguiEvents();
     mainMenuBar();
@@ -133,7 +134,7 @@ void Editor::cameraPanel()
         mRenderer.mCamera.setState(Camera::State::EDITOR_MODE);
 
     ImGui::SameLine();
-    helpMarker("Press E to select mode\n"
+    helpMarker("Press Tab to select mode\n"
                "Hold right click to rotate\n"
                "Use the scroll wheel to zoom");
 
@@ -886,10 +887,6 @@ bool Editor::nodeTransform(GraphNode *node)
     {
         ImGui::SeparatorText("Translation");
 
-        ImGui::Text("Global T.x: %.3f", node->globalT.x);
-        ImGui::Text("Global T.y: %.3f", node->globalT.y);
-        ImGui::Text("Global T.z: %.3f", node->globalT.z);
-
         if (ImGui::DragFloat("X##Translation", &node->localT.x, 0.001f)) modified = true;
         if (ImGui::DragFloat("Y##Translation", &node->localT.y, 0.001f)) modified = true;
         if (ImGui::DragFloat("Z##Translation", &node->localT.z, 0.001f)) modified = true;
@@ -1004,8 +1001,6 @@ void Editor::sceneNodeDragDropTarget(GraphNode *node)
 
             if (!mSceneGraph->hasDescendant(transferNode, node))
             {
-                transferNode->localT = transferNode->globalT - node->globalT;
-
                 transferNode->orphan();
                 transferNode->markDirty();
 
@@ -1573,6 +1568,33 @@ void Editor::gizmoModeIcon(ImTextureID iconDs, ImGuizmo::MODE mode, const char *
 
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay))
         ImGui::SetTooltip(tooltip);
+}
+
+void Editor::keyboardShortcuts()
+{
+    if (ImGui::IsKeyPressed(ImGuiKey_V))
+        mRenderer.mCamera.setState(Camera::State::VIEW_MODE);
+
+    if (ImGui::IsKeyPressed(ImGuiKey_F))
+        mRenderer.mCamera.setState(Camera::State::FIRST_PERSON);
+
+    if (ImGui::IsKeyPressed(ImGuiKey_Tab))
+        mRenderer.mCamera.setState(Camera::State::EDITOR_MODE);
+
+//    if (ImGui::IsKeyPressed(ImGuiKey_W))
+//        mGizmoOp = ImGuizmo::OPERATION::TRANSLATE;
+//
+//    if (ImGui::IsKeyPressed(ImGuiKey_E))
+//        mGizmoOp = ImGuizmo::OPERATION::ROTATE;
+//
+//    if (ImGui::IsKeyPressed(ImGuiKey_R))
+//        mGizmoOp = ImGuizmo::OPERATION::SCALE;
+//
+//    if (ImGui::IsKeyPressed(ImGuiKey_G))
+//        mGizmoMode = ImGuizmo::MODE::WORLD;
+//
+//    if (ImGui::IsKeyPressed(ImGuiKey_L))
+//        mGizmoMode = ImGuizmo::MODE::LOCAL;
 }
 
 void Editor::importModel(const ModelImportData &importData)

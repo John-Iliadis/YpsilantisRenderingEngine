@@ -22,8 +22,6 @@
 
 enum class CopyFlags;
 
-// todo: add keyboard shortcut for gizmo ops
-// todo: i don't think you need the global components
 class Editor
 {
 public:
@@ -88,6 +86,8 @@ private:
     void gizmoOptions();
     void gizmoOpIcon(ImTextureID iconDs, ImGuizmo::OPERATION op, const char* tooltip);
     void gizmoModeIcon(ImTextureID iconDs, ImGuizmo::MODE mode, const char* tooltip);
+
+    void keyboardShortcuts();
 
     void importModel(const ModelImportData& importData);
     std::filesystem::path selectModelFileDialog();

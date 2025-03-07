@@ -59,15 +59,6 @@ void Camera::update(float dt)
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Right))
         mRightButtonDown = false;
 
-    if (ImGui::IsKeyPressed(ImGuiKey_V))
-        mState = State::VIEW_MODE;
-
-    if (ImGui::IsKeyPressed(ImGuiKey_E))
-        mState = State::EDITOR_MODE;
-
-    if (ImGui::IsKeyPressed(ImGuiKey_F))
-        mState = State::FIRST_PERSON;
-
     switch (mState)
     {
         case FIRST_PERSON:
@@ -88,11 +79,6 @@ void Camera::update(float dt)
 
     mPreviousMousePos.x = ImGui::GetMousePos().x;
     mPreviousMousePos.y = ImGui::GetMousePos().y;
-}
-
-void Camera::updateView(const glm::mat4 &view)
-{
-
 }
 
 const glm::mat4 &Camera::viewProjection() const

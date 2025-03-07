@@ -29,9 +29,6 @@ public:
     glm::vec3 localT;
     glm::vec3 localR;
     glm::vec3 localS;
-    glm::vec3 globalT;
-    glm::vec3 globalR;
-    glm::vec3 globalS;
 
 public:
     GraphNode();
