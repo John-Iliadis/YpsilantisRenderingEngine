@@ -886,6 +886,10 @@ bool Editor::nodeTransform(GraphNode *node)
     {
         ImGui::SeparatorText("Translation");
 
+        ImGui::Text("Global T.x: %.3f", node->globalT.x);
+        ImGui::Text("Global T.y: %.3f", node->globalT.y);
+        ImGui::Text("Global T.z: %.3f", node->globalT.z);
+
         if (ImGui::DragFloat("X##Translation", &node->localT.x, 0.001f)) modified = true;
         if (ImGui::DragFloat("Y##Translation", &node->localT.y, 0.001f)) modified = true;
         if (ImGui::DragFloat("Z##Translation", &node->localT.z, 0.001f)) modified = true;

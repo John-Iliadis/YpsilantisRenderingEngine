@@ -667,13 +667,13 @@ void Renderer::getLightIconRenderData()
 {
     mLightIconRenderData.clear();
     for (const auto& [id, index] : mUuidToDirLightIndex)
-        mLightIconRenderData.emplace_back(mSceneGraph->searchNode(id)->globalT,
+        mLightIconRenderData.emplace_back(mSceneGraph->searchNode(id)->globalTransform()[3],
                                           &mDirLightIcon);
     for (const auto& [id, index] : mUuidToPointLightIndex)
-        mLightIconRenderData.emplace_back(mSceneGraph->searchNode(id)->globalT,
+        mLightIconRenderData.emplace_back(mSceneGraph->searchNode(id)->globalTransform()[3],
                                           &mPointLightIcon);
     for (const auto& [id, index] : mUuidToSpotLightIndex)
-        mLightIconRenderData.emplace_back(mSceneGraph->searchNode(id)->globalT,
+        mLightIconRenderData.emplace_back(mSceneGraph->searchNode(id)->globalTransform()[3],
                                           &mSpotLightIcon);
 
     std::sort(mLightIconRenderData.begin(), mLightIconRenderData.end(),

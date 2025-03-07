@@ -23,7 +23,7 @@
 enum class CopyFlags;
 
 // todo: add keyboard shortcut for gizmo ops
-// todo: mesh node shouldn't send delete mesh from destructor
+// todo: i don't think you need the global components
 class Editor
 {
 public:
