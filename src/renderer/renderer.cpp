@@ -309,7 +309,8 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
                             0, 1, &mCameraDs,
                             0, nullptr);
 
-    renderModels(commandBuffer, mPrepassPipeline, 1, true);
+    if (mOitOn) renderOpaque(commandBuffer, mPrepassPipeline, 1);
+    else renderAll(commandBuffer, mPrepassPipeline, 1);
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -459,7 +460,8 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 0, ds.size(), ds.data(),
                                 0, nullptr);
 
-        renderModels(commandBuffer, mOpaqueForwardPassPipeline, 2, true);
+        if (mOitOn) renderOpaque(commandBuffer, mOpaqueForwardPassPipeline, 2);
+        else renderAll(commandBuffer, mOpaqueForwardPassPipeline, 2);
     }
 
     { // subpass 1: transparent fragment collection
@@ -473,7 +475,7 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 0, ds.size(), ds.data(),
                                 0, nullptr);
 
-        if (mOitOn) renderModels(commandBuffer, mTransparentCollectionPipeline, 2, false);
+        if (mOitOn) renderTransparent(commandBuffer, mTransparentCollectionPipeline, 2);
     }
 
     { // subpass 2: transparency resolution
@@ -635,19 +637,16 @@ void Renderer::setViewport(VkCommandBuffer commandBuffer)
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 }
 
-void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex, bool opaque)
+void Renderer::renderOpaque(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex)
 {
     for (const auto& [id, model] : mModels)
     {
-        if (opaque)
-        {
-            pfnCmdSetCullModeEXT(commandBuffer, model->cullMode);
-            pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
-        }
+        pfnCmdSetCullModeEXT(commandBuffer, model->cullMode);
+        pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
 
         for (const auto& mesh : model->meshes)
         {
-            if (model->drawOpaque(mesh) == opaque)
+            if (model->drawOpaque(mesh))
             {
                 uint32_t materialIndex = mesh.materialIndex;
 
@@ -656,6 +655,44 @@ void Renderer::renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipe
 
                 mesh.mesh.render(commandBuffer);
             }
+        }
+    }
+}
+
+void Renderer::renderTransparent(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex)
+{
+    for (const auto& [id, model] : mModels)
+    {
+        for (const auto& mesh : model->meshes)
+        {
+            if (!model->drawOpaque(mesh))
+            {
+                uint32_t materialIndex = mesh.materialIndex;
+
+                model->bindMaterialUBO(commandBuffer, pipelineLayout, materialIndex, matDsIndex);
+                model->bindTextures(commandBuffer, pipelineLayout, materialIndex, matDsIndex);
+
+                mesh.mesh.render(commandBuffer);
+            }
+        }
+    }
+}
+
+void Renderer::renderAll(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex)
+{
+    for (const auto& [id, model] : mModels)
+    {
+        pfnCmdSetCullModeEXT(commandBuffer, model->cullMode);
+        pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+
+        for (const auto& mesh : model->meshes)
+        {
+            uint32_t materialIndex = mesh.materialIndex;
+
+            model->bindMaterialUBO(commandBuffer, pipelineLayout, materialIndex, matDsIndex);
+            model->bindTextures(commandBuffer, pipelineLayout, materialIndex, matDsIndex);
+
+            mesh.mesh.render(commandBuffer);
         }
     }
 }

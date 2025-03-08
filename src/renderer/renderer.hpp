@@ -62,7 +62,9 @@ private:
     void executeGridRenderpass(VkCommandBuffer commandBuffer);
     void executeLightIconRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
-    void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex, bool opaque);
+    void renderOpaque(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
+    void renderTransparent(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
+    void renderAll(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
     void updateCameraUBO();
     void getLightIconRenderData();
     void bindTexture(VkCommandBuffer commandBuffer,
