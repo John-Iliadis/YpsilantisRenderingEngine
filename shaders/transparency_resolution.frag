@@ -5,16 +5,15 @@
 #include "transparent_node.glsl"
 
 layout (location = 0) in vec2 vTexCoords;
-
 layout (location = 0) out vec4 outFragColor;
 
-layout (set = 0, binding = 0, r32ui) uniform uimage2D nodeIndexStorageTex;
+layout (input_attachment_index = 0,
+        set = 0,
+        binding = 0) uniform subpassInput opaqueColor;
 
-layout (set = 0, binding = 1) buffer LinkedListSSBO {
-    TransparentNode nodes[];
-};
-
-layout (set = 0, binding = 2) buffer NodeCounterSSBO
+layout (set = 1, binding = 0, r32ui) uniform uimage2D nodeIndexStorageTex;
+layout (set = 1, binding = 1) buffer LinkedListSSBO { TransparentNode nodes[]; };
+layout (set = 1, binding = 2) buffer NodeCounterSSBO
 {
     uint nodeCount;
     uint maxNodeCount;
@@ -44,7 +43,7 @@ void main()
 
         while (j > 0 && insert.depth > fragments[j - 1].depth)
         {
-            fragments[j] = fragments[j-1];
+            fragments[j] = fragments[j - 1];
             --j;
         }
 
@@ -52,7 +51,7 @@ void main()
     }
 
     // blend all fragments
-    outFragColor = vec4(0.0);
+    outFragColor = subpassLoad(opaqueColor);
     for (uint i = 0; i < count; ++i)
     {
         outFragColor = mix(outFragColor, fragments[i].color, fragments[i].color.a);

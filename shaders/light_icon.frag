@@ -13,5 +13,5 @@ void main()
     float depth = texture(depthTexture, gl_FragCoord.xy / vec2(textureSize(depthTexture, 0))).r;
 
     outFragColor = color * float(gl_FragCoord.z <= depth) +
-                   color * vec4(vec3(0.8), color.a) * float(gl_FragCoord.z > depth);
+                   color * vec4(vec3(0.6), color.a) * float(gl_FragCoord.z > depth);
 }

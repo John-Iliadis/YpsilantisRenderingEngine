@@ -28,16 +28,18 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createNormalTexture();
     createSsaoTexture();
     createColorTexture8U();
-    createIconDepthTexture();
 
     createSingleImageDsLayout();
     createCameraRenderDataDsLayout();
     createMaterialsDsLayout();
     createDepthNormalInputDsLayout();
+    createOitResourcesDsLayout();
+    createSingleInputAttachmentDsLayout();
 
     createCameraDs();
     createSingleImageDescriptorSets();
     createDepthNormalDs();
+    createColor32FInputDs();
 
     createPrepassRenderpass();
     createPrepassFramebuffer();
@@ -116,8 +118,8 @@ void Renderer::render(VkCommandBuffer commandBuffer)
     executeSkyboxRenderpass(commandBuffer);
     executeSsaoRenderpass(commandBuffer);
     executeForwardRenderpass(commandBuffer);
-    executeGridRenderpass(commandBuffer);
     executePostProcessingRenderpass(commandBuffer);
+    executeGridRenderpass(commandBuffer);
     executeLightIconRenderpass(commandBuffer);
 }
 
@@ -179,6 +181,7 @@ void Renderer::resize(uint32_t width, uint32_t height)
         mDepthDs,
         mColor32FDs,
         mColor8UDs,
+        mColor32FInputDs
     };
 
     vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, freeDs.size(), freeDs.data());
@@ -189,7 +192,6 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createNormalTexture();
     createSsaoTexture();
     createColorTexture8U();
-    createIconDepthTexture();
 
     createPrepassFramebuffer();
     createSkyboxFramebuffer();
@@ -201,6 +203,7 @@ void Renderer::resize(uint32_t width, uint32_t height)
 
     createSingleImageDescriptorSets();
     createDepthNormalDs();
+    createColor32FInputDs();
 
     createOitBuffers();
     updateOitResourcesDs();
@@ -476,10 +479,13 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
     { // subpass 2: transparency resolution
         vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mTransparencyResolutionPipeline);
+
+        std::array<VkDescriptorSet, 2> ds {mColor32FInputDs, mOitResourcesDs};
+
         vkCmdBindDescriptorSets(commandBuffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 mTransparencyResolutionPipeline,
-                                0, 1, &mOitResourcesDs,
+                                0, ds.size(), ds.data(),
                                 0, nullptr);
         if (mOitOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     }
@@ -494,42 +500,6 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 0, nullptr);
         vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     }
-
-    vkCmdEndRenderPass(commandBuffer);
-    endDebugLabel(commandBuffer);
-}
-
-void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
-{
-    VkRenderPassBeginInfo renderPassBeginInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mGridRenderpass,
-        .framebuffer = mGridFramebuffer,
-        .renderArea = {
-            .offset = {.x = 0, .y = 0},
-            .extent = {.width = mWidth, .height = mHeight}
-        },
-        .clearValueCount = 0,
-        .pClearValues = nullptr
-    };
-
-    beginDebugLabel(commandBuffer, "Grid");
-    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGridPipeline);
-
-    vkCmdBindDescriptorSets(commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mGridPipeline,
-                            0, 1, &mCameraDs,
-                            0, nullptr);
-
-    vkCmdPushConstants(commandBuffer,
-                       mGridPipeline,
-                       VK_SHADER_STAGE_FRAGMENT_BIT,
-                       0, sizeof(GridData),
-                       &mGridData);
-
-    if (mRenderGrid) vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -567,11 +537,46 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
     endDebugLabel(commandBuffer);
 }
 
+// for the grid to work correctly with transparent geometry,
+// you need to apply the linked list algorithm to it.
+void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mGridRenderpass,
+        .framebuffer = mGridFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    beginDebugLabel(commandBuffer, "Grid");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGridPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mGridPipeline,
+                            0, 1, &mCameraDs,
+                            0, nullptr);
+
+    vkCmdPushConstants(commandBuffer,
+                       mGridPipeline,
+                       VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(GridData),
+                       &mGridData);
+
+    if (mRenderGrid) vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
 void Renderer::executeLightIconRenderpass(VkCommandBuffer commandBuffer)
 {
-    std::array<VkClearValue, 2> clearValues;
-    clearValues.at(1) = {.depthStencil = {.depth = 1.f}};
-
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = mLightIconRenderpass,
@@ -580,8 +585,6 @@ void Renderer::executeLightIconRenderpass(VkCommandBuffer commandBuffer)
             .offset = {.x = 0, .y = 0},
             .extent = {.width = mWidth, .height = mHeight}
         },
-        .clearValueCount = static_cast<uint32_t>(clearValues.size()),
-        .pClearValues = clearValues.data()
     };
 
     getLightIconRenderData();
@@ -716,7 +719,8 @@ void Renderer::createColorTexture32F()
         .layerCount = 1,
         .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                      VK_IMAGE_USAGE_SAMPLED_BIT,
+            VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT,
         .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .magFilter = TextureMagFilter::Nearest,
@@ -824,28 +828,6 @@ void Renderer::createSsaoTexture()
     mSsaoTexture.setDebugName("Renderer::mSsaoTexture");
 }
 
-void Renderer::createIconDepthTexture()
-{
-    TextureSpecification specification {
-        .format = VK_FORMAT_D32_SFLOAT,
-        .width = mWidth,
-        .height = mHeight,
-        .layerCount = 1,
-        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
-        .imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        .imageAspect = VK_IMAGE_ASPECT_DEPTH_BIT,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .magFilter = TextureMagFilter::Nearest,
-        .minFilter = TextureMinFilter::Nearest,
-        .wrapS = TextureWrap::ClampToEdge,
-        .wrapT = TextureWrap::ClampToEdge,
-        .generateMipMaps = false
-    };
-
-    mIconDepthTexture = VulkanTexture(mRenderDevice, specification);
-    mIconDepthTexture.setDebugName("Renderer::mIconDepthTexture");
-}
-
 void Renderer::createSingleImageDsLayout()
 {
     DsLayoutSpecification specification {
@@ -900,6 +882,32 @@ void Renderer::createDepthNormalInputDsLayout()
     };
 
     mDepthNormalDsLayout = VulkanDsLayout(mRenderDevice, specification);
+}
+
+void Renderer::createOitResourcesDsLayout()
+{
+    DsLayoutSpecification mOitResourcesDsLayoutSpecification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        .debugName = "Renderer::mOitResourcesDs"
+    };
+
+    mOitResourcesDsLayout = {mRenderDevice, mOitResourcesDsLayoutSpecification};
+}
+
+void Renderer::createSingleInputAttachmentDsLayout()
+{
+    DsLayoutSpecification mSingleInputAttachmentDsLayoutSpecification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+        },
+        .debugName = "Renderer::mSingleInputAttachmentDsLayout"
+    };
+
+    mSingleInputAttachmentDsLayout = {mRenderDevice, mSingleInputAttachmentDsLayoutSpecification};
 }
 
 void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &texture, const char *name)
@@ -1017,6 +1025,44 @@ void Renderer::createDepthNormalDs()
 
     writeDescriptorSet.dstBinding = 1;
     writeDescriptorSet.pImageInfo = &normalImageInfo;
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::createColor32FInputDs()
+{
+    VkDescriptorSetLayout dsLayout = mSingleInputAttachmentDsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mColor32FInputDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mColor32FInputDs",
+                             mColor32FInputDs);
+
+    VkDescriptorImageInfo imageInfo {
+        .sampler = mColorTexture32F.vulkanSampler.sampler,
+        .imageView = mColorTexture32F.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mColor32FInputDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+        .pImageInfo = &imageInfo
+    };
+
     vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
 }
 
@@ -1439,28 +1485,6 @@ void Renderer::createOitBuffers()
 
 void Renderer::createOitResourcesDs()
 {
-    // mOitResourcesDsLayout
-    DsLayoutSpecification mOitResourcesDsLayoutSpecification {
-        .bindings = {
-            binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
-            binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
-            binding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
-        },
-        .debugName = "Renderer::mOitResourcesDs"
-    };
-
-    mOitResourcesDsLayout = {mRenderDevice, mOitResourcesDsLayoutSpecification};
-
-    // mSingleInputAttachmentDsLayout
-    DsLayoutSpecification mSingleInputAttachmentDsLayoutSpecification {
-        .bindings = {
-            binding(0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
-        },
-        .debugName = "Renderer::mSingleInputAttachmentDsLayout"
-    };
-
-    mSingleInputAttachmentDsLayout = {mRenderDevice, mSingleInputAttachmentDsLayoutSpecification};
-
     // mOitResourcesDs + mTransparentTexInputAttachmentDs allocation
     std::array<VkDescriptorSetLayout, 2> dsLayouts {
         mOitResourcesDsLayout,
@@ -1577,7 +1601,7 @@ void Renderer::createForwardRenderpass()
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
     VkAttachmentDescription depthAttachment {
@@ -1610,6 +1634,11 @@ void Renderer::createForwardRenderpass()
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
+    VkAttachmentReference colorInputAttachmentRef {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
     VkAttachmentReference depthAttachmentRef {
         .attachment = 2,
         .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
@@ -1633,13 +1662,15 @@ void Renderer::createForwardRenderpass()
         .pPreserveAttachments = transparentFragmentCollectionSubpassPreserveAttachments.data()
     };
 
-    std::array<uint32_t, 2> transparencyResolutionSubpassPreserveAttachments {1, 2};
+    uint32_t transparencyResolutionSubpassPreserveAttachments = 2;
     VkSubpassDescription transparencyResolutionSubpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .inputAttachmentCount = 1,
+        .pInputAttachments = &colorInputAttachmentRef,
         .colorAttachmentCount = 1,
         .pColorAttachments = &transparencyAttachmentRef,
-        .preserveAttachmentCount = static_cast<uint32_t>(transparencyResolutionSubpassPreserveAttachments.size()),
-        .pPreserveAttachments = transparencyResolutionSubpassPreserveAttachments.data()
+        .preserveAttachmentCount = 1,
+        .pPreserveAttachments = &transparencyResolutionSubpassPreserveAttachments
     };
 
     uint32_t blendSubpassPreserveAttachment = 2;
@@ -1663,11 +1694,11 @@ void Renderer::createForwardRenderpass()
     std::array<VkSubpassDependency, 3> dependencies;
 
     dependencies.at(0).srcSubpass = 0;
-    dependencies.at(0).dstSubpass = 3;
+    dependencies.at(0).dstSubpass = 2;
     dependencies.at(0).srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies.at(0).dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies.at(0).dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     dependencies.at(0).srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies.at(0).dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies.at(0).dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
     dependencies.at(0).dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     dependencies.at(1).srcSubpass = 1;
@@ -1724,6 +1755,60 @@ void Renderer::createForwardFramebuffer()
     VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mForwardPassFramebuffer);
     vulkanCheck(result, "Failed to create framebuffer.");
     setFramebufferDebugName(mRenderDevice, mForwardPassFramebuffer, "Renderer::mForwardPassFramebuffer");
+}
+
+void Renderer::createOpaqueForwardPassPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/pbr.vert.spv",
+            .fragShaderPath = "shaders/pbr.frag.spv"
+        },
+        .vertexInput = {
+            .bindings = InstancedMesh::bindingDescriptions(),
+            .attributes = InstancedMesh::attributeDescriptions()
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .tesselation = {
+            .patchControlUnits = 0
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = VK_TRUE,
+            .enableDepthWrite = VK_FALSE,
+            .depthCompareOp = VK_COMPARE_OP_EQUAL
+        },
+        .blending = {
+            .enable = false
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_CULL_MODE_EXT,
+            VK_DYNAMIC_STATE_FRONT_FACE_EXT
+        },
+        .pipelineLayout = {
+            .dsLayouts = {
+                mCameraRenderDataDsLayout,
+                mSingleImageDsLayout,
+                mMaterialsDsLayout
+            }
+        },
+        .renderPass = mForwardRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mOpaqueForwardPassPipeline"
+    };
+
+    mOpaqueForwardPassPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
 void Renderer::createOitTransparentCollectionPipeline()
@@ -1796,6 +1881,7 @@ void Renderer::createOitTransparencyResolutionPipeline()
         },
         .pipelineLayout = {
             .dsLayouts = {
+                mSingleInputAttachmentDsLayout,
                 mOitResourcesDsLayout
             }
         },
@@ -1805,60 +1891,6 @@ void Renderer::createOitTransparencyResolutionPipeline()
     };
 
     mTransparencyResolutionPipeline = {mRenderDevice, specification};
-}
-
-void Renderer::createOpaqueForwardPassPipeline()
-{
-    PipelineSpecification specification {
-        .shaderStages = {
-            .vertShaderPath = "shaders/pbr.vert.spv",
-            .fragShaderPath = "shaders/pbr.frag.spv"
-        },
-        .vertexInput = {
-            .bindings = InstancedMesh::bindingDescriptions(),
-            .attributes = InstancedMesh::attributeDescriptions()
-        },
-        .inputAssembly = {
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
-        },
-        .tesselation = {
-            .patchControlUnits = 0
-        },
-        .rasterization = {
-            .rasterizerDiscardPrimitives = false,
-            .polygonMode = VK_POLYGON_MODE_FILL,
-            .lineWidth = 1.f
-        },
-        .multisampling = {
-            .samples = VK_SAMPLE_COUNT_1_BIT
-        },
-        .depthStencil = {
-            .enableDepthTest = VK_TRUE,
-            .enableDepthWrite = VK_FALSE,
-            .depthCompareOp = VK_COMPARE_OP_EQUAL
-        },
-        .blending = {
-            .enable = false
-        },
-        .dynamicStates = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR,
-            VK_DYNAMIC_STATE_CULL_MODE_EXT,
-            VK_DYNAMIC_STATE_FRONT_FACE_EXT
-        },
-        .pipelineLayout = {
-            .dsLayouts = {
-                mCameraRenderDataDsLayout,
-                mSingleImageDsLayout,
-                mMaterialsDsLayout
-            }
-        },
-        .renderPass = mForwardRenderpass,
-        .subpassIndex = 0,
-        .debugName = "Renderer::mOpaqueForwardPassPipeline"
-    };
-
-    mOpaqueForwardPassPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
 void Renderer::createForwardPassBlendPipeline()
@@ -1903,143 +1935,6 @@ void Renderer::createForwardPassBlendPipeline()
     };
 
     mForwardPassBlendPipeline = {mRenderDevice, specification};
-}
-
-void Renderer::createGridRenderpass()
-{
-    VkAttachmentDescription colorAttachment {
-        .format = mColorTexture32F.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkAttachmentDescription depthAttachment {
-        .format = mDepthTexture.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    std::array<VkAttachmentDescription, 2> attachments {{
-        colorAttachment,
-        depthAttachment
-    }};
-
-    VkAttachmentReference colorAttachmentRef {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkAttachmentReference depthAttachmentRef {
-        .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-
-    VkSubpassDescription subpass {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachmentRef,
-        .pDepthStencilAttachment = &depthAttachmentRef
-    };
-
-    VkRenderPassCreateInfo renderPassCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = static_cast<uint32_t>(attachments.size()),
-        .pAttachments = attachments.data(),
-        .subpassCount = 1,
-        .pSubpasses = &subpass
-    };
-
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mGridRenderpass);
-    vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mGridRenderpass, "Renderer::mGridRenderpass");
-}
-
-void Renderer::createGridFramebuffer()
-{
-    vkDestroyFramebuffer(mRenderDevice.device, mGridFramebuffer, nullptr);
-
-    std::array<VkImageView, 2> imageViews {
-        mColorTexture32F.imageView,
-        mDepthTexture.imageView,
-    };
-
-    VkFramebufferCreateInfo framebufferCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mGridRenderpass,
-        .attachmentCount = static_cast<uint32_t>(imageViews.size()),
-        .pAttachments = imageViews.data(),
-        .width = mWidth,
-        .height = mHeight,
-        .layers = 1
-    };
-
-    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mGridFramebuffer);
-    vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mGridFramebuffer, "Renderer::mGridFramebuffer");
-}
-
-void Renderer::createGridPipeline()
-{
-    PipelineSpecification specification {
-        .shaderStages = {
-            .vertShaderPath = "shaders/grid.vert.spv",
-            .fragShaderPath = "shaders/grid.frag.spv"
-        },
-        .inputAssembly = {
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
-        },
-        .tesselation = {
-            .patchControlUnits = 0
-        },
-        .rasterization = {
-            .rasterizerDiscardPrimitives = false,
-            .polygonMode = VK_POLYGON_MODE_FILL,
-            .cullMode = VK_CULL_MODE_NONE,
-            .lineWidth = 1.f
-        },
-        .multisampling = {
-            .samples = VK_SAMPLE_COUNT_1_BIT
-        },
-        .depthStencil = {
-            .enableDepthTest = VK_TRUE,
-            .enableDepthWrite = VK_FALSE,
-            .depthCompareOp = VK_COMPARE_OP_LESS
-        },
-        .blending = {
-            .enable = true,
-            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-            .alphaBlendOp = VK_BLEND_OP_ADD,
-        },
-        .dynamicStates = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR
-        },
-        .pipelineLayout = {
-            .dsLayouts = {
-                mCameraRenderDataDsLayout,
-            },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(GridData),
-            }
-        },
-        .renderPass = mGridRenderpass,
-        .subpassIndex = 0,
-        .debugName = "Renderer::mGridPipeline"
-    };
-
-    mGridPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
 void Renderer::createPostProcessingRenderpass()
@@ -2131,7 +2026,7 @@ void Renderer::createPostProcessingPipeline()
         },
         .pipelineLayout = {
             .dsLayouts = {
-            mSingleImageDsLayout
+                mSingleImageDsLayout
             }
         },
         .renderPass = mPostProcessingRenderpass,
@@ -2140,6 +2035,143 @@ void Renderer::createPostProcessingPipeline()
     };
 
     mPostProcessingPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::createGridRenderpass()
+{
+    VkAttachmentDescription colorAttachment {
+        .format = mColorTexture8U.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentDescription depthAttachment {
+        .format = mDepthTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    std::array<VkAttachmentDescription, 2> attachments {{
+        colorAttachment,
+        depthAttachment
+    }};
+
+    VkAttachmentReference colorAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentReference depthAttachmentRef {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef,
+        .pDepthStencilAttachment = &depthAttachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mGridRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mGridRenderpass, "Renderer::mGridRenderpass");
+}
+
+void Renderer::createGridFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mGridFramebuffer, nullptr);
+
+    std::array<VkImageView, 2> imageViews {
+        mColorTexture8U.imageView,
+        mDepthTexture.imageView,
+    };
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mGridRenderpass,
+        .attachmentCount = static_cast<uint32_t>(imageViews.size()),
+        .pAttachments = imageViews.data(),
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mGridFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mGridFramebuffer, "Renderer::mGridFramebuffer");
+}
+
+void Renderer::createGridPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/grid.vert.spv",
+            .fragShaderPath = "shaders/grid.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .tesselation = {
+            .patchControlUnits = 0
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .cullMode = VK_CULL_MODE_NONE,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = VK_TRUE,
+            .enableDepthWrite = VK_FALSE,
+            .depthCompareOp = VK_COMPARE_OP_LESS
+        },
+        .blending = {
+            .enable = true,
+            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .colorBlendOp = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+            .alphaBlendOp = VK_BLEND_OP_ADD,
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {
+            .dsLayouts = {
+                mCameraRenderDataDsLayout,
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(GridData),
+            }
+        },
+        .renderPass = mGridRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mGridPipeline"
+    };
+
+    mGridPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
 void Renderer::createLightBuffers()
@@ -2216,38 +2248,21 @@ void Renderer::createLightIconRenderpass()
         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
-    VkAttachmentDescription depthAttachment {
-        .format = mIconDepthTexture.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-
-    std::array<VkAttachmentDescription, 2> attachments {colorAttachment, depthAttachment};
-
     VkAttachmentReference colorAttachmentRef {
         .attachment = 0,
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
-    VkAttachmentReference depthAttachmentRef {
-        .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    };
-
     VkSubpassDescription subpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
         .colorAttachmentCount = 1,
-        .pColorAttachments = &colorAttachmentRef,
-        .pDepthStencilAttachment = &depthAttachmentRef
+        .pColorAttachments = &colorAttachmentRef
     };
 
     VkRenderPassCreateInfo renderPassCreateInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = static_cast<uint32_t>(attachments.size()),
-        .pAttachments = attachments.data(),
+        .attachmentCount = 1,
+        .pAttachments = &colorAttachment,
         .subpassCount = 1,
         .pSubpasses = &subpass,
     };
@@ -2261,16 +2276,11 @@ void Renderer::createLightIconFramebuffer()
 {
     vkDestroyFramebuffer(mRenderDevice.device, mLightIconFramebuffer, nullptr);
 
-    std::array<VkImageView, 2> attachments {
-        mColorTexture8U.imageView,
-        mIconDepthTexture.imageView
-    };
-
     VkFramebufferCreateInfo framebufferCreateInfo {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = mLightIconRenderpass,
-        .attachmentCount = static_cast<uint32_t>(attachments.size()),
-        .pAttachments = attachments.data(),
+        .attachmentCount = 1,
+        .pAttachments = &mColorTexture8U.imageView,
         .width = mWidth,
         .height = mHeight,
         .layers = 1

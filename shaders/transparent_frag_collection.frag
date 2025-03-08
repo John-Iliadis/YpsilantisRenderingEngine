@@ -36,14 +36,14 @@ void main()
 {
     uint nodeIndex = atomicAdd(nodeCount, 1);
 
-    if (nodeIndex >= maxNodeCount)
-        discard;
+    if (nodeIndex < maxNodeCount)
+    {
+        vec4 baseColorFactor = material.baseColorFactor;
+        vec4 baseColorSample = texture(baseColorTex, vTexCoords * material.tiling);
 
-    vec4 baseColorFactor = material.baseColorFactor;
-    vec4 baseColorSample = texture(baseColorTex, vTexCoords * material.tiling);
+        vec4 color = baseColorFactor * baseColorSample;
+        uint previousNodeIndex = imageAtomicExchange(nodeIndexStorageTex, ivec2(gl_FragCoord.xy), nodeIndex);
 
-    vec4 color = baseColorFactor * baseColorSample;
-    uint previousNodeIndex = imageAtomicExchange(nodeIndexStorageTex, ivec2(gl_FragCoord.xy), nodeIndex);
-
-    nodes[nodeIndex] = TransparentNode(color, gl_FragCoord.z, previousNodeIndex);
+        nodes[nodeIndex] = TransparentNode(color, gl_FragCoord.z, previousNodeIndex);
+    }
 }

@@ -26,7 +26,6 @@ constexpr uint32_t MaxSpotLights = 1024;
 struct TransparentNode;
 struct LightIconRenderData;
 
-// todo: remove light icon depth buffer if not needed
 class Renderer : public SubscriberSNS
 {
 public:
@@ -59,8 +58,8 @@ private:
     void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
     void executeForwardRenderpass(VkCommandBuffer commandBuffer);
-    void executeGridRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
+    void executeGridRenderpass(VkCommandBuffer commandBuffer);
     void executeLightIconRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
     void renderModels(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex, bool opaque);
@@ -77,17 +76,19 @@ private:
     void createDepthTexture();
     void createNormalTexture();
     void createSsaoTexture();
-    void createIconDepthTexture();
 
     void createSingleImageDsLayout();
     void createCameraRenderDataDsLayout();
     void createMaterialsDsLayout();
     void createDepthNormalInputDsLayout();
+    void createOitResourcesDsLayout();
+    void createSingleInputAttachmentDsLayout();
 
     void createSingleImageDs(VkDescriptorSet& ds, const VulkanTexture& texture, const char* name);
     void createCameraDs();
     void createSingleImageDescriptorSets();
     void createDepthNormalDs();
+    void createColor32FInputDs();
 
     void createPrepassRenderpass();
     void createPrepassFramebuffer();
@@ -107,18 +108,18 @@ private:
     void updateOitResourcesDs();
     void createForwardRenderpass();
     void createForwardFramebuffer();
+    void createOpaqueForwardPassPipeline();
     void createOitTransparentCollectionPipeline();
     void createOitTransparencyResolutionPipeline();
-    void createOpaqueForwardPassPipeline();
     void createForwardPassBlendPipeline();
-
-    void createGridRenderpass();
-    void createGridFramebuffer();
-    void createGridPipeline();
 
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
     void createPostProcessingPipeline();
+
+    void createGridRenderpass();
+    void createGridFramebuffer();
+    void createGridPipeline();
 
     void createLightBuffers();
     void createLightIconTextures();
@@ -147,9 +148,7 @@ private:
     VulkanImage mTransparentNodeIndexStorageImage;
     VulkanBuffer mOitLinkedListInfoSSBO;
     VulkanBuffer mOitLinkedListSSBO;
-    VulkanDsLayout mOitResourcesDsLayout;
     VkDescriptorSet mOitResourcesDs;
-    VulkanDsLayout mSingleInputAttachmentDsLayout;
     VkDescriptorSet mTransparentTexInputAttachmentDs;
 
     // render targets
@@ -159,7 +158,6 @@ private:
     VulkanTexture mDepthTexture;
     VulkanTexture mNormalTexture;
     VulkanTexture mSsaoTexture;
-    VulkanTexture mIconDepthTexture;
     VulkanTexture mSkyboxTexture;
 
     // render passes
@@ -197,7 +195,9 @@ private:
     VulkanDsLayout mCameraRenderDataDsLayout;
     VulkanDsLayout mMaterialsDsLayout;
     VulkanDsLayout mDepthNormalDsLayout;
+    VulkanDsLayout mOitResourcesDsLayout;
     VulkanDsLayout mIconTextureDsLayout;
+    VulkanDsLayout mSingleInputAttachmentDsLayout;
 
     // descriptor sets
     VkDescriptorSet mCameraDs{};
@@ -207,6 +207,7 @@ private:
     VkDescriptorSet mSkyboxDs{};
     VkDescriptorSet mColor32FDs{};
     VkDescriptorSet mColor8UDs{};
+    VkDescriptorSet mColor32FInputDs{};
 
     // gizmo icons
     VulkanTexture mTranslateIcon;
