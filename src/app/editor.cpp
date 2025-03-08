@@ -1793,7 +1793,7 @@ bool Editor::isModelSelected()
 
 bool Editor::emptySpaceClicked()
 {
-    return ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) &&
+    return ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup) &&
            !ImGui::IsAnyItemHovered() &&
            ImGui::IsMouseClicked(ImGuiMouseButton_Left);
 }
