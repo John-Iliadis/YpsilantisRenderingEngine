@@ -85,8 +85,8 @@ void InstancedMesh::removeInstance(uuid32_t id)
         mInstanceIndexToIdMap.erase(transferIndex);
 
         mInstanceBuffer.copyBuffer(mInstanceBuffer,
-                                   removeIndex * sInstanceSize,
                                    transferIndex * sInstanceSize,
+                                   removeIndex * sInstanceSize,
                                    sInstanceSize);
     }
 
