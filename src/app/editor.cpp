@@ -175,7 +175,7 @@ void Editor::assetPanel()
     {
         ImGui::Selectable(model->name.c_str(), mSelectedObjectID == modelID);
         lastItemClicked(modelID);
-        modelDragDropSource(modelID);
+        modelDragDropSource();
     }
 
     assetPanelPopup();
@@ -1059,12 +1059,12 @@ void Editor::sceneNodeDragDropTargetWholeWindow(bool nodeHovered)
     }
 }
 
-void Editor::modelDragDropSource(uuid32_t modelID)
+void Editor::modelDragDropSource()
 {
     if (ImGui::BeginDragDropSource())
     {
-        ImGui::SetDragDropPayload("Model", &modelID, sizeof(uuid32_t));
-        ImGui::Text("%s (Model)", mRenderer.mModels.at(modelID)->name.c_str());
+        ImGui::SetDragDropPayload("Model", &mSelectedObjectID, sizeof(uuid32_t));
+        ImGui::Text("%s (Model)", mRenderer.mModels.at(mSelectedObjectID)->name.c_str());
         ImGui::EndDragDropSource();
     }
 }
