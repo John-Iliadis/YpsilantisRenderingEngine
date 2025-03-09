@@ -79,18 +79,14 @@ private:
     void createNormalTexture();
     void createSsaoTexture();
 
+    // todo: move to bottom
     void createSingleImageDsLayout();
     void createCameraRenderDataDsLayout();
     void createMaterialsDsLayout();
     void createDepthNormalInputDsLayout();
     void createOitResourcesDsLayout();
     void createSingleInputAttachmentDsLayout();
-
-    void createSingleImageDs(VkDescriptorSet& ds, const VulkanTexture& texture, const char* name);
-    void createCameraDs();
-    void createSingleImageDescriptorSets();
-    void createDepthNormalDs();
-    void createColor32FInputDs();
+    void createLightsDsLayout();
 
     void createPrepassRenderpass();
     void createPrepassFramebuffer();
@@ -133,6 +129,13 @@ private:
     void createGizmoIconResources();
 
     void loadSkybox();
+
+    void createSingleImageDs(VkDescriptorSet& ds, const VulkanTexture& texture, const char* name);
+    void createCameraDs();
+    void createSingleImageDescriptorSets();
+    void createDepthNormalDs();
+    void createColor32FInputDs();
+    void createLightsDs();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
@@ -200,6 +203,7 @@ private:
     VulkanDsLayout mOitResourcesDsLayout;
     VulkanDsLayout mIconTextureDsLayout;
     VulkanDsLayout mSingleInputAttachmentDsLayout;
+    VulkanDsLayout mLightsDsLayout;
 
     // descriptor sets
     VkDescriptorSet mCameraDs{};
@@ -210,6 +214,7 @@ private:
     VkDescriptorSet mColor32FDs{};
     VkDescriptorSet mColor8UDs{};
     VkDescriptorSet mColor32FInputDs{};
+    VkDescriptorSet mLightsDs{};
 
     // gizmo icons
     VulkanTexture mTranslateIcon;

@@ -4,6 +4,7 @@
 
 #include "renderer.hpp"
 
+// todo: prevent user from adding more than max lights
 Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     : SubscriberSNS({Topic::Type::Resource})
     , mRenderDevice(renderDevice)
@@ -35,11 +36,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createDepthNormalInputDsLayout();
     createOitResourcesDsLayout();
     createSingleInputAttachmentDsLayout();
-
-    createCameraDs();
-    createSingleImageDescriptorSets();
-    createDepthNormalDs();
-    createColor32FInputDs();
+    createLightsDsLayout();
 
     createPrepassRenderpass();
     createPrepassFramebuffer();
@@ -82,6 +79,12 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createGizmoIconResources();
 
     loadSkybox();
+
+    createCameraDs();
+    createSingleImageDescriptorSets();
+    createDepthNormalDs();
+    createColor32FInputDs();
+    createLightsDs();
 }
 
 Renderer::~Renderer()
@@ -453,29 +456,53 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
     { // subpass 0: opaque pass
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mOpaqueForwardPassPipeline);
 
-        std::array<VkDescriptorSet, 2> ds {mCameraDs, mSsaoDs};
+        std::array<VkDescriptorSet, 3> ds {mCameraDs, mSsaoDs, mLightsDs};
         vkCmdBindDescriptorSets(commandBuffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 mOpaqueForwardPassPipeline,
                                 0, ds.size(), ds.data(),
                                 0, nullptr);
 
-        if (mOitOn) renderOpaque(commandBuffer, mOpaqueForwardPassPipeline, 2);
-        else renderAll(commandBuffer, mOpaqueForwardPassPipeline, 2);
+        std::array<uint32_t, 3> pushConstants {
+            static_cast<uint32_t>(mDirectionalLights.size()),
+            static_cast<uint32_t>(mPointLights.size()),
+            static_cast<uint32_t>(mSpotLights.size())
+        };
+
+        vkCmdPushConstants(commandBuffer,
+                           mOpaqueForwardPassPipeline,
+                           VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(uint32_t) * pushConstants.size(),
+                           pushConstants.data());
+
+        if (mOitOn) renderOpaque(commandBuffer, mOpaqueForwardPassPipeline, 3);
+        else renderAll(commandBuffer, mOpaqueForwardPassPipeline, 3);
     }
 
     { // subpass 1: transparent fragment collection
         vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mTransparentCollectionPipeline);
 
-        std::array<VkDescriptorSet, 2> ds {mCameraDs, mOitResourcesDs};
+        std::array<VkDescriptorSet, 3> ds {mCameraDs, mOitResourcesDs, mLightsDs};
         vkCmdBindDescriptorSets(commandBuffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 mTransparentCollectionPipeline,
                                 0, ds.size(), ds.data(),
                                 0, nullptr);
 
-        if (mOitOn) renderTransparent(commandBuffer, mTransparentCollectionPipeline, 2);
+        std::array<uint32_t, 3> pushConstants {
+            static_cast<uint32_t>(mDirectionalLights.size()),
+            static_cast<uint32_t>(mPointLights.size()),
+            static_cast<uint32_t>(mSpotLights.size())
+        };
+
+        vkCmdPushConstants(commandBuffer,
+                           mOpaqueForwardPassPipeline,
+                           VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(uint32_t) * pushConstants.size(),
+                           pushConstants.data());
+
+        if (mOitOn) renderTransparent(commandBuffer, mTransparentCollectionPipeline, 3);
     }
 
     { // subpass 2: transparency resolution
@@ -947,160 +974,18 @@ void Renderer::createSingleInputAttachmentDsLayout()
     mSingleInputAttachmentDsLayout = {mRenderDevice, mSingleInputAttachmentDsLayoutSpecification};
 }
 
-void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &texture, const char *name)
+void Renderer::createLightsDsLayout()
 {
-    VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
-
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &dsLayout
+    DsLayoutSpecification specification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        .debugName = "Renderer::mLightsDsLayout"
     };
 
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &ds);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-    setVulkanObjectDebugName(mRenderDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, name, ds);
-
-    VkDescriptorImageInfo imageInfo {
-        .sampler = texture.vulkanSampler.sampler,
-        .imageView = texture.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkWriteDescriptorSet writeDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = ds,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &imageInfo
-    };
-
-    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
-}
-
-void Renderer::createCameraDs()
-{
-    VkDescriptorSetLayout dsLayout = mCameraRenderDataDsLayout;
-
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &dsLayout
-    };
-
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mCameraDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-
-    VkDescriptorBufferInfo bufferInfo {
-        .buffer = mCameraUBO.getBuffer(),
-        .offset = 0,
-        .range = sizeof(CameraRenderData)
-    };
-
-    VkWriteDescriptorSet writeDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mCameraDs,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .pBufferInfo = &bufferInfo
-    };
-
-    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
-}
-
-void Renderer::createSingleImageDescriptorSets()
-{
-    createSingleImageDs(mSsaoDs, mSsaoTexture, "Renderer::mSsaoDs");
-    createSingleImageDs(mDepthDs, mDepthTexture, "Renderer::mDepthDs");
-    createSingleImageDs(mColor32FDs, mColorTexture32F, "Renderer::mColor32FDs");
-    createSingleImageDs(mColor8UDs, mColorTexture8U, "Renderer::mColorTexture8U");
-}
-
-void Renderer::createDepthNormalDs()
-{
-    VkDescriptorSetLayout dsLayout = mDepthNormalDsLayout;
-
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &dsLayout
-    };
-
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mDepthNormalDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-
-    VkDescriptorImageInfo depthImageInfo {
-        .sampler = mDepthTexture.vulkanSampler.sampler,
-        .imageView = mDepthTexture.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkDescriptorImageInfo normalImageInfo {
-        .sampler = mNormalTexture.vulkanSampler.sampler,
-        .imageView = mNormalTexture.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkWriteDescriptorSet writeDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mDepthNormalDs,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &depthImageInfo
-    };
-
-    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
-
-    writeDescriptorSet.dstBinding = 1;
-    writeDescriptorSet.pImageInfo = &normalImageInfo;
-    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
-}
-
-void Renderer::createColor32FInputDs()
-{
-    VkDescriptorSetLayout dsLayout = mSingleInputAttachmentDsLayout;
-
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &dsLayout
-    };
-
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mColor32FInputDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-
-    setVulkanObjectDebugName(mRenderDevice,
-                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                             "Renderer::mColor32FInputDs",
-                             mColor32FInputDs);
-
-    VkDescriptorImageInfo imageInfo {
-        .sampler = mColorTexture32F.vulkanSampler.sampler,
-        .imageView = mColorTexture32F.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-
-    VkWriteDescriptorSet writeDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mColor32FInputDs,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
-        .pImageInfo = &imageInfo
-    };
-
-    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+    mLightsDsLayout = {mRenderDevice, specification};
 }
 
 void Renderer::createPrepassRenderpass()
@@ -1798,7 +1683,7 @@ void Renderer::createOpaqueForwardPassPipeline()
 {
     PipelineSpecification specification {
         .shaderStages = {
-            .vertShaderPath = "shaders/pbr.vert.spv",
+            .vertShaderPath = "shaders/mesh.vert.spv",
             .fragShaderPath = "shaders/pbr.frag.spv"
         },
         .vertexInput = {
@@ -1837,7 +1722,13 @@ void Renderer::createOpaqueForwardPassPipeline()
             .dsLayouts = {
                 mCameraRenderDataDsLayout,
                 mSingleImageDsLayout,
+                mLightsDsLayout,
                 mMaterialsDsLayout
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(uint32_t) * 3
             }
         },
         .renderPass = mForwardRenderpass,
@@ -1852,7 +1743,7 @@ void Renderer::createOitTransparentCollectionPipeline()
 {
     PipelineSpecification specification {
         .shaderStages = {
-            .vertShaderPath = "shaders/transparent_frag_collection.vert.spv",
+            .vertShaderPath = "shaders/mesh.vert.spv",
             .fragShaderPath = "shaders/transparent_frag_collection.frag.spv"
         },
         .vertexInput = {
@@ -1883,7 +1774,13 @@ void Renderer::createOitTransparentCollectionPipeline()
             .dsLayouts = {
                 mCameraRenderDataDsLayout,
                 mOitResourcesDsLayout,
+                mLightsDsLayout,
                 mMaterialsDsLayout
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(uint32_t) * 3
             }
         },
         .renderPass = mForwardRenderpass,
@@ -2461,4 +2358,222 @@ void Renderer::loadSkybox()
     };
 
     importSkybox(paths);
+}
+
+void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &texture, const char *name)
+{
+    VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &ds);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+    setVulkanObjectDebugName(mRenderDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, name, ds);
+
+    VkDescriptorImageInfo imageInfo {
+        .sampler = texture.vulkanSampler.sampler,
+        .imageView = texture.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = ds,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &imageInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::createCameraDs()
+{
+    VkDescriptorSetLayout dsLayout = mCameraRenderDataDsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mCameraDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    VkDescriptorBufferInfo bufferInfo {
+        .buffer = mCameraUBO.getBuffer(),
+        .offset = 0,
+        .range = sizeof(CameraRenderData)
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mCameraDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &bufferInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::createSingleImageDescriptorSets()
+{
+    createSingleImageDs(mSsaoDs, mSsaoTexture, "Renderer::mSsaoDs");
+    createSingleImageDs(mDepthDs, mDepthTexture, "Renderer::mDepthDs");
+    createSingleImageDs(mColor32FDs, mColorTexture32F, "Renderer::mColor32FDs");
+    createSingleImageDs(mColor8UDs, mColorTexture8U, "Renderer::mColorTexture8U");
+}
+
+void Renderer::createDepthNormalDs()
+{
+    VkDescriptorSetLayout dsLayout = mDepthNormalDsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mDepthNormalDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    VkDescriptorImageInfo depthImageInfo {
+        .sampler = mDepthTexture.vulkanSampler.sampler,
+        .imageView = mDepthTexture.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkDescriptorImageInfo normalImageInfo {
+        .sampler = mNormalTexture.vulkanSampler.sampler,
+        .imageView = mNormalTexture.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mDepthNormalDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &depthImageInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+
+    writeDescriptorSet.dstBinding = 1;
+    writeDescriptorSet.pImageInfo = &normalImageInfo;
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::createColor32FInputDs()
+{
+    VkDescriptorSetLayout dsLayout = mSingleInputAttachmentDsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mColor32FInputDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mColor32FInputDs",
+                             mColor32FInputDs);
+
+    VkDescriptorImageInfo imageInfo {
+        .sampler = mColorTexture32F.vulkanSampler.sampler,
+        .imageView = mColorTexture32F.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mColor32FInputDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+        .pImageInfo = &imageInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::createLightsDs()
+{
+    VkDescriptorSetLayout dsLayout = mLightsDsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mLightsDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mLightsDs",
+                             mLightsDs);
+
+    VkDescriptorBufferInfo dirLightBufferInfo {
+        .buffer = mDirLightSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorBufferInfo pointLightBufferInfo {
+        .buffer = mPointLightSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorBufferInfo spotLightBufferInfo {
+        .buffer = mSpotLightSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkWriteDescriptorSet prototype {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mLightsDs,
+//        .dstBinding = x,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+//        .pBufferInfo = x
+    };
+
+    std::array<VkWriteDescriptorSet, 3> writeDs;
+    writeDs.fill(prototype);
+
+    writeDs.at(0).dstBinding = 0;
+    writeDs.at(0).pBufferInfo = &dirLightBufferInfo;
+
+    writeDs.at(1).dstBinding = 1;
+    writeDs.at(1).pBufferInfo = &pointLightBufferInfo;
+
+    writeDs.at(2).dstBinding = 2;
+    writeDs.at(2).pBufferInfo = &spotLightBufferInfo;
+
+    vkUpdateDescriptorSets(mRenderDevice.device, writeDs.size(), writeDs.data(), 0, nullptr);
 }
