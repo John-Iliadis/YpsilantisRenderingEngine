@@ -1856,7 +1856,7 @@ void Renderer::createOitTransparentCollectionPipeline()
         },
         .depthStencil = {
             .enableDepthTest = VK_TRUE,
-            .enableDepthWrite = VK_TRUE,
+            .enableDepthWrite = VK_FALSE,
             .depthCompareOp = VK_COMPARE_OP_LESS
         },
         .dynamicStates = {

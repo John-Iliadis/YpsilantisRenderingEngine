@@ -814,7 +814,7 @@ void Editor::dirLightInspector(GraphNode *node)
         if (ImGui::ColorEdit3("Color##dirLight", glm::value_ptr(dirLight.color), ImGuiColorEditFlags_DisplayRGB))
             modified = true;
 
-        if (ImGui::DragFloat("Intensity##dirLight", &dirLight.intensity))
+        if (ImGui::DragFloat("Intensity##dirLight", &dirLight.intensity, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp))
             modified = true;
     }
 
@@ -839,7 +839,7 @@ void Editor::pointLightInspector(GraphNode *node)
         if (ImGui::ColorEdit3("Color##pointLight", glm::value_ptr(pointLight.color), ImGuiColorEditFlags_DisplayRGB))
             modified = true;
 
-        if (ImGui::DragFloat("Intensity##pointLight", &pointLight.intensity))
+        if (ImGui::DragFloat("Intensity##pointLight", &pointLight.intensity, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp))
             modified = true;
 
         if (ImGui::DragFloat("Range##pointLight", &pointLight.range))
@@ -866,7 +866,7 @@ void Editor::spotLightInspector(GraphNode *node)
         if (ImGui::ColorEdit3("Color##spotLight", glm::value_ptr(spotLight.color), ImGuiColorEditFlags_DisplayRGB))
             modified = true;
 
-        if (ImGui::DragFloat("Intensity##spotLight", &spotLight.intensity))
+        if (ImGui::DragFloat("Intensity##spotLight", &spotLight.intensity, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp))
             modified = true;
 
         if (ImGui::DragFloat("Range##spotLight", &spotLight.range))

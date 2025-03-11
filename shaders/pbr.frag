@@ -44,8 +44,6 @@ layout (set = 3, binding = 4) uniform sampler2D normalTex;
 layout (set = 3, binding = 5) uniform sampler2D aoTex;
 layout (set = 3, binding = 6) uniform sampler2D emissionTex;
 
-// todo: update light dir when using editor
-// todo: add light intensity
 // todo: put brdf calculation in a function
 // todo: check light dir radians vs degrees
 // todo: issues with metalness
