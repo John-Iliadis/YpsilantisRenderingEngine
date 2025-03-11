@@ -19,11 +19,13 @@ GraphNode::GraphNode()
 GraphNode::GraphNode(NodeType type, const std::string& name,
                      glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale,
                      GraphNode* parent,
-                     std::optional<uuid32_t> modelID)
+                     std::optional<uuid32_t> modelID,
+                     std::vector<uuid32_t> meshIDs)
     : mID(UUIDRegistry::generateSceneNodeID())
     , mType(type)
     , mName(name)
     , mModelID(modelID)
+    , mMeshIDs(std::move(meshIDs))
     , localT(translation)
     , localR(rotation)
     , localS(scale)
@@ -112,7 +114,7 @@ const glm::mat4 &GraphNode::globalTransform() const
     return mGlobalTransform;
 }
 
-void GraphNode::updateGlobalTransform()
+bool GraphNode::updateGlobalTransform()
 {
     if (mDirty)
     {
@@ -128,10 +130,11 @@ void GraphNode::updateGlobalTransform()
         }
 
         mDirty = false;
+
+        return true;
     }
 
-    for (auto child : mChildren)
-        child->updateGlobalTransform();
+    return false;
 }
 
 void GraphNode::calcLocalTransform()
@@ -151,4 +154,9 @@ void GraphNode::setName(const std::string &name)
 const glm::mat4 &GraphNode::localTransform() const
 {
     return mLocalTransform;
+}
+
+const std::vector<uuid32_t> &GraphNode::meshIDs() const
+{
+    return mMeshIDs;
 }

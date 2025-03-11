@@ -73,13 +73,20 @@ private:
                      uint32_t binding,
                      uint32_t set);
 
+    void updateSceneGraph();
+    void updateGraphNode(NodeType type, GraphNode* node);
+    void updateEmptyNode(GraphNode* node);
+    void updateMeshNode(GraphNode* node);
+    void updateDirLightNode(GraphNode* node);
+    void updatePointLightNode(GraphNode* node);
+    void updateSpotLightNode(GraphNode* node);
+
     void createColorTexture32F();
     void createColorTexture8U();
     void createDepthTexture();
     void createNormalTexture();
     void createSsaoTexture();
 
-    // todo: move to bottom
     void createSingleImageDsLayout();
     void createCameraRenderDataDsLayout();
     void createMaterialsDsLayout();

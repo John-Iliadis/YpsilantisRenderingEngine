@@ -6,16 +6,14 @@
 #define VULKANRENDERINGENGINE_SCENE_GRAPH_HPP
 
 #include "../app/simple_notification_service.hpp"
-#include "mesh_node.hpp"
+#include "graph_node.hpp"
 
-class SceneGraph : public SubscriberSNS
+class SceneGraph
 {
 public:
     SceneGraph();
 
     void addNode(GraphNode* node);
-    void update();
-
     GraphNode* searchNode(uuid32_t nodeID);
     bool hasDescendant(GraphNode* current, GraphNode* descendant);
 

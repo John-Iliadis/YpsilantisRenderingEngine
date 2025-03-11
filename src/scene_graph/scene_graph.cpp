@@ -5,8 +5,7 @@
 #include "scene_graph.hpp"
 
 SceneGraph::SceneGraph()
-    : SubscriberSNS({Topic::Type::Renderer})
-    , mRoot(NodeType::Empty, "RootNode", {}, {}, glm::vec3(1.f), nullptr)
+    : mRoot(NodeType::Empty, "RootNode", {}, {}, glm::vec3(1.f), nullptr)
 {
 }
 
@@ -27,11 +26,6 @@ GraphNode *SceneGraph::searchNode(uuid32_t nodeID)
     }
 
     return nullptr;
-}
-
-void SceneGraph::update()
-{
-    mRoot.updateGlobalTransform();
 }
 
 void SceneGraph::addNode(GraphNode *node)

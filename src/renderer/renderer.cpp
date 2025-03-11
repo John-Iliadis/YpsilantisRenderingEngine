@@ -4,6 +4,11 @@
 
 #include "renderer.hpp"
 
+namespace ImGuizmo
+{
+    void DecomposeMatrixToComponents(const float* matrix, float* translation, float* rotation, float* scale);
+}
+
 // todo: prevent user from adding more than max lights
 Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     : SubscriberSNS({Topic::Type::Resource})
@@ -111,6 +116,7 @@ Renderer::~Renderer()
 void Renderer::update()
 {
     updateCameraUBO();
+    updateSceneGraph();
 }
 
 void Renderer::render(VkCommandBuffer commandBuffer)
@@ -772,6 +778,93 @@ void Renderer::bindTexture(VkCommandBuffer commandBuffer,
                             pipelineLayout,
                             set,
                             1, &writeDescriptorSet);
+}
+
+void Renderer::updateSceneGraph()
+{
+    updateGraphNode(mSceneGraph->root()->type(), mSceneGraph->root());
+}
+
+void Renderer::updateGraphNode(NodeType type, GraphNode *node)
+{
+    if (!node) return;
+
+    switch (type)
+    {
+        case NodeType::Empty: updateEmptyNode(node); break;
+        case NodeType::Mesh: updateMeshNode(node); break;
+        case NodeType::DirectionalLight: updateDirLightNode(node); break;
+        case NodeType::PointLight: updatePointLightNode(node); break;
+        case NodeType::SpotLight: updateSpotLightNode(node); break;
+    }
+
+    for (auto* child : node->children())
+        updateGraphNode(child->type(), child);
+}
+
+void Renderer::updateEmptyNode(GraphNode *node)
+{
+    node->updateGlobalTransform();
+}
+
+void Renderer::updateMeshNode(GraphNode *node)
+{
+    if (node->updateGlobalTransform())
+    {
+        for (uint32_t meshID : node->meshIDs())
+        {
+            Message message = Message::meshInstanceUpdate(meshID, node->id(), node->globalTransform());
+            SNS::publishMessage(Topic::Type::SceneGraph, message);
+        }
+    }
+}
+
+void Renderer::updateDirLightNode(GraphNode *node)
+{
+    if (node->updateGlobalTransform())
+    {
+        index_t lightIndex = mUuidToDirLightIndex.at(node->id());
+        DirectionalLight& light = mDirectionalLights.at(lightIndex);
+
+        glm::vec3 dummy;
+        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(node->globalTransform()),
+                                              glm::value_ptr(dummy),
+                                              glm::value_ptr(light.direction),
+                                              glm::value_ptr(dummy));
+        updateDirLight(node->id());
+    }
+}
+
+void Renderer::updatePointLightNode(GraphNode *node)
+{
+    if (node->updateGlobalTransform())
+    {
+        index_t lightIndex = mUuidToPointLightIndex.at(node->id());
+        PointLight& light = mPointLights.at(lightIndex);
+
+        glm::vec3 dummy;
+        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(node->globalTransform()),
+                                              glm::value_ptr(light.position),
+                                              glm::value_ptr(dummy),
+                                              glm::value_ptr(dummy));
+        updatePointLight(node->id());
+    }
+}
+
+void Renderer::updateSpotLightNode(GraphNode *node)
+{
+    if (node->updateGlobalTransform())
+    {
+        index_t lightIndex = mUuidToSpotLightIndex.at(node->id());
+        SpotLight& light = mSpotLights.at(lightIndex);
+
+        glm::vec3 dummy;
+        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(node->globalTransform()),
+                                              glm::value_ptr(light.position),
+                                              glm::value_ptr(light.direction),
+                                              glm::value_ptr(dummy));
+        updateSpotLight(node->id());
+    }
 }
 
 void Renderer::createColorTexture32F()

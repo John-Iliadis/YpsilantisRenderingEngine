@@ -57,7 +57,6 @@ void Editor::update(float dt)
         debugPanel();
 
     sharedPopups();
-    mSceneGraph->update();
 }
 
 void Editor::imguiEvents()
@@ -448,7 +447,7 @@ GraphNode *Editor::createMeshNode(Model &model, const SceneNode &sceneNode, Grap
         meshIDs.push_back(mesh.meshID);
     }
 
-    GraphNode* graphNode = new MeshNode(NodeType::Mesh,
+    GraphNode* graphNode = new GraphNode(NodeType::Mesh,
                                         sceneNode.name,
                                         sceneNode.translation,
                                         sceneNode.rotation,
@@ -755,8 +754,6 @@ void Editor::emptyNodeInspector(GraphNode *node)
 
 void Editor::meshNodeInspector(GraphNode *node)
 {
-    MeshNode *meshNode = dynamic_cast<MeshNode*>(node);
-
     ImGui::Text("Asset Type: Scene Node (Mesh)");
     ImGui::Text("Name: %s", node->name().c_str());
 
@@ -764,10 +761,10 @@ void Editor::meshNodeInspector(GraphNode *node)
 
     if (ImGui::CollapsingHeader("Info##meshNodeInspector", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        auto &model = *mRenderer.mModels.at(meshNode->modelID().value());
+        auto &model = *mRenderer.mModels.at(node->modelID().value());
 
         std::vector<Mesh *> meshes;
-        for (uuid32_t meshID: meshNode->meshIDs())
+        for (uuid32_t meshID: node->meshIDs())
             meshes.push_back(model.getMesh(meshID));
 
         ImGui::Text("Associated Model: %s", model.name.c_str());
@@ -969,11 +966,11 @@ void Editor::deleteNode(GraphNode *node)
     if (node->type() == NodeType::PointLight) mRenderer.deletePointLight(node->id());
     if (node->type() == NodeType::SpotLight) mRenderer.deleteSpotLight(node->id());
 
-    if (auto meshNode = dynamic_cast<MeshNode*>(node))
+    if (node->type() == NodeType::Mesh)
     {
-        for (uuid32_t meshID : meshNode->meshIDs())
+        for (uuid32_t meshID : node->meshIDs())
         {
-            Message msg = Message::RemoveMeshInstance(meshID, meshNode->id());
+            Message msg = Message::RemoveMeshInstance(meshID, node->id());
             SNS::publishMessage(Topic::Type::SceneGraph, msg);
         }
     }
@@ -1705,20 +1702,16 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
         {
             Model& model = *mRenderer.mModels.at(*node->modelID());
 
-            MeshNode* meshNode = dynamic_cast<MeshNode*>(node);
+            newNode = new GraphNode(node->type(),
+                                    node->name(),
+                                    node->localT,
+                                    node->localR,
+                                    node->localS,
+                                    node->parent(),
+                                    *node->modelID(),
+                                    node->meshIDs());
 
-            uuid32_t modelID = meshNode->modelID().value();
-            std::vector<uuid32_t> meshIDs = meshNode->meshIDs();
-
-            newNode = new MeshNode(meshNode->type(),
-                                   meshNode->name(),
-                                   node->localT,
-                                   node->localR,
-                                   node->localS,
-                                   meshNode->parent(),
-                                   modelID, meshIDs);
-
-            for (uuid32_t meshID : meshIDs)
+            for (uuid32_t meshID : node->meshIDs())
                 model.getMesh(meshID)->mesh.addInstance(newNode->id());
 
             break;

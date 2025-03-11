@@ -47,6 +47,8 @@ layout (set = 3, binding = 6) uniform sampler2D emissionTex;
 // todo: update light dir when using editor
 // todo: add light intensity
 // todo: put brdf calculation in a function
+// todo: check light dir radians vs degrees
+// todo: issues with metalness
 // PBR requires all inputs to be linear
 void main()
 {

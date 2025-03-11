@@ -35,7 +35,8 @@ public:
     GraphNode(NodeType type, const std::string& name,
               glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale,
               GraphNode* parent,
-              std::optional<uuid32_t> modelID = {});
+              std::optional<uuid32_t> modelID = {},
+              std::vector<uuid32_t> meshIds = {});
     virtual ~GraphNode();
 
     void setParent(GraphNode* parent);
@@ -46,7 +47,7 @@ public:
 
     void setName(const std::string& name);
     void calcLocalTransform();
-    virtual void updateGlobalTransform();
+    bool updateGlobalTransform();
 
     uuid32_t id() const;
     NodeType type() const;
@@ -55,6 +56,7 @@ public:
     GraphNode* parent() const;
     const glm::mat4& globalTransform() const;
     const glm::mat4& localTransform() const;
+    const std::vector<uuid32_t>& meshIDs() const;
     const std::vector<GraphNode*>& children() const;
 
 protected:
@@ -62,6 +64,7 @@ protected:
     NodeType mType;
     std::string mName;
     std::optional<uuid32_t> mModelID;
+    std::vector<uuid32_t> mMeshIDs;
     bool mDirty;
 
     glm::mat4 mLocalTransform;

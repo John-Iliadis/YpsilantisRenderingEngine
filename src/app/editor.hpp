@@ -15,7 +15,6 @@
 #include <glm/gtx/matrix_decompose.hpp>
 #include "../utils/utils.hpp"
 #include "../scene_graph/scene_graph.hpp"
-#include "../scene_graph/mesh_node.hpp"
 #include "../renderer/renderer.hpp"
 #include "../renderer/model.hpp"
 #include "../renderer/camera.hpp"

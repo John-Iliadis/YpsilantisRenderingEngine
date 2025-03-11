@@ -69,8 +69,6 @@ add_executable(${PROJECT_NAME}
         src/utils/main_thread_task_queue.hpp
         src/renderer/model_importer.cpp
         src/renderer/model_importer.hpp
-        src/scene_graph/mesh_node.cpp
-        src/scene_graph/mesh_node.hpp
         src/scene_graph/scene_graph.cpp
         src/scene_graph/scene_graph.hpp
         src/scene_graph/graph_node.cpp
