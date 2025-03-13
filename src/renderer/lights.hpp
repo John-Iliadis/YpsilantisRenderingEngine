@@ -45,13 +45,8 @@ inline glm::vec3 calcLightDir(glm::vec3 angles)
 {
     static constexpr glm::vec3 vec(0.f, 0.f, 1.f);
     angles = glm::radians(angles);
-    glm::mat3 rotation = glm::mat3(glm::yawPitchRoll(-angles.y, -angles.x, angles.z));
+    glm::mat3 rotation = glm::mat3(glm::yawPitchRoll(angles.y, angles.x, angles.z));
     return rotation * vec;
-}
-
-inline glm::vec3 calcLightDir(float x, float y, float z)
-{
-    return calcLightDir(glm::vec3(x, y, z));
 }
 
 #endif //VULKANRENDERINGENGINE_LIGHTS_HPP

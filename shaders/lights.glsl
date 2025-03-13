@@ -24,3 +24,8 @@ struct SpotLight
     float innerCutoff;
     float outerCutoff;
 };
+
+float calcAttenuation(float distance, float lightRange)
+{
+    return pow(1 - distance / lightRange, 2.0) * float(distance < lightRange);
+}
