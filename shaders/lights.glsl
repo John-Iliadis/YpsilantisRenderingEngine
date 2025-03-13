@@ -19,7 +19,8 @@ struct SpotLight
     vec4 color;
     vec4 position;
     vec4 direction;
+    float intensity;
     float range;
-    float innerAngle;
-    float outerAngle;
+    float innerCutoff;
+    float outerCutoff;
 };

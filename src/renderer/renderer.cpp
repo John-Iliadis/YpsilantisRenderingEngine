@@ -469,10 +469,11 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 0, ds.size(), ds.data(),
                                 0, nullptr);
 
-        std::array<uint32_t, 3> pushConstants {
+        std::array<uint32_t, 4> pushConstants {
             static_cast<uint32_t>(mDirectionalLights.size()),
             static_cast<uint32_t>(mPointLights.size()),
-            static_cast<uint32_t>(mSpotLights.size())
+            static_cast<uint32_t>(mSpotLights.size()),
+            static_cast<uint32_t>(mDebugNormals)
         };
 
         vkCmdPushConstants(commandBuffer,
@@ -499,7 +500,7 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
         std::array<uint32_t, 3> pushConstants {
             static_cast<uint32_t>(mDirectionalLights.size()),
             static_cast<uint32_t>(mPointLights.size()),
-            static_cast<uint32_t>(mSpotLights.size())
+            static_cast<uint32_t>(mSpotLights.size()),
         };
 
         vkCmdPushConstants(commandBuffer,
@@ -827,10 +828,14 @@ void Renderer::updateDirLightNode(GraphNode *node)
         DirectionalLight& light = mDirectionalLights.at(lightIndex);
 
         glm::vec3 dummy;
+        glm::vec3 orientation;
         ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(node->globalTransform()),
                                               glm::value_ptr(dummy),
-                                              glm::value_ptr(light.direction),
+                                              glm::value_ptr(orientation),
                                               glm::value_ptr(dummy));
+
+        light.direction = glm::vec4(calcLightDir(orientation), 0.0);
+
         updateDirLight(node->id());
     }
 }
@@ -859,10 +864,14 @@ void Renderer::updateSpotLightNode(GraphNode *node)
         SpotLight& light = mSpotLights.at(lightIndex);
 
         glm::vec3 dummy;
+        glm::vec3 orientation;
         ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(node->globalTransform()),
                                               glm::value_ptr(light.position),
-                                              glm::value_ptr(light.direction),
+                                              glm::value_ptr(orientation),
                                               glm::value_ptr(dummy));
+
+        light.direction = glm::vec4(calcLightDir(orientation), 0.f);
+
         updateSpotLight(node->id());
     }
 }
@@ -1821,7 +1830,7 @@ void Renderer::createOpaqueForwardPassPipeline()
             .pushConstantRange = VkPushConstantRange {
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .offset = 0,
-                .size = sizeof(uint32_t) * 3
+                .size = sizeof(uint32_t) * 4
             }
         },
         .renderPass = mForwardRenderpass,

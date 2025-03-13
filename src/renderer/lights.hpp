@@ -6,6 +6,7 @@
 #define VULKANRENDERINGENGINE_LIGHTS_HPP
 
 #include <glm/glm.hpp>
+#include <glm/gtx/euler_angles.hpp>
 
 enum class LightType
 {
@@ -36,8 +37,21 @@ struct SpotLight
     alignas(16) glm::vec4 direction;
     alignas(4) float intensity;
     alignas(4) float range;
-    alignas(4) float innerAngle; // rad
-    alignas(4) float outerAngle; // rad
+    alignas(4) float innerAngle;
+    alignas(4) float outerAngle;
 };
+
+inline glm::vec3 calcLightDir(glm::vec3 angles)
+{
+    static constexpr glm::vec3 vec(0.f, 0.f, 1.f);
+    angles = glm::radians(angles);
+    glm::mat3 rotation = glm::mat3(glm::yawPitchRoll(-angles.y, -angles.x, angles.z));
+    return rotation * vec;
+}
+
+inline glm::vec3 calcLightDir(float x, float y, float z)
+{
+    return calcLightDir(glm::vec3(x, y, z));
+}
 
 #endif //VULKANRENDERINGENGINE_LIGHTS_HPP

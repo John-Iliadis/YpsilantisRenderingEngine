@@ -363,6 +363,8 @@ void Editor::debugPanel()
 
     ImGui::Separator();
 
+    ImGui::Checkbox("Debug Normals", &mRenderer.mDebugNormals);
+
     ImGui::End();
 }
 
@@ -464,16 +466,18 @@ GraphNode *Editor::createMeshNode(Model &model, const SceneNode &sceneNode, Grap
 
 void Editor::addDirLight()
 {
+    constexpr glm::vec3 initialOrientation(50.f, -30.f, 0.f);
+
     DirectionalLight dirLight {
         .color = glm::vec4(1.f),
-        .direction = glm::vec4(1.f, -1.f, 1.f, 1.f),
+        .direction = glm::vec4(calcLightDir(initialOrientation), 0.f),
         .intensity = 0.5f
     };
 
     GraphNode* lightNode = new GraphNode(NodeType::DirectionalLight,
                                          "Directional Light",
                                          spawnPos(),
-                                         dirLight.direction,
+                                         initialOrientation,
                                          glm::vec3(1.f),
                                          nullptr);
 
@@ -503,10 +507,12 @@ void Editor::addPointLight()
 
 void Editor::addSpotLight()
 {
+    constexpr glm::vec3 initialOrientation(90.f, 0.f, 0.f);
+
     SpotLight spotLight {
         .color = glm::vec4(1.f),
         .position = glm::vec4(spawnPos(), 1.f),
-        .direction = glm::vec4(0.f, -1.f, 0.f, 0.f),
+        .direction = glm::vec4(calcLightDir(initialOrientation), 0.f),
         .intensity = 0.5f,
         .range = 10.f,
         .innerAngle = 45.f,
@@ -516,7 +522,7 @@ void Editor::addSpotLight()
     GraphNode* lightNode = new GraphNode(NodeType::SpotLight,
                                          "Spot Light",
                                          spotLight.position,
-                                         spotLight.direction,
+                                         initialOrientation,
                                          glm::vec3(1.f),
                                          nullptr);
 
@@ -842,7 +848,7 @@ void Editor::pointLightInspector(GraphNode *node)
         if (ImGui::DragFloat("Intensity##pointLight", &pointLight.intensity, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp))
             modified = true;
 
-        if (ImGui::DragFloat("Range##pointLight", &pointLight.range))
+        if (ImGui::DragFloat("Range##pointLight", &pointLight.range, 0.01f, 0.01f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp))
             modified = true;
     }
 
@@ -869,13 +875,13 @@ void Editor::spotLightInspector(GraphNode *node)
         if (ImGui::DragFloat("Intensity##spotLight", &spotLight.intensity, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp))
             modified = true;
 
-        if (ImGui::DragFloat("Range##spotLight", &spotLight.range))
+        if (ImGui::DragFloat("Range##spotLight", &spotLight.range, 0.01f, 0.01f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp))
             modified = true;
 
-        if (ImGui::DragFloat("Inner Angle##pointLight", &spotLight.innerAngle, 0.01f, 1.f, spotLight.outerAngle, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+        if (ImGui::DragFloat("Inner Angle##pointLight", &spotLight.innerAngle, 0.01f, 1.f, spotLight.outerAngle, "%.2f", ImGuiSliderFlags_AlwaysClamp))
             modified = true;
 
-        if (ImGui::DragFloat("Outer Angle##pointLight", &spotLight.outerAngle, 0.01f, spotLight.innerAngle, 179.f, "%.3f", ImGuiSliderFlags_AlwaysClamp))
+        if (ImGui::DragFloat("Outer Angle##pointLight", &spotLight.outerAngle, 0.01f, spotLight.innerAngle, 179.f, "%.2f", ImGuiSliderFlags_AlwaysClamp))
             modified = true;
     }
 

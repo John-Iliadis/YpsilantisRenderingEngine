@@ -278,6 +278,7 @@ private:
     bool mSsaoOn = false;
     bool mOitOn = true;
     bool mRenderGrid = true;
+    bool mDebugNormals = false;
 
 private:
     friend class Editor;
