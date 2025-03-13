@@ -247,7 +247,11 @@ VulkanBuffer ModelLoader::loadVertexData(const aiMesh &aiMesh)
         }
     }
 
-    return {mRenderDevice, vertices.size() * sizeof(Vertex), BufferType::Staging, MemoryType::HostCached, vertices.data()};
+    return {mRenderDevice,
+            vertices.size() * sizeof(Vertex),
+            BufferType::Staging,
+            MemoryType::HostCached,
+            vertices.data()};
 }
 
 VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
@@ -268,7 +272,11 @@ VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
         }
     }
 
-    return {mRenderDevice, indices.size() * sizeof(uint32_t), BufferType::Staging, MemoryType::HostCached, indices.data()};
+    return {mRenderDevice,
+            indices.size() * sizeof(uint32_t),
+            BufferType::Staging,
+            MemoryType::HostCached,
+            indices.data()};
 }
 
 std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)

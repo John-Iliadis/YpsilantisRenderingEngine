@@ -159,9 +159,9 @@ std::vector<VkVertexInputAttributeDescription> InstancedMesh::attributeDescripti
         vertAttrib(6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + sizeof(glm::vec4)),
         vertAttrib(7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + 2 * sizeof(glm::vec4)),
         vertAttrib(8, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, modelMatrix) + 3 * sizeof(glm::vec4)),
-        vertAttrib(9, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix)),
-        vertAttrib(10, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix) + sizeof(glm::vec4)),
-        vertAttrib(11, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(InstanceData, normalMatrix) + 2 * sizeof(glm::vec4)),
+        vertAttrib(9, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(InstanceData, normalMatrix)),
+        vertAttrib(10, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(InstanceData, normalMatrix) + sizeof(glm::vec3)),
+        vertAttrib(11, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(InstanceData, normalMatrix) + 2 * sizeof(glm::vec3)),
         vertAttrib(12, 1, VK_FORMAT_R32_UINT, offsetof(InstanceData, id)),
     };
 }
