@@ -25,6 +25,7 @@ constexpr uint32_t MaxSpotLights = 1024;
 
 struct TransparentNode;
 struct LightIconRenderData;
+enum class Tonemap;
 
 class Renderer : public SubscriberSNS
 {
@@ -261,6 +262,11 @@ private:
     uint32_t mOitLinkedListLength = 8;
     std::vector<LightIconRenderData> mLightIconRenderData;
 
+    bool mHDROn = false;
+    Tonemap mTonemap;
+    float mExposure = 1.f;
+    float mMaxWhite = 4.f;
+
     struct SkyboxData
     {
         alignas(4) int32_t flipX = false;
@@ -296,6 +302,26 @@ struct LightIconRenderData
     glm::vec3 pos;
     VulkanTexture* icon;
 };
+
+enum class Tonemap
+{
+    Reinhard = 1,
+    ReinhardExtended = 2,
+    NarkowiczAces = 3,
+    HillAces = 4
+};
+
+inline const char* toStr(Tonemap t)
+{
+    switch (t)
+    {
+        case Tonemap::Reinhard: return "Reinhard";
+        case Tonemap::ReinhardExtended: return "ReinhardExtended";
+        case Tonemap::NarkowiczAces: return "NarkowiczAces";
+        case Tonemap::HillAces: return "HillAces";
+        default: return "Unknown";
+    }
+}
 
 #include "renderer.inl"
 

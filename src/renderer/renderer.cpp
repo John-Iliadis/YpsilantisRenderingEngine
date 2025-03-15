@@ -9,7 +9,6 @@ namespace ImGuizmo
     void DecomposeMatrixToComponents(const float* matrix, float* translation, float* rotation, float* scale);
 }
 
-// todo: prevent user from adding more than max lights
 Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     : SubscriberSNS({Topic::Type::Resource})
     , mRenderDevice(renderDevice)
@@ -18,6 +17,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     , mWidth(InitialViewportWidth)
     , mHeight(InitialViewportHeight)
     , mCameraUBO(renderDevice, sizeof(CameraRenderData), BufferType::Uniform, MemoryType::HostCoherent)
+    , mTonemap(Tonemap::ReinhardExtended)
 {
     if (saveData.contains("viewport"))
     {
@@ -561,11 +561,29 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPostProcessingPipeline);
 
+    struct {
+        uint32_t mHDROn;
+        float exposure;
+        float maxWhite;
+        uint32_t tonemap;
+    } pushConstants {
+        static_cast<uint32_t>(mHDROn),
+        mExposure,
+        mMaxWhite,
+        static_cast<uint32_t>(mTonemap)
+    };
+
     vkCmdBindDescriptorSets(commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             mPostProcessingPipeline,
                             0, 1, &mColor32FDs,
                             0, nullptr);
+
+    vkCmdPushConstants(commandBuffer,
+                       mPostProcessingPipeline,
+                       VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(pushConstants),
+                       &pushConstants);
 
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
@@ -2063,6 +2081,11 @@ void Renderer::createPostProcessingPipeline()
         .pipelineLayout = {
             .dsLayouts = {
                 mSingleImageDsLayout
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(float) * 2 + sizeof(uint32_t) * 2
             }
         },
         .renderPass = mPostProcessingRenderpass,

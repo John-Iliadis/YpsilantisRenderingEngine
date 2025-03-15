@@ -244,9 +244,36 @@ void Editor::rendererPanel()
             ImGui::OpenPopup("skyboxImportPopup");
     }
 
+    if (ImGui::CollapsingHeader("HDR", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("Enable##HDR", &mRenderer.mHDROn);
+        ImGui::Separator();
+
+        if (ImGui::BeginCombo("Tonemapping", toStr(mRenderer.mTonemap)))
+        {
+            if (ImGui::Selectable("Reinhard", mRenderer.mTonemap == Tonemap::Reinhard))
+                mRenderer.mTonemap = Tonemap::Reinhard;
+            if (ImGui::Selectable("Reinhard Extended", mRenderer.mTonemap == Tonemap::ReinhardExtended))
+                mRenderer.mTonemap = Tonemap::ReinhardExtended;
+            if (ImGui::Selectable("Narkowicz Aces", mRenderer.mTonemap == Tonemap::NarkowiczAces))
+                mRenderer.mTonemap = Tonemap::NarkowiczAces;
+            if (ImGui::Selectable("Hill Aces", mRenderer.mTonemap == Tonemap::HillAces))
+                mRenderer.mTonemap = Tonemap::HillAces;
+
+            ImGui::EndCombo();
+        }
+
+        ImGui::DragFloat("Exposure", &mRenderer.mExposure, 0.001f, 0.f, FLT_MAX, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+
+        if (mRenderer.mTonemap == Tonemap::ReinhardExtended)
+        {
+            ImGui::DragFloat("Max White", &mRenderer.mMaxWhite, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        }
+    }
+
     if (ImGui::CollapsingHeader("Order Independent Transparency", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Checkbox("Enable", &mRenderer.mOitOn);
+        ImGui::Checkbox("Enable##OIT", &mRenderer.mOitOn);
         ImGui::Separator();
 
         std::string val = std::to_string(mRenderer.mOitLinkedListLength) + "x";
