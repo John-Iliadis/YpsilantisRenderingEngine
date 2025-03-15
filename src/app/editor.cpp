@@ -661,7 +661,7 @@ void Editor::modelInspector(uuid32_t modelID)
             {
                 for (uint32_t i = 0; i < model.materials.size(); ++i)
                 {
-                    const std::string& matName = model.materialNames.at(i);
+                    std::string matName = std::format("{}##{}", model.materialNames.at(i), i);
 
                     if (ImGui::Selectable(matName.c_str(), i == sSelectedMatIndex.at(modelID)))
                         sSelectedMatIndex.at(modelID) = i;

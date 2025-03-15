@@ -144,7 +144,9 @@ void ModelLoader::loadMaterials(const aiScene& aiScene)
         const aiMaterial& aiMaterial = *aiScene.mMaterials[i];
 
         materials.push_back(loadMaterial(aiMaterial));
-        materialNames.push_back(aiMaterial.GetName().data);
+
+        aiString matName = aiMaterial.GetName();
+        materialNames.push_back(matName.length? matName.data : "Unnamed Material");
     }
 }
 
@@ -369,7 +371,6 @@ std::optional<std::string> ModelLoader::getTextureName(const aiMaterial &aiMater
     return std::nullopt;
 }
 
-// todo: go through all the texture types
 Material ModelLoader::loadMaterial(const aiMaterial &aiMaterial)
 {
     auto getTexIndex = [this, &aiMaterial] (aiTextureType type) {
