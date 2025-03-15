@@ -156,10 +156,10 @@ void ModelLoader::getTextureNames(const aiScene& aiScene)
 
         auto baseColTexName = getTextureName(material, aiTextureType_BASE_COLOR);
         auto normalTexName = getTextureName(material, aiTextureType_NORMALS);
-        auto emissionTexName = getTextureName(material, aiTextureType_EMISSION_COLOR);
+        auto emissionTexName = getTextureName(material, aiTextureType_EMISSIVE);
         auto metallicTexName = getTextureName(material, aiTextureType_METALNESS);
         auto roughnessTexName = getTextureName(material, aiTextureType_DIFFUSE_ROUGHNESS);
-        auto aoTexName = getTextureName(material, aiTextureType_AMBIENT_OCCLUSION);
+        auto aoTexName = getTextureName(material, aiTextureType_LIGHTMAP);
 
         if (baseColTexName) mTextureNames.insert(*baseColTexName);
         if (normalTexName) mTextureNames.insert(*normalTexName);
@@ -369,6 +369,7 @@ std::optional<std::string> ModelLoader::getTextureName(const aiMaterial &aiMater
     return std::nullopt;
 }
 
+// todo: go through all the texture types
 Material ModelLoader::loadMaterial(const aiMaterial &aiMaterial)
 {
     auto getTexIndex = [this, &aiMaterial] (aiTextureType type) {
@@ -383,12 +384,13 @@ Material ModelLoader::loadMaterial(const aiMaterial &aiMaterial)
         .metallicTexIndex = getTexIndex(aiTextureType_METALNESS),
         .roughnessTexIndex = getTexIndex(aiTextureType_DIFFUSE_ROUGHNESS),
         .normalTexIndex = getTexIndex(aiTextureType_NORMALS),
-        .aoTexIndex = getTexIndex(aiTextureType_AMBIENT_OCCLUSION),
+        .aoTexIndex = getTexIndex(aiTextureType_LIGHTMAP),
         .emissionTexIndex = getTexIndex(aiTextureType_EMISSIVE),
         .metallicFactor = getMetallicFactor(aiMaterial),
         .roughnessFactor = getRoughnessFactor(aiMaterial),
+        .emissionFactor = 1.f,
         .baseColorFactor = getBaseColorFactor(aiMaterial),
-        .emissionFactor = getEmissionFactor(aiMaterial),
+        .emissionColor = getEmissionFactor(aiMaterial),
         .tiling = glm::vec4(1.f),
         .offset = glm::vec3(0.f)
     };

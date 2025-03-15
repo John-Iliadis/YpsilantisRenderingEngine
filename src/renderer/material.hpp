@@ -17,8 +17,9 @@ struct alignas(64) Material
     alignas(4) int32_t emissionTexIndex;
     alignas(4) float metallicFactor;
     alignas(4) float roughnessFactor;
+    alignas(4) float emissionFactor;
     alignas(16) glm::vec4 baseColorFactor;
-    alignas(16) glm::vec4 emissionFactor;
+    alignas(16) glm::vec4 emissionColor;
     alignas(8) glm::vec2 tiling;
     alignas(8) glm::vec2 offset;
 };

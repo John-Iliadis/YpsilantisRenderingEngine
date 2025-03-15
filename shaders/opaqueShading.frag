@@ -55,7 +55,7 @@ void main()
     float roughness = texture(roughnessTex, texCoords).g * material.roughnessFactor;
     vec3 normalSample = normalize(texture(normalTex, texCoords).xyz * 2.0 - 1.0);
     float ao = texture(aoTex, texCoords).r;
-    vec3 emission = texture(emissionTex, texCoords).rgb * material.emissionFactor.rgb;
+    vec3 emission = texture(emissionTex, texCoords).rgb * material.emissionColor.rgb * material.emissionFactor;
 
     vec3 normal = normalize(vTBN * normalSample);
     vec3 viewVec = normalize(cameraPos.xyz - vFragWorldPos);
@@ -104,6 +104,6 @@ void main()
 
     vec3 ambient = vec3(0.1) * baseColor * ao;
 
-    outFragColor = vec4(L_0 + ambient, 1.0) * (1.0 - float(debugNormals)) +
+    outFragColor = vec4(emission + L_0 + ambient, 1.0)  * (1.0 - float(debugNormals)) +
                    vec4(normal * 0.5 + 0.5, 1.0) * float(debugNormals);
 }

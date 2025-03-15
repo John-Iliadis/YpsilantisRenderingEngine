@@ -9,8 +9,9 @@ struct Material
     int emissionTexIndex;
     float metallicFactor;
     float roughnessFactor;
+    float emissionFactor;
     vec4 baseColorFactor;
-    vec4 emissionFactor;
+    vec4 emissionColor;
     vec2 tiling;
     vec2 offset;
 };

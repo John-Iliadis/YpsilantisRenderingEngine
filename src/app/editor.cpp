@@ -665,13 +665,16 @@ void Editor::modelInspector(uuid32_t modelID)
             if (ImGui::ColorEdit4("Base Color", glm::value_ptr(mat.baseColorFactor), sColorEditFlags))
                 matNeedsUpdate = true;
 
-            if (ImGui::ColorEdit3("Emission", glm::value_ptr(mat.emissionFactor), sColorEditFlags))
+            if (ImGui::ColorEdit3("Emission Color", glm::value_ptr(mat.emissionColor), sColorEditFlags))
                 matNeedsUpdate = true;
 
             if (ImGui::SliderFloat("Metallic", &mat.metallicFactor, 0.f, 1.f))
                 matNeedsUpdate = true;
 
             if (ImGui::SliderFloat("Roughness", &mat.roughnessFactor, 0.f, 1.f))
+                matNeedsUpdate = true;
+
+            if (ImGui::DragFloat("Emission Factor", &mat.emissionFactor, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp))
                 matNeedsUpdate = true;
 
             ImGui::SeparatorText("Texture Coordinates");
