@@ -47,6 +47,7 @@ layout (set = 3, binding = 6) uniform sampler2D emissionTex;
 
 // todo: put brdf calculation in a function
 // todo: issues with metalness
+// todo: optimize vector miltiplication order
 // PBR requires all inputs to be linear
 void main()
 {
@@ -115,7 +116,7 @@ void main()
         vec3 posToLightVec = spotLights[i].position.xyz - vFragWorldPos;
         vec3 lightVec = normalize(posToLightVec);
         float dist = length(posToLightVec);
-        float cosTheta = dot(normalize(spotLights[i].direction.xyz), lightVec);
+        float cosTheta = dot(normalize(-spotLights[i].direction.xyz), lightVec); // -spotLights[i].direction.xyz
         float epsilon = innerCutoff - outerCutoff;
         float intensity = clamp((cosTheta - outerCutoff) / epsilon, 0.0, 1.0);
         float attenuation = calcAttenuation(dist, spotLights[i].range);

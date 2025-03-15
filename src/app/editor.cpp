@@ -466,12 +466,12 @@ GraphNode *Editor::createMeshNode(Model &model, const SceneNode &sceneNode, Grap
 
 void Editor::addDirLight()
 {
-    constexpr glm::vec3 initialOrientation(50.f, -30.f, 0.f);
+    constexpr glm::vec3 initialOrientation(-50.f, 30.f, -20.f);
 
     DirectionalLight dirLight {
         .color = glm::vec4(1.f),
         .direction = glm::vec4(calcLightDir(initialOrientation), 0.f),
-        .intensity = 0.5f
+        .intensity = 1.f
     };
 
     GraphNode* lightNode = new GraphNode(NodeType::DirectionalLight,
@@ -490,7 +490,7 @@ void Editor::addPointLight()
     PointLight pointLight {
         .color = glm::vec4(1.f),
         .position = glm::vec4(spawnPos(), 1.f),
-        .intensity = 0.5f,
+        .intensity = 1.f,
         .range = 10.f
     };
 
@@ -507,13 +507,13 @@ void Editor::addPointLight()
 
 void Editor::addSpotLight()
 {
-    constexpr glm::vec3 initialOrientation(90.f, 0.f, 0.f);
+    constexpr glm::vec3 initialOrientation(0.f, 0.f, 0.f);
 
     SpotLight spotLight {
         .color = glm::vec4(1.f),
         .position = glm::vec4(spawnPos(), 1.f),
         .direction = glm::vec4(calcLightDir(initialOrientation), 0.f),
-        .intensity = 0.5f,
+        .intensity = 1.f,
         .range = 10.f,
         .innerAngle = 45.f,
         .outerAngle = 60.f

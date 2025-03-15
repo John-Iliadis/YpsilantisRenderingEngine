@@ -41,12 +41,11 @@ struct SpotLight
     alignas(4) float outerAngle;
 };
 
-inline glm::vec3 calcLightDir(glm::vec3 angles)
+inline glm::vec3 calcLightDir(const glm::vec3& angles)
 {
-    static constexpr glm::vec3 vec(0.f, 0.f, 1.f);
-    angles = glm::radians(angles);
-    glm::mat3 rotation = glm::mat3(glm::yawPitchRoll(angles.y, angles.x, angles.z));
-    return rotation * vec;
+    static constexpr glm::vec3 sInitialDir(0.f, 0.f, -1.f);
+    glm::mat3 rotation = glm::toMat3(glm::quat(glm::radians(angles)));
+    return rotation * sInitialDir;
 }
 
 #endif //VULKANRENDERINGENGINE_LIGHTS_HPP
