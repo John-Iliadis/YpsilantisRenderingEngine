@@ -1786,7 +1786,7 @@ void Renderer::createOpaqueForwardPassPipeline()
     PipelineSpecification specification {
         .shaderStages = {
             .vertShaderPath = "shaders/mesh.vert.spv",
-            .fragShaderPath = "shaders/pbr.frag.spv"
+            .fragShaderPath = "shaders/opaqueShading.frag.spv"
         },
         .vertexInput = {
             .bindings = InstancedMesh::bindingDescriptions(),

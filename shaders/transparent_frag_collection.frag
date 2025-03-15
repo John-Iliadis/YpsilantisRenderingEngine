@@ -1,13 +1,12 @@
 #version 460 core
 
 // shadow mapping
-// lighting
 // ibl
 
 #include "transparent_node.glsl"
 #include "material.glsl"
 #include "lights.glsl"
-#include "brdf.glsl"
+#include "renderingEquations.glsl"
 
 layout (early_fragment_tests) in;
 
