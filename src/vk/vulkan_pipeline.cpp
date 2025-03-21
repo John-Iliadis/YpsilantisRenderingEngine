@@ -180,24 +180,26 @@ void VulkanGraphicsPipeline::createPipeline(const PipelineSpecification &specifi
         .stencilTestEnable = VK_FALSE
     };
 
-    VkPipelineColorBlendAttachmentState colorBlendAttachmentState {
-        .blendEnable = specification.blending.enable,
-        .srcColorBlendFactor = specification.blending.srcColorBlendFactor,
-        .dstColorBlendFactor = specification.blending.dstColorBlendFactor,
-        .colorBlendOp = specification.blending.colorBlendOp,
-        .srcAlphaBlendFactor = specification.blending.srcAlphaBlendFactor,
-        .dstAlphaBlendFactor = specification.blending.dstAlphaBlendFactor,
-        .alphaBlendOp = specification.blending.alphaBlendOp,
-        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
-                          VK_COLOR_COMPONENT_G_BIT |
-                          VK_COLOR_COMPONENT_B_BIT |
-                          VK_COLOR_COMPONENT_A_BIT
-    };
+    std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachmentStates(specification.blendStates.size());
+    for (size_t i = 0; i < colorBlendAttachmentStates.size(); ++i)
+    {
+        colorBlendAttachmentStates.at(i).blendEnable = specification.blendStates.at(i).enable;
+        colorBlendAttachmentStates.at(i).srcColorBlendFactor = specification.blendStates.at(i).srcColorBlendFactor;
+        colorBlendAttachmentStates.at(i).dstColorBlendFactor = specification.blendStates.at(i).dstColorBlendFactor;
+        colorBlendAttachmentStates.at(i).colorBlendOp = specification.blendStates.at(i).colorBlendOp;
+        colorBlendAttachmentStates.at(i).srcAlphaBlendFactor = specification.blendStates.at(i).srcAlphaBlendFactor;
+        colorBlendAttachmentStates.at(i).dstAlphaBlendFactor = specification.blendStates.at(i).dstAlphaBlendFactor;
+        colorBlendAttachmentStates.at(i).alphaBlendOp = specification.blendStates.at(i).alphaBlendOp;
+        colorBlendAttachmentStates.at(i).colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                                                          VK_COLOR_COMPONENT_G_BIT |
+                                                          VK_COLOR_COMPONENT_B_BIT |
+                                                          VK_COLOR_COMPONENT_A_BIT;
+    }
 
     VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &colorBlendAttachmentState
+        .attachmentCount = static_cast<uint32_t>(colorBlendAttachmentStates.size()),
+        .pAttachments = colorBlendAttachmentStates.data()
     };
 
     VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo {

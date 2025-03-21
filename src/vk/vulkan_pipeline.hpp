@@ -63,8 +63,9 @@ struct PipelineSpecification
         VkBlendFactor srcAlphaBlendFactor;
         VkBlendFactor dstAlphaBlendFactor;
         VkBlendOp alphaBlendOp;
-    } blending;
+    };
 
+    std::vector<BlendState> blendStates;
     std::vector<VkDynamicState> dynamicStates;
 
     struct PipelineLayout {

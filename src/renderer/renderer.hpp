@@ -85,6 +85,7 @@ private:
     void createColorTexture32F();
     void createColorTexture8U();
     void createDepthTexture();
+    void createPosTexture();
     void createNormalTexture();
     void createSsaoTexture();
 
@@ -147,8 +148,8 @@ private:
 
 private:
     const VulkanRenderDevice& mRenderDevice;
-    SaveData& mSaveData;
     std::shared_ptr<SceneGraph> mSceneGraph;
+    SaveData& mSaveData;
 
     uint32_t mWidth;
     uint32_t mHeight;
@@ -169,6 +170,7 @@ private:
     VulkanTexture mColorTexture32F;
     VulkanTexture mColorTexture8U;
     VulkanTexture mDepthTexture;
+    VulkanTexture mPosTexture;
     VulkanTexture mNormalTexture;
     VulkanTexture mSsaoTexture;
     VulkanTexture mSkyboxTexture;

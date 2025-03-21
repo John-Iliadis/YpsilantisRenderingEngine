@@ -31,6 +31,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 
     createColorTexture32F();
     createDepthTexture();
+    createPosTexture();
     createNormalTexture();
     createSsaoTexture();
     createColorTexture8U();
@@ -198,6 +199,7 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createOitTextures();
     createColorTexture32F();
     createDepthTexture();
+    createPosTexture();
     createNormalTexture();
     createSsaoTexture();
     createColorTexture8U();
@@ -293,9 +295,10 @@ void Renderer::deleteSpotLight(uuid32_t id)
 
 void Renderer::executePrepass(VkCommandBuffer commandBuffer)
 {
+    static constexpr VkClearValue posClear {.color = {0.f, 0.f, 0.f, 0.f}};
     static constexpr VkClearValue normalClear {.color = {0.f, 0.f, 0.f, 0.f}};
     static constexpr VkClearValue depthClear {.depthStencil = {.depth = 1.f, .stencil = 0}};
-    static constexpr std::array<VkClearValue, 2> clears {normalClear, depthClear};
+    static constexpr std::array<VkClearValue, 3> clears {posClear, normalClear, depthClear};
 
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -965,6 +968,30 @@ void Renderer::createDepthTexture()
     mDepthTexture.setDebugName("Renderer::mDepthTexture");
 }
 
+void Renderer::createPosTexture()
+{
+    TextureSpecification specification{
+        .format = VK_FORMAT_R16G16B16A16_SFLOAT,
+        .width = mWidth,
+        .height = mHeight,
+        .layerCount = 1,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT |
+                      VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Nearest,
+        .minFilter = TextureMinFilter::Nearest,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .generateMipMaps = false
+    };
+
+    mPosTexture = VulkanTexture(mRenderDevice, specification);
+    mPosTexture.setDebugName("Renderer::mPosTexture");
+}
+
 void Renderer::createNormalTexture()
 {
     TextureSpecification specification{
@@ -1110,6 +1137,15 @@ void Renderer::createLightsDsLayout()
 
 void Renderer::createPrepassRenderpass()
 {
+    VkAttachmentDescription posAttachment {
+        .format = mPosTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
     VkAttachmentDescription normalAttachment {
         .format = mNormalTexture.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -1128,25 +1164,36 @@ void Renderer::createPrepassRenderpass()
         .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     };
 
-    std::array<VkAttachmentDescription, 2> attachments {{
+    std::array<VkAttachmentDescription, 3> attachments {{
+        posAttachment,
         normalAttachment,
         depthAttachment,
     }};
 
-    VkAttachmentReference normalAttachmentRef {
+    VkAttachmentReference posAttachmentRef {
         .attachment = 0,
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
-    VkAttachmentReference depthAttachmentRef {
+    VkAttachmentReference normalAttachmentRef {
         .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentReference depthAttachmentRef {
+        .attachment = 2,
         .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    std::array<VkAttachmentReference, 2> subpassColorAttachmentRefs {
+        posAttachmentRef,
+        normalAttachmentRef
     };
 
     VkSubpassDescription subpass {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &normalAttachmentRef,
+        .colorAttachmentCount = static_cast<uint32_t>(subpassColorAttachmentRefs.size()),
+        .pColorAttachments = subpassColorAttachmentRefs.data(),
         .pDepthStencilAttachment = &depthAttachmentRef
     };
 
@@ -1167,7 +1214,8 @@ void Renderer::createPrepassFramebuffer()
 {
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
 
-    std::array<VkImageView, 2> imageViews {
+    std::array<VkImageView, 3> imageViews {
+        mPosTexture.imageView,
         mNormalTexture.imageView,
         mDepthTexture.imageView,
     };
@@ -1217,8 +1265,9 @@ void Renderer::createPrepassPipeline()
             .enableDepthWrite = VK_TRUE,
             .depthCompareOp = VK_COMPARE_OP_LESS
         },
-        .blending = {
-            .enable = false
+        .blendStates = {
+            {.enable = false},
+            {.enable = false}
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -1346,8 +1395,8 @@ void Renderer::createSkyboxPipeline()
             .enableDepthWrite = VK_FALSE,
             .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL
         },
-        .blending = {
-            .enable = false
+        .blendStates = {
+            {.enable = false}
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -1452,8 +1501,8 @@ void Renderer::createSsaoPipeline()
             .enableDepthTest = VK_FALSE,
             .enableDepthWrite = VK_FALSE,
         },
-        .blending = {
-            .enable = false
+        .blendStates = {
+            {.enable = false}
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -1829,8 +1878,8 @@ void Renderer::createOpaqueForwardPassPipeline()
             .enableDepthWrite = VK_FALSE,
             .depthCompareOp = VK_COMPARE_OP_EQUAL
         },
-        .blending = {
-            .enable = false
+        .blendStates = {
+            {.enable = false}
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -1929,6 +1978,9 @@ void Renderer::createOitTransparencyResolutionPipeline()
         .multisampling = {
             .samples = VK_SAMPLE_COUNT_1_BIT
         },
+        .blendStates = {
+            {.enable = false}
+        },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR
@@ -1965,14 +2017,16 @@ void Renderer::createForwardPassBlendPipeline()
         .multisampling = {
             .samples = VK_SAMPLE_COUNT_1_BIT
         },
-        .blending = {
-            .enable = true,
-            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-            .alphaBlendOp = VK_BLEND_OP_ADD
+        .blendStates = {
+            {
+                .enable = true,
+                .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+                .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                .colorBlendOp = VK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+                .alphaBlendOp = VK_BLEND_OP_ADD
+            }
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -2071,8 +2125,8 @@ void Renderer::createPostProcessingPipeline()
             .enableDepthTest = VK_FALSE,
             .enableDepthWrite = VK_FALSE,
         },
-        .blending = {
-            .enable = false
+        .blendStates = {
+            {.enable = false}
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -2202,14 +2256,16 @@ void Renderer::createGridPipeline()
             .enableDepthWrite = VK_FALSE,
             .depthCompareOp = VK_COMPARE_OP_LESS
         },
-        .blending = {
-            .enable = true,
-            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-            .alphaBlendOp = VK_BLEND_OP_ADD,
+        .blendStates = {
+            {
+                .enable = true,
+                .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+                .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                .colorBlendOp = VK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+                .alphaBlendOp = VK_BLEND_OP_ADD
+            }
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -2373,14 +2429,16 @@ void Renderer::createLightIconPipeline()
             .enableDepthTest = VK_FALSE,
             .enableDepthWrite = VK_FALSE,
         },
-        .blending = {
-            .enable = true,
-            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-            .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-            .alphaBlendOp = VK_BLEND_OP_ADD
+        .blendStates = {
+            {
+                .enable = true,
+                .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+                .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                .colorBlendOp = VK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+                .alphaBlendOp = VK_BLEND_OP_ADD
+            }
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
