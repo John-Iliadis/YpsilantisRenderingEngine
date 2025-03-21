@@ -2,7 +2,8 @@
 
 #include "vertex_input.glsl"
 
-layout (location = 0) out vec3 vNormal;
+layout (location = 0) out vec3 vViewSpacePos;
+layout (location = 1) out vec3 vViewSpaceNormal;
 
 layout (set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -16,6 +17,7 @@ layout (set = 0, binding = 0) uniform CameraUBO {
 
 void main()
 {
-    vNormal = normalMat * normal;
+    vViewSpacePos = vec3(view * modelMat * vec4(position, 1.0));
+    vViewSpaceNormal = mat3(view) * normalMat * normal;
     gl_Position = viewProj * modelMat * vec4(position, 1.0);
 }
