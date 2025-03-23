@@ -19,5 +19,6 @@ void main()
 {
     vViewSpacePos = vec3(view * modelMat * vec4(position, 1.0));
     vViewSpaceNormal = mat3(view) * normalMat * normal;
+
     gl_Position = viewProj * modelMat * vec4(position, 1.0);
 }

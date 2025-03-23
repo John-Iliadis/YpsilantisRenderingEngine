@@ -33,13 +33,13 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createDepthTexture();
     createPosTexture();
     createNormalTexture();
-    createSsaoTexture();
+    createSsaoTextures();
     createColorTexture8U();
 
     createSingleImageDsLayout();
     createCameraRenderDataDsLayout();
     createMaterialsDsLayout();
-    createDepthNormalInputDsLayout();
+    createSsaoDsLayout();
     createOitResourcesDsLayout();
     createSingleInputAttachmentDsLayout();
     createLightsDsLayout();
@@ -52,9 +52,16 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createSkyboxFramebuffer();
     createSkyboxPipeline();
 
+    createSsaoKernel(32);
+    createSsaoKernelSSBO();
+    updateSsaoKernelSSBO();
+    createSsaoNoiseTexture();
     createSsaoRenderpass();
     createSsaoFramebuffer();
+    createSsaoBlurRenderpass();
+    createSsaoBlurFramebuffer();
     createSsaoPipeline();
+    createSsaoBlurPipeline();
 
     createOitTextures();
     createOitBuffers();
@@ -88,7 +95,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 
     createCameraDs();
     createSingleImageDescriptorSets();
-    createDepthNormalDs();
+    createSsaoDs();
     createColor32FInputDs();
     createLightsDs();
 }
@@ -101,6 +108,7 @@ Renderer::~Renderer()
     vkDestroyFramebuffer(mRenderDevice.device, mSkyboxFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mForwardPassFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mSsaoFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mSsaoBlurFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mGridFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mLightIconFramebuffer, nullptr);
@@ -108,6 +116,7 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSkyboxRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSsaoRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mSsaoBlurRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mForwardRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mGridRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
@@ -127,6 +136,7 @@ void Renderer::render(VkCommandBuffer commandBuffer)
     executePrepass(commandBuffer);
     executeSkyboxRenderpass(commandBuffer);
     executeSsaoRenderpass(commandBuffer);
+    executeSsaoBlurRenderpass(commandBuffer);
     executeForwardRenderpass(commandBuffer);
     executePostProcessingRenderpass(commandBuffer);
     executeGridRenderpass(commandBuffer);
@@ -186,8 +196,9 @@ void Renderer::resize(uint32_t width, uint32_t height)
     mCamera.resize(width, height);
 
     std::vector<VkDescriptorSet> freeDs {
-        mDepthNormalDs,
         mSsaoDs,
+        mSsaoTextureDs,
+        mSsaoBlurTextureDs,
         mDepthDs,
         mColor32FDs,
         mColor8UDs,
@@ -201,19 +212,20 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createDepthTexture();
     createPosTexture();
     createNormalTexture();
-    createSsaoTexture();
+    createSsaoTextures();
     createColorTexture8U();
 
     createPrepassFramebuffer();
     createSkyboxFramebuffer();
     createSsaoFramebuffer();
+    createSsaoBlurFramebuffer();
     createForwardFramebuffer();
     createGridFramebuffer();
     createPostProcessingFramebuffer();
     createLightIconFramebuffer();
 
     createSingleImageDescriptorSets();
-    createDepthNormalDs();
+    createSsaoDs();
     createColor32FInputDs();
 
     createOitBuffers();
@@ -378,7 +390,7 @@ void Renderer::executeSkyboxRenderpass(VkCommandBuffer commandBuffer)
 
 void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
 {
-    VkClearValue ssaoClear {.color = {0.f}};
+    VkClearValue ssaoClear {.color = {1.f}};
 
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -394,7 +406,18 @@ void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
 
     std::array<VkDescriptorSet, 2> descriptorSets {
         mCameraDs,
-        mDepthNormalDs
+        mSsaoDs
+    };
+
+    struct {
+        uint32_t ssaoKernelSize;
+        float ssaoRadius;
+        float ssaoIntensity;
+        float ssaoBias;
+        glm::vec2 screenSize;
+        float noiseTextureSize;
+    } pushConstants {static_cast<uint32_t>(mSsaoKernel.size()), mSsaoRadius, mSsaoIntensity,
+        mSsaoDepthBias, glm::vec2(mWidth, mHeight), SsaoNoiseTextureSize
     };
 
     beginDebugLabel(commandBuffer, "SSAO Renderpass");
@@ -406,6 +429,51 @@ void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
                             mSsaoPipeline,
                             0, descriptorSets.size(), descriptorSets.data(),
                             0, nullptr);
+
+    vkCmdPushConstants(commandBuffer,
+                       mSsaoPipeline,
+                       VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(pushConstants),
+                       &pushConstants);
+
+    if (mSsaoOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer)
+{
+    VkClearValue ssaoClear {.color = {1.f}};
+
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mSsaoBlurRenderpass,
+        .framebuffer = mSsaoBlurFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {.width = mWidth, .height = mHeight}
+        },
+        .clearValueCount = 1,
+        .pClearValues = &ssaoClear
+    };
+
+    beginDebugLabel(commandBuffer, "SSAO Blur Renderpass");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSsaoBlurPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mSsaoBlurPipeline,
+                            0, 1, &mSsaoTextureDs,
+                            0, nullptr);
+
+    glm::vec2 texelSize = 1.f / glm::vec2(mWidth, mHeight);
+    vkCmdPushConstants(commandBuffer,
+                       mSsaoBlurPipeline,
+                       VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(glm::vec2),
+                       &texelSize);
 
     if (mSsaoOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
@@ -465,18 +533,20 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
     { // subpass 0: opaque pass
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mOpaqueForwardPassPipeline);
 
-        std::array<VkDescriptorSet, 3> ds {mCameraDs, mSsaoDs, mLightsDs};
+        std::array<VkDescriptorSet, 3> ds {mCameraDs, mSsaoBlurTextureDs, mLightsDs};
         vkCmdBindDescriptorSets(commandBuffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 mOpaqueForwardPassPipeline,
                                 0, ds.size(), ds.data(),
                                 0, nullptr);
 
-        std::array<uint32_t, 4> pushConstants {
+        std::array<uint32_t, 6> pushConstants {
             static_cast<uint32_t>(mDirectionalLights.size()),
             static_cast<uint32_t>(mPointLights.size()),
             static_cast<uint32_t>(mSpotLights.size()),
-            static_cast<uint32_t>(mDebugNormals)
+            static_cast<uint32_t>(mDebugNormals),
+            mWidth,
+            mHeight
         };
 
         vkCmdPushConstants(commandBuffer,
@@ -1016,7 +1086,7 @@ void Renderer::createNormalTexture()
     mNormalTexture.setDebugName("Renderer::mNormalTexture");
 }
 
-void Renderer::createSsaoTexture()
+void Renderer::createSsaoTextures()
 {
     TextureSpecification specification {
         .format = VK_FORMAT_R32_SFLOAT,
@@ -1037,6 +1107,9 @@ void Renderer::createSsaoTexture()
 
     mSsaoTexture = VulkanTexture(mRenderDevice, specification);
     mSsaoTexture.setDebugName("Renderer::mSsaoTexture");
+
+    mSsaoBlurTexture = VulkanTexture(mRenderDevice, specification);
+    mSsaoBlurTexture.setDebugName("Renderer::mSsaoBlurTexture");
 }
 
 void Renderer::createSingleImageDsLayout()
@@ -1082,17 +1155,19 @@ void Renderer::createMaterialsDsLayout()
     mMaterialsDsLayout = VulkanDsLayout(mRenderDevice, specification);
 }
 
-void Renderer::createDepthNormalInputDsLayout()
+void Renderer::createSsaoDsLayout()
 {
     DsLayoutSpecification specification {
         .bindings = {
             binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
-            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
         },
-        .debugName = "Renderer::mDepthNormalDsLayout"
+        .debugName = "Renderer::mSSAODsLayout"
     };
 
-    mDepthNormalDsLayout = VulkanDsLayout(mRenderDevice, specification);
+    mSSAODsLayout = VulkanDsLayout(mRenderDevice, specification);
 }
 
 void Renderer::createOitResourcesDsLayout()
@@ -1421,6 +1496,75 @@ void Renderer::createSkyboxPipeline()
     mSkyboxPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
+void Renderer::createSsaoKernel(uint32_t sampleCount)
+{
+    mSsaoKernel.resize(sampleCount);
+
+    for (size_t i = 0, count = mSsaoKernel.size(); i < count; ++i)
+    {
+        mSsaoKernel.at(i) = glm::vec4 {
+            mSsaoDistribution(mSsaoRandomEngine) * 2.f - 1.f, // -> [-1, 1]
+            mSsaoDistribution(mSsaoRandomEngine) * 2.f - 1.f, // -> [-1, 1]
+            mSsaoDistribution(mSsaoRandomEngine), // -> [0, 1]
+            0.f
+        };
+
+        mSsaoKernel.at(i) = glm::normalize(mSsaoKernel.at(i));
+        mSsaoKernel.at(i) *= mSsaoDistribution(mSsaoRandomEngine);
+
+        float scale = static_cast<float>(i) / count;
+        scale = glm::lerp(0.1f, 1.f, glm::pow(scale, 2.f));
+        mSsaoKernel.at(i) *= scale;
+    }
+}
+
+void Renderer::createSsaoKernelSSBO()
+{
+    VkDeviceSize bufferSize = sizeof(glm::vec4) * MaxSsaoKernelSamples;
+    mSsaoKernelSSBO = {mRenderDevice, bufferSize, BufferType::Storage, MemoryType::Device};
+    mSsaoKernelSSBO.setDebugName("Renderer::mSsaoKernelSSBO");
+}
+
+void Renderer::updateSsaoKernelSSBO()
+{
+    VkDeviceSize kernelSize = sizeof(glm::vec4) * mSsaoKernel.size();
+    mSsaoKernelSSBO.update(0, kernelSize, mSsaoKernel.data());
+}
+
+void Renderer::createSsaoNoiseTexture()
+{
+    std::vector<glm::vec4> randomVectors(glm::pow(SsaoNoiseTextureSize, 2));
+    for (auto& randomVec : randomVectors)
+    {
+        randomVec = glm::vec4 {
+            mSsaoDistribution(mSsaoRandomEngine) * 2.f - 1.f, // -> [-1, 1]
+            mSsaoDistribution(mSsaoRandomEngine) * 2.f - 1.f, // -> [-1, 1]
+            0.f,
+            0.f
+        };
+    }
+
+    TextureSpecification specification {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .width = SsaoNoiseTextureSize,
+        .height = SsaoNoiseTextureSize,
+        .layerCount = 1,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+        .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Nearest,
+        .minFilter = TextureMinFilter::Nearest,
+        .wrapS = TextureWrap::Repeat,
+        .wrapT = TextureWrap::Repeat,
+        .generateMipMaps = false
+    };
+
+    mSsaoNoiseTexture = {mRenderDevice, specification, randomVectors.data()};
+    mSsaoNoiseTexture.setDebugName("Renderer::mSsaoNoiseTexture");
+}
+
 void Renderer::createSsaoRenderpass()
 {
     VkAttachmentDescription ssaoAttachment {
@@ -1475,6 +1619,60 @@ void Renderer::createSsaoFramebuffer()
     setFramebufferDebugName(mRenderDevice, mSsaoFramebuffer, "Renderer::mSsaoFramebuffer");
 }
 
+void Renderer::createSsaoBlurRenderpass()
+{
+    VkAttachmentDescription ssaoBlurAttachment {
+        .format = mSsaoBlurTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference ssaoBlurAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &ssaoBlurAttachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &ssaoBlurAttachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mSsaoBlurRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mSsaoBlurRenderpass, "Renderer::mSsaoBlurRenderpass");
+}
+
+void Renderer::createSsaoBlurFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mSsaoBlurFramebuffer, nullptr);
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mSsaoBlurRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &mSsaoBlurTexture.imageView,
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mSsaoBlurFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mSsaoBlurFramebuffer, "Renderer::mSsaoBlurFramebuffer");
+}
+
 void Renderer::createSsaoPipeline()
 {
     PipelineSpecification specification {
@@ -1511,7 +1709,12 @@ void Renderer::createSsaoPipeline()
         .pipelineLayout = {
             .dsLayouts = {
                 mCameraRenderDataDsLayout,
-                mDepthNormalDsLayout
+                mSSAODsLayout
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(float) * 7
             }
         },
         .renderPass = mSsaoRenderpass,
@@ -1520,6 +1723,57 @@ void Renderer::createSsaoPipeline()
     };
 
     mSsaoPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::createSsaoBlurPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/fullscreen_render.vert.spv",
+            .fragShaderPath = "shaders/blur_ssao.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .tesselation = {
+            .patchControlUnits = 0
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .cullMode = VK_CULL_MODE_NONE,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = VK_FALSE,
+            .enableDepthWrite = VK_FALSE,
+        },
+        .blendStates = {
+            {.enable = false}
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {
+            .dsLayouts = {
+                mSingleImageDsLayout
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(glm::vec2)
+            }
+        },
+        .renderPass = mSsaoBlurRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mSsaoBlurPipeline"
+    };
+
+    mSsaoBlurPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
 void Renderer::createOitTextures()
@@ -1853,7 +2107,7 @@ void Renderer::createOpaqueForwardPassPipeline()
     PipelineSpecification specification {
         .shaderStages = {
             .vertShaderPath = "shaders/mesh.vert.spv",
-            .fragShaderPath = "shaders/opaqueShading.frag.spv"
+            .fragShaderPath = "shaders/opaque_shading.frag.spv"
         },
         .vertexInput = {
             .bindings = InstancedMesh::bindingDescriptions(),
@@ -1897,7 +2151,7 @@ void Renderer::createOpaqueForwardPassPipeline()
             .pushConstantRange = VkPushConstantRange {
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .offset = 0,
-                .size = sizeof(uint32_t) * 4
+                .size = sizeof(uint32_t) * 6
             }
         },
         .renderPass = mForwardRenderpass,
@@ -2612,15 +2866,16 @@ void Renderer::createCameraDs()
 
 void Renderer::createSingleImageDescriptorSets()
 {
-    createSingleImageDs(mSsaoDs, mSsaoTexture, "Renderer::mSsaoDs");
+    createSingleImageDs(mSsaoTextureDs, mSsaoTexture, "Renderer::mSsaoTextureDs");
+    createSingleImageDs(mSsaoBlurTextureDs, mSsaoBlurTexture, "Renderer::mSsaoBlurTextureDs");
     createSingleImageDs(mDepthDs, mDepthTexture, "Renderer::mDepthDs");
     createSingleImageDs(mColor32FDs, mColorTexture32F, "Renderer::mColor32FDs");
     createSingleImageDs(mColor8UDs, mColorTexture8U, "Renderer::mColorTexture8U");
 }
 
-void Renderer::createDepthNormalDs()
+void Renderer::createSsaoDs()
 {
-    VkDescriptorSetLayout dsLayout = mDepthNormalDsLayout;
+    VkDescriptorSetLayout dsLayout = mSSAODsLayout;
 
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -2629,12 +2884,13 @@ void Renderer::createDepthNormalDs()
         .pSetLayouts = &dsLayout
     };
 
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mDepthNormalDs);
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mSsaoDs);
     vulkanCheck(result, "Failed to allocate descriptor set.");
+    setVulkanObjectDebugName(mRenderDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, "Renderer::mSsaoDs", mSsaoDs);
 
-    VkDescriptorImageInfo depthImageInfo {
-        .sampler = mDepthTexture.vulkanSampler.sampler,
-        .imageView = mDepthTexture.imageView,
+    VkDescriptorImageInfo posImageInfo {
+        .sampler = mPosTexture.vulkanSampler.sampler,
+        .imageView = mPosTexture.imageView,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
@@ -2644,21 +2900,49 @@ void Renderer::createDepthNormalDs()
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
-    VkWriteDescriptorSet writeDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mDepthNormalDs,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &depthImageInfo
+    VkDescriptorImageInfo noiseImageInfo {
+        .sampler = mSsaoNoiseTexture.vulkanSampler.sampler,
+        .imageView = mSsaoNoiseTexture.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
-    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+    VkDescriptorBufferInfo kernelBufferInfo {
+        .buffer = mSsaoKernelSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
 
-    writeDescriptorSet.dstBinding = 1;
-    writeDescriptorSet.pImageInfo = &normalImageInfo;
-    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+    VkWriteDescriptorSet writeDescriptorSetPrototype {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mSsaoDs,
+//        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+//        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+//        .pImageInfo = nullptr,
+//        .pBufferInfo = nullptr
+    };
+
+    std::array<VkWriteDescriptorSet, 4> descriptorWrites;
+    descriptorWrites.fill(writeDescriptorSetPrototype);
+
+    descriptorWrites.at(0).dstBinding = 0;
+    descriptorWrites.at(0).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrites.at(0).pImageInfo = &posImageInfo;
+
+    descriptorWrites.at(1).dstBinding = 1;
+    descriptorWrites.at(1).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrites.at(1).pImageInfo = &normalImageInfo;
+
+    descriptorWrites.at(2).dstBinding = 2;
+    descriptorWrites.at(2).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrites.at(2).pImageInfo = &noiseImageInfo;
+
+    descriptorWrites.at(3).dstBinding = 3;
+    descriptorWrites.at(3).descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites.at(3).pBufferInfo = &kernelBufferInfo;
+
+    vkUpdateDescriptorSets(mRenderDevice.device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 }
 
 void Renderer::createColor32FInputDs()

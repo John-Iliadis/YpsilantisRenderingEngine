@@ -22,6 +22,8 @@ constexpr uint32_t InitialViewportHeight = 700;
 constexpr uint32_t MaxDirLights = 1024;
 constexpr uint32_t MaxPointLights = 1024;
 constexpr uint32_t MaxSpotLights = 1024;
+constexpr uint32_t MaxSsaoKernelSamples = 128;
+constexpr uint32_t SsaoNoiseTextureSize = 4;
 
 struct TransparentNode;
 struct LightIconRenderData;
@@ -58,6 +60,7 @@ private:
     void executePrepass(VkCommandBuffer commandBuffer);
     void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
+    void executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer);
     void executeForwardRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
     void executeGridRenderpass(VkCommandBuffer commandBuffer);
@@ -87,12 +90,12 @@ private:
     void createDepthTexture();
     void createPosTexture();
     void createNormalTexture();
-    void createSsaoTexture();
+    void createSsaoTextures();
 
     void createSingleImageDsLayout();
     void createCameraRenderDataDsLayout();
     void createMaterialsDsLayout();
-    void createDepthNormalInputDsLayout();
+    void createSsaoDsLayout();
     void createOitResourcesDsLayout();
     void createSingleInputAttachmentDsLayout();
     void createLightsDsLayout();
@@ -105,9 +108,16 @@ private:
     void createSkyboxFramebuffer();
     void createSkyboxPipeline();
 
+    void createSsaoKernel(uint32_t sampleCount);
+    void createSsaoKernelSSBO();
+    void updateSsaoKernelSSBO();
+    void createSsaoNoiseTexture();
     void createSsaoRenderpass();
     void createSsaoFramebuffer();
+    void createSsaoBlurRenderpass();
+    void createSsaoBlurFramebuffer();
     void createSsaoPipeline();
+    void createSsaoBlurPipeline();
 
     void createOitTextures();
     void createOitBuffers();
@@ -142,7 +152,7 @@ private:
     void createSingleImageDs(VkDescriptorSet& ds, const VulkanTexture& texture, const char* name);
     void createCameraDs();
     void createSingleImageDescriptorSets();
-    void createDepthNormalDs();
+    void createSsaoDs();
     void createColor32FInputDs();
     void createLightsDs();
 
@@ -173,12 +183,14 @@ private:
     VulkanTexture mPosTexture;
     VulkanTexture mNormalTexture;
     VulkanTexture mSsaoTexture;
+    VulkanTexture mSsaoBlurTexture;
     VulkanTexture mSkyboxTexture;
 
     // render passes
     VkRenderPass mPrepassRenderpass{};
     VkRenderPass mSkyboxRenderpass{};
     VkRenderPass mSsaoRenderpass{};
+    VkRenderPass mSsaoBlurRenderpass{};
     VkRenderPass mForwardRenderpass{};
     VkRenderPass mGridRenderpass{};
     VkRenderPass mPostProcessingRenderpass{};
@@ -189,6 +201,7 @@ private:
     VkFramebuffer mSkyboxFramebuffer{};
     VkFramebuffer mForwardPassFramebuffer{};
     VkFramebuffer mSsaoFramebuffer{};
+    VkFramebuffer mSsaoBlurFramebuffer{};
     VkFramebuffer mGridFramebuffer{};
     VkFramebuffer mPostProcessingFramebuffer{};
     VkFramebuffer mLightIconFramebuffer{};
@@ -198,6 +211,7 @@ private:
     VulkanGraphicsPipeline mSkyboxPipeline;
     VulkanGraphicsPipeline mGridPipeline;
     VulkanGraphicsPipeline mSsaoPipeline;
+    VulkanGraphicsPipeline mSsaoBlurPipeline;
     VulkanGraphicsPipeline mTransparentCollectionPipeline;
     VulkanGraphicsPipeline mTransparencyResolutionPipeline;
     VulkanGraphicsPipeline mOpaqueForwardPassPipeline;
@@ -209,7 +223,7 @@ private:
     VulkanDsLayout mSingleImageDsLayout;
     VulkanDsLayout mCameraRenderDataDsLayout;
     VulkanDsLayout mMaterialsDsLayout;
-    VulkanDsLayout mDepthNormalDsLayout;
+    VulkanDsLayout mSSAODsLayout;
     VulkanDsLayout mOitResourcesDsLayout;
     VulkanDsLayout mIconTextureDsLayout;
     VulkanDsLayout mSingleInputAttachmentDsLayout;
@@ -217,14 +231,25 @@ private:
 
     // descriptor sets
     VkDescriptorSet mCameraDs{};
-    VkDescriptorSet mDepthNormalDs{};
     VkDescriptorSet mSsaoDs{};
+    VkDescriptorSet mSsaoTextureDs{};
+    VkDescriptorSet mSsaoBlurTextureDs{};
     VkDescriptorSet mDepthDs{};
     VkDescriptorSet mSkyboxDs{};
     VkDescriptorSet mColor32FDs{};
     VkDescriptorSet mColor8UDs{};
     VkDescriptorSet mColor32FInputDs{};
     VkDescriptorSet mLightsDs{};
+
+    // ssao
+    std::uniform_real_distribution<float> mSsaoDistribution {0.f, 1.f};
+    std::default_random_engine mSsaoRandomEngine;
+    float mSsaoRadius = 0.5f;
+    float mSsaoIntensity = 1.f;
+    float mSsaoDepthBias = 0.025f;
+    std::vector<glm::vec4> mSsaoKernel;
+    VulkanBuffer mSsaoKernelSSBO;
+    VulkanTexture mSsaoNoiseTexture;
 
     // gizmo icons
     VulkanTexture mTranslateIcon;
@@ -283,7 +308,7 @@ private:
     } mGridData;
 
     bool mRenderSkybox = true;
-    bool mSsaoOn = false;
+    bool mSsaoOn = true;
     bool mOitOn = true;
     bool mRenderGrid = true;
     bool mDebugNormals = false;

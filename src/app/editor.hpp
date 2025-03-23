@@ -39,6 +39,7 @@ private:
     void inspectorPanel();
     void viewPort();
     void debugPanel();
+    void ssaoTextureDebugWin();
 
     void sceneNodeRecursive(GraphNode* node);
     void createModelGraph(Model& model);
@@ -93,6 +94,7 @@ private:
     void checkPayloadType(const char* type);
     void resetBuffer();
     void helpMarker(const char* desc);
+    void imguiImageFitted(ImTextureID textureId, float imageWidth, float imageHeight);
     GraphNode* copyGraphNode(GraphNode* node);
     std::optional<std::string> renameDialog();
     std::optional<uuid32_t> selectModel();
@@ -118,6 +120,7 @@ private:
     bool mShowInspectorPanel = true;
     bool mShowRendererPanel = true;
     bool mShowDebugPanel = true;
+    bool mShowSSAOOutputTexture = false;
     bool mModelImportPopup = false;
     bool mViewGizmoControls = true;
     bool mViewAxisGizmo = true;

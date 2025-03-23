@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <optional>
 #include <variant>
+#include <random>
 
 #include <iostream>
 #include <format>

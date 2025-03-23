@@ -284,7 +284,7 @@ const CameraRenderData Camera::renderData() const
 {
     return {
         .view = mView,
-        .projection = mProjection,
+        .projection = sRightHandedBasis * mProjection,
         .viewProj = mViewProjection,
         .position = glm::vec4(mPosition, 1.f),
         .direction = glm::vec4(mAxisZ, 1.f),

@@ -2,7 +2,7 @@
 
 #include "material.glsl"
 #include "lights.glsl"
-#include "renderingEquations.glsl"
+#include "rendering_equations.glsl"
 
 layout (early_fragment_tests) in;
 
@@ -18,6 +18,8 @@ layout (push_constant) uniform PushConstants
     uint pointLightCount;
     uint spotLightCount;
     uint debugNormals;
+    uint screenWidth;
+    uint screenHeight;
 };
 
 layout (set = 0, binding = 0) uniform CameraUBO
@@ -49,6 +51,7 @@ layout (set = 3, binding = 6) uniform sampler2D emissionTex;
 void main()
 {
     vec2 texCoords = vTexCoords * material.tiling + material.offset;
+    vec2 screenSpaceTexCoords = gl_FragCoord.xy / vec2(float(screenWidth), float(screenHeight));
 
     vec3 baseColor = texture(baseColorTex, texCoords).rgb * material.baseColorFactor.rgb;
     float metallic = texture(metallicTex, texCoords).b * material.metallicFactor;
@@ -56,6 +59,7 @@ void main()
     vec3 normalSample = normalize(texture(normalTex, texCoords).xyz * 2.0 - 1.0);
     float ao = texture(aoTex, texCoords).r;
     vec3 emission = texture(emissionTex, texCoords).rgb * material.emissionColor.rgb * material.emissionFactor;
+    float occlusionFactor = texture(ssaoTexture, screenSpaceTexCoords).r;
 
     vec3 normal = normalize(vTBN * normalSample);
     vec3 viewVec = normalize(cameraPos.xyz - vFragWorldPos);
@@ -104,6 +108,6 @@ void main()
 
     vec3 ambient = vec3(0.1) * baseColor * ao;
 
-    outFragColor = vec4(emission + L_0 + ambient, 1.0)  * (1.0 - float(debugNormals)) +
+    outFragColor = vec4(emission + L_0 + ambient, 1.0) * occlusionFactor * (1.0 - float(debugNormals)) +
                    vec4(normal * 0.5 + 0.5, 1.0) * float(debugNormals);
 }

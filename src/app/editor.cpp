@@ -56,6 +56,9 @@ void Editor::update(float dt)
     if (mShowDebugPanel)
         debugPanel();
 
+    if (mShowSSAOOutputTexture)
+        ssaoTextureDebugWin();
+
     sharedPopups();
 }
 
@@ -271,6 +274,33 @@ void Editor::rendererPanel()
         }
     }
 
+    if (ImGui::CollapsingHeader("SSAO", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("Enable##ssao", &mRenderer.mSsaoOn);
+        ImGui::Separator();
+
+        std::string prev = std::to_string(mRenderer.mSsaoKernel.size());
+        if (ImGui::BeginCombo("Sample Count##ssao", prev.data()))
+        {
+            for (uint32_t i = 8; i <= 128; i *= 2)
+            {
+                std::string label = std::to_string(i);
+                bool selected = i == mRenderer.mSsaoKernel.size();
+                if (ImGui::Selectable(label.data(), selected) && !selected)
+                {
+                    mRenderer.createSsaoKernel(i);
+                    mRenderer.updateSsaoKernelSSBO();
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+
+        ImGui::DragFloat("Radius##ssao", &mRenderer.mSsaoRadius, 0.001f, 0.f, FLT_MAX, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::DragFloat("Intensity##ssao", &mRenderer.mSsaoIntensity, 0.001f, 0.f, FLT_MAX, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::DragFloat("Bias##ssao", &mRenderer.mSsaoDepthBias, 0.0001f, 0.f, FLT_MAX, "%.4f", ImGuiSliderFlags_AlwaysClamp);
+    }
+
     if (ImGui::CollapsingHeader("Order Independent Transparency", ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Checkbox("Enable##OIT", &mRenderer.mOitOn);
@@ -390,7 +420,21 @@ void Editor::debugPanel()
 
     ImGui::Separator();
 
-    ImGui::Checkbox("Debug Normals", &mRenderer.mDebugNormals);
+    ImGui::Checkbox("Debug normals", &mRenderer.mDebugNormals);
+    ImGui::Checkbox("Show SSAO output texture", &mShowSSAOOutputTexture);
+
+    ImGui::End();
+}
+
+void Editor::ssaoTextureDebugWin()
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+    ImGui::Begin("SSAO Output Texture", &mShowSSAOOutputTexture, ImGuiWindowFlags_NoScrollbar);
+    ImGui::PopStyleVar(2);
+
+    ImTextureID textureId = static_cast<ImTextureID>(mRenderer.mSsaoBlurTextureDs);
+    ImGui::Image(textureId, mViewportSize);
 
     ImGui::End();
 }
@@ -1682,6 +1726,16 @@ void Editor::helpMarker(const char* desc)
         ImGui::PopTextWrapPos();
         ImGui::EndTooltip();
     }
+}
+
+void Editor::imguiImageFitted(ImTextureID textureId, float imageWidth, float imageHeight)
+{
+    float width = ImGui::GetContentRegionAvail().x;
+
+    float scale = width / imageWidth;
+    float scaledHeight = imageHeight * scale;
+
+    ImGui::Image(textureId, ImVec2(width, scaledHeight));
 }
 
 GraphNode *Editor::copyGraphNode(GraphNode *node)

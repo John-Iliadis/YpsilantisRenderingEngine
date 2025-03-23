@@ -22,9 +22,7 @@ void main()
     vTexCoords = position;
 
     mat4 viewNoTranslation = mat4(mat3(view));
-    mat4 proj = projection;
-    proj[1] *= -1;
 
-    vec4 viewProjPos = proj * viewNoTranslation * vec4(position, 1.0);
+    vec4 viewProjPos = projection * viewNoTranslation * vec4(position, 1.0);
     gl_Position = viewProjPos.xyww;
 }
