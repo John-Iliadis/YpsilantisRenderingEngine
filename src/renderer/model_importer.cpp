@@ -80,6 +80,8 @@ ModelLoader::ModelLoader(const VulkanRenderDevice& renderDevice, const ModelImpo
         debugLog("Exception caught: " + std::string(e.what()));
     }
 
+    debugLog("Successfully loaded: " + path.string());
+
     stbi_set_flip_vertically_on_load(false);
 }
 

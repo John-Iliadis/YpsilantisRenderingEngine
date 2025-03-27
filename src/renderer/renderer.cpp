@@ -43,10 +43,20 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createOitResourcesDsLayout();
     createSingleInputAttachmentDsLayout();
     createLightsDsLayout();
+    createFrustumClusterGenDsLayout();
+    createAssignLightsToClustersDsLayout();
+    createSingleSSBODsLayout();
 
     createPrepassRenderpass();
     createPrepassFramebuffer();
     createPrepassPipeline();
+
+    createVolumeClusterSSBO();
+    createClusterLightListSSBO();
+    createFrustumClusterGenPipelineLayout();
+    createFrustumClusterGenPipeline();
+    createAssignLightsToClustersPipelineLayout();
+    createAssignLightsToClustersPipeline();
 
     createSkyboxRenderpass();
     createSkyboxFramebuffer();
@@ -98,11 +108,20 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createSsaoDs();
     createColor32FInputDs();
     createLightsDs();
+    createFrustumClusterGenDs();
+    createAssignLightsToClustersDs();
+    createClusterLightListDs();
 }
 
 Renderer::~Renderer()
 {
     destroyDefaultMaterialTextures();
+
+    vkDestroyPipeline(mRenderDevice.device, mFrustumClusterGenPipeline, nullptr);
+    vkDestroyPipeline(mRenderDevice.device, mAssignLightsToClustersPipeline, nullptr);
+
+    vkDestroyPipelineLayout(mRenderDevice.device, mFrustumClusterGenPipelineLayout, nullptr);
+    vkDestroyPipelineLayout(mRenderDevice.device, mAssignLightsToClustersPipelineLayout, nullptr);
 
     vkDestroyFramebuffer(mRenderDevice.device, mPrepassFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mSkyboxFramebuffer, nullptr);
@@ -137,6 +156,8 @@ void Renderer::render(VkCommandBuffer commandBuffer)
     executeSkyboxRenderpass(commandBuffer);
     executeSsaoRenderpass(commandBuffer);
     executeSsaoBlurRenderpass(commandBuffer);
+    executeGenFrustumClustersRenderpass(commandBuffer);
+    executeAssignLightsToClustersRenderpass(commandBuffer);
     executeForwardRenderpass(commandBuffer);
     executePostProcessingRenderpass(commandBuffer);
     executeGridRenderpass(commandBuffer);
@@ -481,6 +502,126 @@ void Renderer::executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer)
     endDebugLabel(commandBuffer);
 }
 
+void Renderer::executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer)
+{
+    beginDebugLabel(commandBuffer, "Gen Frustum Clusters");
+
+    vkCmdFillBuffer(commandBuffer, mVolumeClustersSSBO.getBuffer(), 0, mVolumeClustersSSBO.getSize(), 0);
+    vkCmdFillBuffer(commandBuffer, mClusterLightListSSBO.getBuffer(), 0, mClusterLightListSSBO.getSize(), 0);
+
+    VkBufferMemoryBarrier clearBufferMemoryBarrier {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+        .buffer = VK_NULL_HANDLE,
+        .offset = 0,
+        .size = VK_WHOLE_SIZE
+    };
+
+    std::array<VkBufferMemoryBarrier, 2> clearBufferMemoryBarriers;
+    clearBufferMemoryBarriers.fill(clearBufferMemoryBarrier);
+
+    clearBufferMemoryBarriers.at(0).buffer = mVolumeClustersSSBO.getBuffer();
+    clearBufferMemoryBarriers.at(1).buffer = mClusterLightListSSBO.getBuffer();
+
+    vkCmdPipelineBarrier(commandBuffer,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         0,
+                         0, nullptr,
+                         clearBufferMemoryBarriers.size(), clearBufferMemoryBarriers.data(),
+                         0, nullptr);
+
+    struct {
+        glm::mat4 invProj;
+        glm::uvec2 screenSize;
+    } pushConstants {
+        glm::inverse(mCamera.projection()),
+        glm::uvec2(mWidth, mHeight)
+    };
+
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, mFrustumClusterGenPipeline);
+
+    std::array<VkDescriptorSet, 2> ds {mCameraDs, mFrustumClusterGenDs};
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_COMPUTE,
+                            mFrustumClusterGenPipelineLayout,
+                            0, ds.size(), ds.data(),
+                            0, nullptr);
+
+    vkCmdPushConstants(commandBuffer,
+                       mFrustumClusterGenPipelineLayout,
+                       VK_SHADER_STAGE_COMPUTE_BIT,
+                       0, sizeof(pushConstants),
+                       &pushConstants);
+
+    vkCmdDispatch(commandBuffer, mClusterGridSize.x, mClusterGridSize.y, mClusterGridSize.z);
+
+    VkBufferMemoryBarrier clustersBufferMemoryBarrier {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .buffer = mVolumeClustersSSBO.getBuffer(),
+        .offset = 0,
+        .size = VK_WHOLE_SIZE
+    };
+
+    vkCmdPipelineBarrier(commandBuffer,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         0,
+                         0, nullptr,
+                         1, &clustersBufferMemoryBarrier,
+                         0, nullptr);
+
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBuffer)
+{
+    struct {
+        uint32_t pointLightCount;
+    } pushConstants {
+        static_cast<uint32_t>(mPointLights.size())
+    };
+
+    beginDebugLabel(commandBuffer, "Create Light List");
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, mAssignLightsToClustersPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_COMPUTE,
+                            mAssignLightsToClustersPipelineLayout,
+                            0, 1, &mAssignLightsToClustersDs,
+                            0, nullptr);
+
+    vkCmdPushConstants(commandBuffer,
+                       mAssignLightsToClustersPipelineLayout,
+                       VK_SHADER_STAGE_COMPUTE_BIT,
+                       0, sizeof(pushConstants),
+                       &pushConstants);
+
+    vkCmdDispatch(commandBuffer, mClusterGridSize.x, mClusterGridSize.y, mClusterGridSize.z);
+
+    VkBufferMemoryBarrier clustersBufferMemoryBarrier {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .buffer = mVolumeClustersSSBO.getBuffer(),
+        .offset = 0,
+        .size = VK_WHOLE_SIZE
+    };
+
+    vkCmdPipelineBarrier(commandBuffer,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         0,
+                         0, nullptr,
+                         1, &clustersBufferMemoryBarrier,
+                         0, nullptr);
+
+    endDebugLabel(commandBuffer);
+}
+
 void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
 {
     static constexpr VkClearValue transparencyClear {.color = {0.f, 0.f, 0.f, 0.f}};
@@ -533,20 +674,24 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
     { // subpass 0: opaque pass
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mOpaqueForwardPassPipeline);
 
-        std::array<VkDescriptorSet, 3> ds {mCameraDs, mSsaoBlurTextureDs, mLightsDs};
+        std::array<VkDescriptorSet, 4> ds {mCameraDs, mSsaoBlurTextureDs, mLightsDs, mClusterLightListDs};
         vkCmdBindDescriptorSets(commandBuffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 mOpaqueForwardPassPipeline,
                                 0, ds.size(), ds.data(),
                                 0, nullptr);
 
-        std::array<uint32_t, 6> pushConstants {
+        std::array<uint32_t, 10> pushConstants {
             static_cast<uint32_t>(mDirectionalLights.size()),
             static_cast<uint32_t>(mPointLights.size()),
             static_cast<uint32_t>(mSpotLights.size()),
             static_cast<uint32_t>(mDebugNormals),
             mWidth,
-            mHeight
+            mHeight,
+            mClusterGridSize.x,
+            mClusterGridSize.y,
+            mClusterGridSize.z,
+            0
         };
 
         vkCmdPushConstants(commandBuffer,
@@ -555,8 +700,8 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                            0, sizeof(uint32_t) * pushConstants.size(),
                            pushConstants.data());
 
-        if (mOitOn) renderOpaque(commandBuffer, mOpaqueForwardPassPipeline, 3);
-        else renderAll(commandBuffer, mOpaqueForwardPassPipeline, 3);
+        if (mOitOn) renderOpaque(commandBuffer, mOpaqueForwardPassPipeline, 4);
+        else renderAll(commandBuffer, mOpaqueForwardPassPipeline, 4);
     }
 
     { // subpass 1: transparent fragment collection
@@ -1128,7 +1273,7 @@ void Renderer::createCameraRenderDataDsLayout()
 {
     DsLayoutSpecification specification {
         .bindings = {
-            binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+            binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL)
         },
         .debugName = "Renderer::mCameraRenderDataDsLayout"
     };
@@ -1208,6 +1353,45 @@ void Renderer::createLightsDsLayout()
     };
 
     mLightsDsLayout = {mRenderDevice, specification};
+}
+
+void Renderer::createFrustumClusterGenDsLayout()
+{
+    DsLayoutSpecification specification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT),
+        },
+        .debugName = "Renderer::mFrustumClusterGenDsLayout"
+    };
+
+    mFrustumClusterGenDsLayout = {mRenderDevice, specification};
+}
+
+void Renderer::createAssignLightsToClustersDsLayout()
+{
+    DsLayoutSpecification specification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT),
+            binding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT),
+        },
+        .debugName = "Renderer::mAssignLightsToClustersDsLayout"
+    };
+
+    mAssignLightsToClustersDsLayout = {mRenderDevice, specification};
+}
+
+void Renderer::createSingleSSBODsLayout()
+{
+    DsLayoutSpecification specification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        .debugName = "Renderer::mSingleSSBODsLayout"
+    };
+
+    mSingleSSBODsLayout = {mRenderDevice, specification};
 }
 
 void Renderer::createPrepassRenderpass()
@@ -1362,6 +1546,152 @@ void Renderer::createPrepassPipeline()
     };
 
     mPrepassPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::createVolumeClusterSSBO()
+{
+    uint32_t clusterCount = mClusterGridSize.x * mClusterGridSize.y * mClusterGridSize.z;
+    mVolumeClustersSSBO = {mRenderDevice,
+                           sizeof(VolumeTileAABB) * clusterCount,
+                           BufferType::Storage,
+                           MemoryType::Device};
+    mVolumeClustersSSBO.setDebugName("Renderer::mVolumeClustersSSBO");
+}
+
+void Renderer::createClusterLightListSSBO()
+{
+    uint32_t clusterCount = mClusterGridSize.x * mClusterGridSize.y * mClusterGridSize.z;
+    mClusterLightListSSBO = {mRenderDevice,
+                             clusterCount * PerClusterCapacity * sizeof(uint32_t),
+                             BufferType::Storage,
+                             MemoryType::Device};
+    mClusterLightListSSBO.setDebugName("Renderer::mClusterLightListSSBO");
+}
+
+void Renderer::createFrustumClusterGenPipelineLayout()
+{
+    VkPushConstantRange pushConstantRange {
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        .offset = 0,
+        .size = sizeof(glm::mat4) + sizeof(glm::vec2)
+    };
+
+    std::array<VkDescriptorSetLayout, 2> setLayouts {
+        mCameraRenderDataDsLayout,
+        mFrustumClusterGenDsLayout
+    };
+
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = static_cast<uint32_t>(setLayouts.size()),
+        .pSetLayouts = setLayouts.data(),
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pushConstantRange
+    };
+
+    VkResult result = vkCreatePipelineLayout(mRenderDevice.device,
+                                             &pipelineLayoutCreateInfo,
+                                             nullptr,
+                                             &mFrustumClusterGenPipelineLayout);
+    vulkanCheck(result, "Failed to create pipeline layout.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+                             "Renderer::mFrustumClusterGenPipelineLayout",
+                                 mFrustumClusterGenPipelineLayout);
+}
+
+void Renderer::createFrustumClusterGenPipeline()
+{
+    VulkanShaderModule shaderModule(mRenderDevice, "shaders/gen_frustum_clusters.comp.spv");
+
+    VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .module = shaderModule,
+        .pName = "main"
+    };
+
+    VkComputePipelineCreateInfo computePipelineCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .stage = pipelineShaderStageCreateInfo,
+        .layout = mFrustumClusterGenPipelineLayout
+    };
+
+    VkResult result = vkCreateComputePipelines(mRenderDevice.device,
+                                               VK_NULL_HANDLE,
+                                               1,
+                                               &computePipelineCreateInfo,
+                                               nullptr,
+                                               &mFrustumClusterGenPipeline);
+    vulkanCheck(result, "Failed to create compute pipeline.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_PIPELINE,
+                             "Renderer::mFrustumClusterGenPipeline",
+                             mFrustumClusterGenPipeline);
+}
+
+void Renderer::createAssignLightsToClustersPipelineLayout()
+{
+    VkPushConstantRange pushConstantRange {
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        .offset = 0,
+        .size = sizeof(uint32_t)
+    };
+
+    VkDescriptorSetLayout dsLayout = mAssignLightsToClustersDsLayout;
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &dsLayout,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pushConstantRange
+    };
+
+    VkResult result = vkCreatePipelineLayout(mRenderDevice.device,
+                                             &pipelineLayoutCreateInfo,
+                                             nullptr,
+                                             &mAssignLightsToClustersPipelineLayout);
+    vulkanCheck(result, "Failed to create pipeline layout.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+                             "Renderer::mAssignLightsToClustersPipelineLayout",
+                             mAssignLightsToClustersPipelineLayout);
+
+
+}
+
+void Renderer::createAssignLightsToClustersPipeline()
+{
+    VulkanShaderModule shaderModule(mRenderDevice, "shaders/assign_lights_to_clusters.comp.spv");
+
+    VkPipelineShaderStageCreateInfo pipelineShaderStageCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+        .module = shaderModule,
+        .pName = "main"
+    };
+
+    VkComputePipelineCreateInfo computePipelineCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .stage = pipelineShaderStageCreateInfo,
+        .layout = mAssignLightsToClustersPipelineLayout
+    };
+
+    VkResult result = vkCreateComputePipelines(mRenderDevice.device,
+                                               VK_NULL_HANDLE,
+                                               1,
+                                               &computePipelineCreateInfo,
+                                               nullptr,
+                                               &mAssignLightsToClustersPipeline);
+    vulkanCheck(result, "Failed to create compute pipeline.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_PIPELINE,
+                             "Renderer::mAssignLightsToClustersPipeline",
+                             mAssignLightsToClustersPipeline);
 }
 
 void Renderer::createSkyboxRenderpass()
@@ -2146,12 +2476,13 @@ void Renderer::createOpaqueForwardPassPipeline()
                 mCameraRenderDataDsLayout,
                 mSingleImageDsLayout,
                 mLightsDsLayout,
+                mSingleSSBODsLayout,
                 mMaterialsDsLayout
             },
             .pushConstantRange = VkPushConstantRange {
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .offset = 0,
-                .size = sizeof(uint32_t) * 6
+                .size = sizeof(uint32_t) * 12
             }
         },
         .renderPass = mForwardRenderpass,
@@ -3043,4 +3374,142 @@ void Renderer::createLightsDs()
     writeDs.at(2).pBufferInfo = &spotLightBufferInfo;
 
     vkUpdateDescriptorSets(mRenderDevice.device, writeDs.size(), writeDs.data(), 0, nullptr);
+}
+
+void Renderer::createFrustumClusterGenDs()
+{
+    VkDescriptorSetLayout dsLayout = mFrustumClusterGenDsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mFrustumClusterGenDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mFrustumClusterGenDs",
+                             mFrustumClusterGenDs);
+
+    VkDescriptorBufferInfo bufferInfo {
+        .buffer = mVolumeClustersSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mFrustumClusterGenDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &bufferInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::createAssignLightsToClustersDs()
+{
+    VkDescriptorSetLayout dsLayout = mAssignLightsToClustersDsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mAssignLightsToClustersDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mAssignLightsToClustersDs",
+                             mAssignLightsToClustersDs);
+
+    VkDescriptorBufferInfo clusterBufferInfo {
+        .buffer = mVolumeClustersSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorBufferInfo pointLightBufferInfo {
+        .buffer = mPointLightSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorBufferInfo lightListBufferInfo {
+        .buffer = mClusterLightListSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkWriteDescriptorSet prototypeWriteDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mAssignLightsToClustersDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = nullptr
+    };
+
+    std::array<VkWriteDescriptorSet, 3> writeDs;
+    writeDs.fill(prototypeWriteDescriptorSet);
+
+    writeDs.at(0).pBufferInfo = &clusterBufferInfo;
+    writeDs.at(0).dstBinding = 0;
+
+    writeDs.at(1).pBufferInfo = &pointLightBufferInfo;
+    writeDs.at(1).dstBinding = 1;
+
+    writeDs.at(2).pBufferInfo = &lightListBufferInfo;
+    writeDs.at(2).dstBinding = 2;
+
+    vkUpdateDescriptorSets(mRenderDevice.device, writeDs.size(), writeDs.data(), 0, nullptr);
+}
+
+void Renderer::createClusterLightListDs()
+{
+    VkDescriptorSetLayout dsLayout = mSingleSSBODsLayout;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mClusterLightListDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mClusterLightListDs",
+                             mClusterLightListDs);
+
+    VkDescriptorBufferInfo lightListBufferInfo {
+        .buffer = mClusterLightListSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mClusterLightListDs,
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &lightListBufferInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
 }

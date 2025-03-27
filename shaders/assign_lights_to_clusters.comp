@@ -1,0 +1,69 @@
+#version 460 core
+
+#include "lights.glsl"
+
+struct LightGrid
+{
+    uint offset;
+    uint count;
+};
+
+struct VolumeTileAABB
+{
+    vec4 minPoint;
+    vec4 maxPoint;
+};
+
+layout (push_constant) uniform PushConstants
+{
+    uint pointLightCount;
+};
+
+layout (set = 0, binding = 0) readonly buffer volumeClusterSSBO { VolumeTileAABB clusters[]; };
+layout (set = 0, binding = 1) readonly buffer PointLightSSBO { PointLight pointLights[]; };
+layout (set = 0, binding = 2) buffer LightIndexSSBO { uint lightIndexList[]; };
+
+bool sphereIntersectAABB(vec3 minAABB, vec3 maxAABB, vec3 lightPos, float radius);
+
+const uint perClusterCapacity = 50;
+const uint maxLightsPerCluster = perClusterCapacity - 1;
+
+void main()
+{
+    // per cluster variables
+    uint tileIndex = gl_WorkGroupID.x +
+                     gl_WorkGroupID.y * gl_NumWorkGroups.x +
+                     gl_WorkGroupID.z * gl_NumWorkGroups.x * gl_NumWorkGroups.y;
+
+    VolumeTileAABB aabb = clusters[tileIndex];
+
+    // iterate the light list
+    uint clusterBaseIndex = tileIndex * perClusterCapacity;
+    uint lightsInCluster = 0;
+
+    for (uint i = 0; i < pointLightCount; ++i)
+    {
+        PointLight pointLight = pointLights[i];
+
+        if (sphereIntersectAABB(aabb.minPoint.xyz, aabb.maxPoint.xyz, pointLight.position.xyz, pointLights[i].range))
+        {
+            uint lightIndex = clusterBaseIndex + lightsInCluster + 1;
+            lightIndexList[lightIndex] = i;
+            ++lightsInCluster;
+        }
+
+        if (lightsInCluster == maxLightsPerCluster)
+            break;
+    }
+
+    // the first element of the cluster is the number of lights it contains
+    lightIndexList[clusterBaseIndex] = lightsInCluster;
+}
+
+bool sphereIntersectAABB(vec3 minAABB, vec3 maxAABB, vec3 lightPos, float radius)
+{
+    // Find closest point on the box to the sphere center
+    vec3 closestPoint = clamp(lightPos, minAABB, maxAABB);
+    float dist = distance(closestPoint, lightPos);
+    return dist < radius;
+}

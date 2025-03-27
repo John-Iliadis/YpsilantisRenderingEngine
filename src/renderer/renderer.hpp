@@ -24,9 +24,11 @@ constexpr uint32_t MaxPointLights = 1024;
 constexpr uint32_t MaxSpotLights = 1024;
 constexpr uint32_t MaxSsaoKernelSamples = 128;
 constexpr uint32_t SsaoNoiseTextureSize = 4;
+constexpr uint32_t PerClusterCapacity = 50;
 
 struct TransparentNode;
 struct LightIconRenderData;
+struct VolumeTileAABB;
 enum class Tonemap;
 
 class Renderer : public SubscriberSNS
@@ -61,6 +63,8 @@ private:
     void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer);
+    void executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer);
+    void executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBuffer);
     void executeForwardRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
     void executeGridRenderpass(VkCommandBuffer commandBuffer);
@@ -99,10 +103,20 @@ private:
     void createOitResourcesDsLayout();
     void createSingleInputAttachmentDsLayout();
     void createLightsDsLayout();
+    void createFrustumClusterGenDsLayout();
+    void createAssignLightsToClustersDsLayout();
+    void createSingleSSBODsLayout();
 
     void createPrepassRenderpass();
     void createPrepassFramebuffer();
     void createPrepassPipeline();
+
+    void createVolumeClusterSSBO();
+    void createClusterLightListSSBO();
+    void createFrustumClusterGenPipelineLayout();
+    void createFrustumClusterGenPipeline();
+    void createAssignLightsToClustersPipelineLayout();
+    void createAssignLightsToClustersPipeline();
 
     void createSkyboxRenderpass();
     void createSkyboxFramebuffer();
@@ -155,6 +169,9 @@ private:
     void createSsaoDs();
     void createColor32FInputDs();
     void createLightsDs();
+    void createFrustumClusterGenDs();
+    void createAssignLightsToClustersDs();
+    void createClusterLightListDs();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
@@ -206,7 +223,7 @@ private:
     VkFramebuffer mPostProcessingFramebuffer{};
     VkFramebuffer mLightIconFramebuffer{};
 
-    // pipelines
+    // graphics pipelines
     VulkanGraphicsPipeline mPrepassPipeline;
     VulkanGraphicsPipeline mSkyboxPipeline;
     VulkanGraphicsPipeline mGridPipeline;
@@ -219,6 +236,15 @@ private:
     VulkanGraphicsPipeline mPostProcessingPipeline;
     VulkanGraphicsPipeline mLightIconPipeline;
 
+    // forward+ rendering
+    glm::uvec3 mClusterGridSize = glm::vec3(16, 16, 24);
+    VulkanBuffer mVolumeClustersSSBO;
+    VulkanBuffer mClusterLightListSSBO;
+    VkPipelineLayout mFrustumClusterGenPipelineLayout{};
+    VkPipeline mFrustumClusterGenPipeline{};
+    VkPipelineLayout mAssignLightsToClustersPipelineLayout{};
+    VkPipeline mAssignLightsToClustersPipeline{};
+
     // descriptor set layouts
     VulkanDsLayout mSingleImageDsLayout;
     VulkanDsLayout mCameraRenderDataDsLayout;
@@ -228,6 +254,9 @@ private:
     VulkanDsLayout mIconTextureDsLayout;
     VulkanDsLayout mSingleInputAttachmentDsLayout;
     VulkanDsLayout mLightsDsLayout;
+    VulkanDsLayout mFrustumClusterGenDsLayout;
+    VulkanDsLayout mAssignLightsToClustersDsLayout;
+    VulkanDsLayout mSingleSSBODsLayout;
 
     // descriptor sets
     VkDescriptorSet mCameraDs{};
@@ -258,11 +287,14 @@ private:
     VulkanTexture mGlobalIcon;
     VulkanTexture mLocalIcon;
 
-    VkDescriptorSet mTranslateIconDs;
-    VkDescriptorSet mRotateIconDs;
-    VkDescriptorSet mScaleIconDs;
-    VkDescriptorSet mGlobalIconDs;
-    VkDescriptorSet mLocalIconDs;
+    VkDescriptorSet mTranslateIconDs{};
+    VkDescriptorSet mRotateIconDs{};
+    VkDescriptorSet mScaleIconDs{};
+    VkDescriptorSet mGlobalIconDs{};
+    VkDescriptorSet mLocalIconDs{};
+    VkDescriptorSet mFrustumClusterGenDs{};
+    VkDescriptorSet mAssignLightsToClustersDs{};
+    VkDescriptorSet mClusterLightListDs{};
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
@@ -328,6 +360,12 @@ struct LightIconRenderData
 {
     glm::vec3 pos;
     VulkanTexture* icon;
+};
+
+struct VolumeTileAABB
+{
+    alignas(16) glm::vec4 minPoint;
+    alignas(16) glm::vec4 maxPoint;
 };
 
 enum class Tonemap

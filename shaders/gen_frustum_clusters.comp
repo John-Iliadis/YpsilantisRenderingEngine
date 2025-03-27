@@ -1,0 +1,86 @@
+#version 460 core
+
+struct VolumeTileAABB
+{
+    vec4 minPoint;
+    vec4 maxPoint;
+};
+
+layout (push_constant) uniform PushConstants
+{
+    mat4 inverseProj;
+    uvec2 screenSize;
+};
+
+layout (set = 0, binding = 0) uniform CameraUBO
+{
+    mat4 view;
+    mat4 projection;
+    mat4 viewProj;
+    vec4 cameraPos;
+    vec4 cameraDir;
+    float nearPlane;
+    float farPlane;
+};
+
+layout (set = 1, binding = 0) buffer volumeClusterSSBO { VolumeTileAABB cluster[]; };
+
+vec3 screenToView(vec2 screenCoords);
+vec3 lineIntersectPlane(vec3 a, vec3 b, float zDistance);
+
+void main()
+{
+    // per cluster variables
+    vec2 tileSize = screenSize / vec2(gl_NumWorkGroups.xy);
+    uint tileIndex = gl_WorkGroupID.x +
+                     gl_WorkGroupID.x * gl_NumWorkGroups.y +
+                     gl_WorkGroupID.x * gl_NumWorkGroups.y * gl_NumWorkGroups.z;
+
+    // calculate the screen space min and max point of the cluster
+    vec2 minPointSS = gl_WorkGroupID.xy * tileSize; // top left
+    vec2 maxPointSS = (gl_WorkGroupID.xy + 1) * tileSize; // bottom right
+
+    // transform the points from screen space to view space
+    vec3 minPointVs = screenToView(minPointSS);
+    vec3 maxPointVs = screenToView(maxPointSS);
+
+    // calculate the z of the near and far cluster planes using the exponential equation
+    float nearClusterPlane = -nearPlane * pow(farPlane / nearPlane, gl_WorkGroupID.z / float(gl_NumWorkGroups.z));
+    float farClusterPlane = -nearPlane * pow(farPlane / nearPlane, (gl_WorkGroupID.z + 1) / float(gl_NumWorkGroups.z));
+
+    // find the intesection points of the cluster to the near and far planes
+    vec3 minPointNear = lineIntersectPlane(vec3(0.0), minPointVs, nearClusterPlane);
+    vec3 minPointFar = lineIntersectPlane(vec3(0.0), minPointVs, farClusterPlane);
+    vec3 maxPointNear = lineIntersectPlane(vec3(0.0), maxPointVs, nearClusterPlane);
+    vec3 maxPointFar = lineIntersectPlane(vec3(0.0), maxPointVs, farClusterPlane);
+
+    // make the bounding box of the frustum segment
+    vec3 minPointAABB = min(min(minPointNear, minPointFar), min(maxPointNear, maxPointFar));
+    vec3 maxPointAABB = max(max(minPointNear, minPointFar), max(maxPointNear, maxPointFar));
+
+    // store the result
+    cluster[tileIndex].minPoint = vec4(minPointAABB, 0.0);
+    cluster[tileIndex].maxPoint = vec4(maxPointAABB, 0.0);
+}
+
+vec3 screenToView(vec2 screenCoords)
+{
+    vec4 ndc = vec4(screenCoords / screenSize * 2.0 - 1.0, 0.0, 1.0);
+
+    vec4 viewCoord = inverseProj * ndc;
+    viewCoord /= viewCoord.w;
+
+    return viewCoord.xyz;
+}
+
+vec3 lineIntersectPlane(vec3 a, vec3 b, float zDistance)
+{
+    vec3 direction = b - a;
+    vec3 planeNormal = vec3(0.0, 0.0, 1.0);
+
+    // substitute the parametric line equation into the plane equation and solve for t
+    float t = (zDistance - dot(planeNormal, a)) / dot(planeNormal, direction);
+
+    // plug t into the line equation to get the intersection point
+    return a + t * direction;
+}

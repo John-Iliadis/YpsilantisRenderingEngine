@@ -6,7 +6,7 @@
 #include "transparent_node.glsl"
 #include "material.glsl"
 #include "lights.glsl"
-#include "renderingEquations.glsl"
+#include "rendering_equations.glsl"
 
 layout (early_fragment_tests) in;
 

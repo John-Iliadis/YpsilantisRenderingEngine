@@ -43,7 +43,7 @@ public:
 
     const glm::mat4& viewProjection() const;
     const glm::mat4& view() const;
-    const glm::mat4& projection() const;
+    const glm::mat4 projection() const;
     const glm::vec3& position() const;
     const glm::vec3& front() const;
     const State state() const;

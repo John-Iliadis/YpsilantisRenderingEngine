@@ -20,6 +20,7 @@ layout (push_constant) uniform PushConstants
     uint debugNormals;
     uint screenWidth;
     uint screenHeight;
+    uvec4 clusterGrid;
 };
 
 layout (set = 0, binding = 0) uniform CameraUBO
@@ -39,15 +40,31 @@ layout (set = 2, binding = 0) buffer readonly DirLightsSSBO { DirectionalLight d
 layout (set = 2, binding = 1) buffer readonly PointLightsSSBO { PointLight pointLights[]; };
 layout (set = 2, binding = 2) buffer readonly SpotLightSSBO { SpotLight spotLights[]; };
 
-layout (set = 3, binding = 0) uniform MaterialsUBO { Material material; };
-layout (set = 3, binding = 1) uniform sampler2D baseColorTex;
-layout (set = 3, binding = 2) uniform sampler2D metallicTex;
-layout (set = 3, binding = 3) uniform sampler2D roughnessTex;
-layout (set = 3, binding = 4) uniform sampler2D normalTex;
-layout (set = 3, binding = 5) uniform sampler2D aoTex;
-layout (set = 3, binding = 6) uniform sampler2D emissionTex;
+layout (set = 3, binding = 0) buffer readonly LightIndexSSBO { uint lightIndexList[]; };
 
-// PBR requires all inputs to be linear
+layout (set = 4, binding = 0) uniform MaterialsUBO { Material material; };
+layout (set = 4, binding = 1) uniform sampler2D baseColorTex;
+layout (set = 4, binding = 2) uniform sampler2D metallicTex;
+layout (set = 4, binding = 3) uniform sampler2D roughnessTex;
+layout (set = 4, binding = 4) uniform sampler2D normalTex;
+layout (set = 4, binding = 5) uniform sampler2D aoTex;
+layout (set = 4, binding = 6) uniform sampler2D emissionTex;
+
+const uint perClusterCapacity = 50;
+
+uint getClusterIndex()
+{
+    vec2 clusterSizeXY = clusterGrid.xy / vec2(screenWidth, screenHeight);
+    uvec3 clusterIndex = uvec3(gl_FragCoord.xy / clusterSizeXY, 0);
+
+    float z = -nearPlane * pow(farPlane / nearPlane, gl_FragCoord.z);
+    clusterIndex.z = uint(clusterGrid.z * log(z / nearPlane) / log(farPlane / nearPlane));
+
+    return clusterIndex.x +
+           clusterIndex.x * clusterIndex.y +
+           clusterIndex.x * clusterIndex.y * clusterIndex.z;
+}
+
 void main()
 {
     vec2 texCoords = vTexCoords * material.tiling + material.offset;
@@ -76,13 +93,18 @@ void main()
         L_0 += renderingEquation(normal, lightVec, viewVec, halfwayVec, lightRadiance, baseColor, F_0, metallic, roughness);
     }
 
-    for (uint i = 0; i < pointLightCount; ++i)
+    uint clusterIndex = getClusterIndex();
+    uint baseLightIndex = clusterIndex * perClusterCapacity;
+    uint clusterPointLightCount = lightIndexList[baseLightIndex];
+    for (uint i = 0; i < clusterPointLightCount; ++i)
     {
-        vec3 lightToPosVec = pointLights[i].position.xyz - vFragWorldPos;
+        PointLight pointLight = pointLights[lightIndexList[baseLightIndex + i + 1]];
+
+        vec3 lightToPosVec = pointLight.position.xyz - vFragWorldPos;
         float dist = length(lightToPosVec);
-        float attenuation = calcAttenuation(dist, pointLights[i].range);
+        float attenuation = calcAttenuation(dist, pointLight.range);
         vec3 lightVec = normalize(lightToPosVec);
-        vec3 lightRadiance = pointLights[i].color.rgb * (pointLights[i].intensity * attenuation);
+        vec3 lightRadiance = pointLight.color.rgb * (pointLight.intensity * attenuation);
         vec3 halfwayVec = normalize(viewVec + lightVec);
 
         L_0 += renderingEquation(normal, lightVec, viewVec, halfwayVec, lightRadiance, baseColor, F_0, metallic, roughness);

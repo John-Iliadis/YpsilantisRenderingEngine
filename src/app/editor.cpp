@@ -1521,8 +1521,10 @@ bool Editor::transformGizmo()
 
     glm::mat4 globalMatrix = node->globalTransform();
 
+    glm::mat4 proj = mRenderer.mCamera.projection();
+    proj[1][1] *= -1.f;
     if (ImGuizmo::Manipulate(glm::value_ptr(mRenderer.mCamera.view()),
-                             glm::value_ptr(mRenderer.mCamera.projection()),
+                             glm::value_ptr(proj),
                              mGizmoOp, mGizmoMode,
                              glm::value_ptr(globalMatrix)))
     {

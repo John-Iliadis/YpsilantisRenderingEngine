@@ -24,7 +24,7 @@ Camera::Camera(glm::vec3 position, float fovY, float width, float height, float 
     , mPosition(position)
     , mTheta()
     , mPhi()
-    , mProjection(glm::perspective(glm::radians(fovY), width / height, nearZ, farZ))
+    , mProjection(sRightHandedBasis * glm::perspective(glm::radians(fovY), width / height, nearZ, farZ))
     , mFovY(fovY)
     , mAspectRatio(width / height)
     , mNearZ(nearZ)
@@ -91,9 +91,9 @@ const glm::mat4 &Camera::view() const
     return mView;
 }
 
-const glm::mat4 &Camera::projection() const
+const glm::mat4 Camera::projection() const
 {
-    return mProjection;
+    return sRightHandedBasis * mProjection;
 }
 
 const glm::vec3 &Camera::position() const

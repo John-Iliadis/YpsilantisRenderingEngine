@@ -123,6 +123,7 @@ file(GLOB GLSL_FILES
         ${SHADER_DIR}/*.vert
         ${SHADER_DIR}/*.frag
         ${SHADER_DIR}/*.geom
+        ${SHADER_DIR}/*.comp
 )
 
 foreach (GLSL_FILE ${GLSL_FILES})
