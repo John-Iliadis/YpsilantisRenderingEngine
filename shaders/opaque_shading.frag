@@ -54,15 +54,15 @@ const uint perClusterCapacity = 50;
 
 uint getClusterIndex()
 {
-    vec2 clusterSizeXY = clusterGrid.xy / vec2(screenWidth, screenHeight);
+    vec2 clusterSizeXY = vec2(screenWidth, screenHeight) / clusterGrid.xy;
     uvec3 clusterIndex = uvec3(gl_FragCoord.xy / clusterSizeXY, 0);
 
-    float z = -nearPlane * pow(farPlane / nearPlane, gl_FragCoord.z);
+    float z = nearPlane * pow(farPlane / nearPlane, gl_FragCoord.z);
     clusterIndex.z = uint(clusterGrid.z * log(z / nearPlane) / log(farPlane / nearPlane));
 
     return clusterIndex.x +
-           clusterIndex.x * clusterIndex.y +
-           clusterIndex.x * clusterIndex.y * clusterIndex.z;
+           clusterIndex.y * clusterGrid.x +
+           clusterIndex.z * clusterGrid.x * clusterGrid.y;
 }
 
 void main()
@@ -131,5 +131,5 @@ void main()
     vec3 ambient = vec3(0.1) * baseColor * ao;
 
     outFragColor = vec4(emission + L_0 + ambient, 1.0) * occlusionFactor * (1.0 - float(debugNormals)) +
-                   vec4(normal * 0.5 + 0.5, 1.0) * float(debugNormals);
+                   vec4(normal, 1.0) * float(debugNormals);
 }

@@ -151,7 +151,6 @@ void Renderer::update()
 void Renderer::render(VkCommandBuffer commandBuffer)
 {
     setViewport(commandBuffer);
-
     executePrepass(commandBuffer);
     executeSkyboxRenderpass(commandBuffer);
     executeSsaoRenderpass(commandBuffer);
@@ -900,7 +899,10 @@ void Renderer::setViewport(VkCommandBuffer commandBuffer)
 
     VkRect2D scissor {
         .offset = {.x = 0, .y = 0},
-        .extent = {.width = mWidth, .height = mHeight}
+        .extent = {
+            .width = mWidth,
+            .height = mHeight
+        }
     };
 
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);

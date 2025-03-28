@@ -8,14 +8,6 @@ static constexpr float PanVarDivisor = 10000.f;
 static constexpr float RotateVarDivisor = 200.f;
 static constexpr float FlySpeedDivisor = 20.f;
 
-static constexpr glm::mat4 sRightHandedBasis
-{
-    1.f, 0.f, 0.f, 0.f,
-    0.f, -1.f, 0.f, 0.f,
-    0.f, 0.f, 1.f, 0.f,
-    0.f, 0.f, 0.f, 1.f
-};
-
 Camera::Camera(glm::vec3 position, float fovY, float width, float height, float nearZ, float farZ)
     : mView()
     , mAxisX(1.0, 0.f, 0.f)
@@ -24,7 +16,7 @@ Camera::Camera(glm::vec3 position, float fovY, float width, float height, float 
     , mPosition(position)
     , mTheta()
     , mPhi()
-    , mProjection(sRightHandedBasis * glm::perspective(glm::radians(fovY), width / height, nearZ, farZ))
+    , mProjection(glm::perspective(glm::radians(fovY), width / height, nearZ, farZ))
     , mFovY(fovY)
     , mAspectRatio(width / height)
     , mNearZ(nearZ)
@@ -91,9 +83,9 @@ const glm::mat4 &Camera::view() const
     return mView;
 }
 
-const glm::mat4 Camera::projection() const
+const glm::mat4& Camera::projection() const
 {
-    return sRightHandedBasis * mProjection;
+    return mProjection;
 }
 
 const glm::vec3 &Camera::position() const
@@ -157,7 +149,7 @@ void Camera::scroll(float x, float y)
 
     if (mState == VIEW_MODE || mState == EDITOR_MODE)
     {
-        mPosition += mAxisZ * mZScrollOffset * -glm::sign(y);
+        mPosition += mAxisZ * mZScrollOffset * glm::sign(y);
     }
 }
 
@@ -187,8 +179,8 @@ void Camera::updateFirstPerson(float dt)
 
     if (z || x)
     {
-        float xOffset = mFlySpeed * dt * glm::sign(x) / FlySpeedDivisor;
-        float zOffset = mFlySpeed * dt * glm::sign(z) / FlySpeedDivisor;
+        float xOffset = -mFlySpeed * dt * glm::sign(x) / FlySpeedDivisor;
+        float zOffset = -mFlySpeed * dt * glm::sign(z) / FlySpeedDivisor;
 
         mPosition += mAxisX * xOffset + mAxisZ * zOffset;
     }
@@ -196,7 +188,7 @@ void Camera::updateFirstPerson(float dt)
     if (mouseDt.x || mouseDt.y)
     {
         mTheta += -mouseDt.x * mRotateSensitivity / RotateVarDivisor;
-        mPhi += -mouseDt.y * mRotateSensitivity / RotateVarDivisor;
+        mPhi += mouseDt.y * mRotateSensitivity / RotateVarDivisor;
         mPhi = glm::clamp(mPhi, -89.f, 89.f);
     }
 }
@@ -212,12 +204,12 @@ void Camera::updateViewMode(float dt)
         if (mRightButtonDown)
         {
             mTheta += -mouseDt.x * mRotateSensitivity / RotateVarDivisor;
-            mPhi += -mouseDt.y * mRotateSensitivity / RotateVarDivisor;
+            mPhi += mouseDt.y * mRotateSensitivity / RotateVarDivisor;
             mPhi = glm::clamp(mPhi, -89.f, 89.f);
         }
         else if (mLeftButtonDown)
         {
-            float xOffset = -mPanSpeed * mouseDt.x / PanVarDivisor;
+            float xOffset = mPanSpeed * mouseDt.x / PanVarDivisor;
             float yOffset = mPanSpeed * mouseDt.y / PanVarDivisor;
 
             mPosition += mAxisX * xOffset + mAxisY * yOffset;
@@ -237,7 +229,7 @@ void Camera::updateEditorMode(float dt)
     if (mouseDt.x || mouseDt.y)
     {
         mTheta += -mouseDt.x * mRotateSensitivity / RotateVarDivisor;
-        mPhi += -mouseDt.y * mRotateSensitivity / RotateVarDivisor;
+        mPhi += mouseDt.y * mRotateSensitivity / RotateVarDivisor;
         mPhi = glm::clamp(mPhi, -89.f, 89.f);
     }
 }
@@ -261,30 +253,17 @@ void Camera::calculateBasis()
 void Camera::calculateViewProjection()
 {
     calculateBasis();
-
-    mView[0].x = mAxisX.x;
-    mView[0].y = mAxisY.x;
-    mView[0].z = mAxisZ.x;
-    mView[1].x = mAxisX.y;
-    mView[1].y = mAxisY.y;
-    mView[1].z = mAxisZ.y;
-    mView[2].x = mAxisX.z;
-    mView[2].y = mAxisY.z;
-    mView[2].z = mAxisZ.z;
-    mView[3].x = -glm::dot(mPosition, mAxisX);
-    mView[3].y = -glm::dot(mPosition, mAxisY);
-    mView[3].z = -glm::dot(mPosition, mAxisZ);
-    mView[3].w = 1.f;
-
+    mView = glm::lookAt(mPosition, mPosition + mAxisZ, glm::vec3(0.f, 1.f, 0.f));
     mProjection = glm::perspective(glm::radians(mFovY), mAspectRatio, mNearZ, mFarZ);
-    mViewProjection = sRightHandedBasis * mProjection * mView;
+    mProjection[1].y *= -1.f;
+    mViewProjection = mProjection * mView;
 }
 
 const CameraRenderData Camera::renderData() const
 {
     return {
         .view = mView,
-        .projection = sRightHandedBasis * mProjection,
+        .projection = mProjection,
         .viewProj = mViewProjection,
         .position = glm::vec4(mPosition, 1.f),
         .direction = glm::vec4(mAxisZ, 1.f),

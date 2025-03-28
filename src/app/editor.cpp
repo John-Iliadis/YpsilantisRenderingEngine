@@ -1852,7 +1852,7 @@ std::optional<uuid32_t> Editor::selectModel()
 
 glm::vec3 Editor::spawnPos()
 {
-    return mRenderer.mCamera.position() - mRenderer.mCamera.front() * 10.f;
+    return mRenderer.mCamera.position() + mRenderer.mCamera.front() * 10.f;
 }
 
 bool Editor::lastItemClicked(uuid32_t id)
