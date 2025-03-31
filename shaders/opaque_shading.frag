@@ -3,6 +3,7 @@
 #include "material.glsl"
 #include "lights.glsl"
 #include "rendering_equations.glsl"
+#include "cluster.glsl"
 
 layout (early_fragment_tests) in;
 
@@ -20,7 +21,9 @@ layout (push_constant) uniform PushConstants
     uint debugNormals;
     uint screenWidth;
     uint screenHeight;
-    uvec4 clusterGrid;
+    uint clusterGridX;
+    uint clusterGridY;
+    uint clusterGridZ;
 };
 
 layout (set = 0, binding = 0) uniform CameraUBO
@@ -40,29 +43,27 @@ layout (set = 2, binding = 0) buffer readonly DirLightsSSBO { DirectionalLight d
 layout (set = 2, binding = 1) buffer readonly PointLightsSSBO { PointLight pointLights[]; };
 layout (set = 2, binding = 2) buffer readonly SpotLightSSBO { SpotLight spotLights[]; };
 
-layout (set = 3, binding = 0) buffer readonly LightIndexSSBO { uint lightIndexList[]; };
+layout (set = 3, binding = 0) buffer readonly ClustersSSBO { Cluster clusters[]; };
 
-layout (set = 4, binding = 0) uniform MaterialsUBO { Material material; };
-layout (set = 4, binding = 1) uniform sampler2D baseColorTex;
-layout (set = 4, binding = 2) uniform sampler2D metallicTex;
-layout (set = 4, binding = 3) uniform sampler2D roughnessTex;
-layout (set = 4, binding = 4) uniform sampler2D normalTex;
-layout (set = 4, binding = 5) uniform sampler2D aoTex;
-layout (set = 4, binding = 6) uniform sampler2D emissionTex;
+layout (set = 4, binding = 0) uniform sampler2D viewPosTexture;
 
-const uint perClusterCapacity = 50;
+layout (set = 5, binding = 0) uniform MaterialsUBO { Material material; };
+layout (set = 5, binding = 1) uniform sampler2D baseColorTex;
+layout (set = 5, binding = 2) uniform sampler2D metallicTex;
+layout (set = 5, binding = 3) uniform sampler2D roughnessTex;
+layout (set = 5, binding = 4) uniform sampler2D normalTex;
+layout (set = 5, binding = 5) uniform sampler2D aoTex;
+layout (set = 5, binding = 6) uniform sampler2D emissionTex;
 
-uint getClusterIndex()
+uint getClusterIndex(vec3 viewPos)
 {
-    vec2 clusterSizeXY = vec2(screenWidth, screenHeight) / clusterGrid.xy;
-    uvec3 clusterIndex = uvec3(gl_FragCoord.xy / clusterSizeXY, 0);
+    vec2 clusterSizeXY = vec2(screenWidth, screenHeight) / vec2(clusterGridX, clusterGridY);
+    uvec3 cluster = uvec3(gl_FragCoord.xy / clusterSizeXY, 0);
+    cluster.z = uint(clusterGridZ * log(-viewPos.z / nearPlane) / log(farPlane / nearPlane));
 
-    float z = nearPlane * pow(farPlane / nearPlane, gl_FragCoord.z);
-    clusterIndex.z = uint(clusterGrid.z * log(z / nearPlane) / log(farPlane / nearPlane));
-
-    return clusterIndex.x +
-           clusterIndex.y * clusterGrid.x +
-           clusterIndex.z * clusterGrid.x * clusterGrid.y;
+    return cluster.x +
+           cluster.y * clusterGridX +
+           cluster.z * clusterGridX * clusterGridY;
 }
 
 void main()
@@ -77,6 +78,7 @@ void main()
     float ao = texture(aoTex, texCoords).r;
     vec3 emission = texture(emissionTex, texCoords).rgb * material.emissionColor.rgb * material.emissionFactor;
     float occlusionFactor = texture(ssaoTexture, screenSpaceTexCoords).r;
+    vec3 viewPos = texture(viewPosTexture, screenSpaceTexCoords).xyz;
 
     vec3 normal = normalize(vTBN * normalSample);
     vec3 viewVec = normalize(cameraPos.xyz - vFragWorldPos);
@@ -93,12 +95,11 @@ void main()
         L_0 += renderingEquation(normal, lightVec, viewVec, halfwayVec, lightRadiance, baseColor, F_0, metallic, roughness);
     }
 
-    uint clusterIndex = getClusterIndex();
-    uint baseLightIndex = clusterIndex * perClusterCapacity;
-    uint clusterPointLightCount = lightIndexList[baseLightIndex];
-    for (uint i = 0; i < clusterPointLightCount; ++i)
+    uint clusterIndex = getClusterIndex(viewPos);
+    Cluster cluster = clusters[clusterIndex];
+    for (uint i = 0; i < cluster.lightCount; ++i)
     {
-        PointLight pointLight = pointLights[lightIndexList[baseLightIndex + i + 1]];
+        PointLight pointLight = pointLights[cluster.lightIndices[i]];
 
         vec3 lightToPosVec = pointLight.position.xyz - vFragWorldPos;
         float dist = length(lightToPosVec);

@@ -9,6 +9,8 @@ namespace ImGuizmo
     void DecomposeMatrixToComponents(const float* matrix, float* translation, float* rotation, float* scale);
 }
 
+// todo: don't calculate the frustum grid each frame
+
 Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     : SubscriberSNS({Topic::Type::Resource})
     , mRenderDevice(renderDevice)
@@ -25,7 +27,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
         mHeight = saveData["viewport"]["height"];
     }
 
-    mCamera = Camera(glm::vec3(0.f, 1.f, 0.f), 30.f, mWidth, mHeight, 0.01f);
+    mCamera = Camera(glm::vec3(0.f, 1.f, 0.f), 30.f, mWidth, mHeight);
 
     createDefaultMaterialTextures(mRenderDevice);
 
@@ -52,7 +54,6 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createPrepassPipeline();
 
     createVolumeClusterSSBO();
-    createClusterLightListSSBO();
     createFrustumClusterGenPipelineLayout();
     createFrustumClusterGenPipeline();
     createAssignLightsToClustersPipelineLayout();
@@ -110,7 +111,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createLightsDs();
     createFrustumClusterGenDs();
     createAssignLightsToClustersDs();
-    createClusterLightListDs();
+    createClustersDs();
 }
 
 Renderer::~Renderer()
@@ -501,41 +502,18 @@ void Renderer::executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer)
     endDebugLabel(commandBuffer);
 }
 
+// only needs to be calculated when resized
 void Renderer::executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer)
 {
     beginDebugLabel(commandBuffer, "Gen Frustum Clusters");
 
-    vkCmdFillBuffer(commandBuffer, mVolumeClustersSSBO.getBuffer(), 0, mVolumeClustersSSBO.getSize(), 0);
-    vkCmdFillBuffer(commandBuffer, mClusterLightListSSBO.getBuffer(), 0, mClusterLightListSSBO.getSize(), 0);
-
-    VkBufferMemoryBarrier clearBufferMemoryBarrier {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-        .buffer = VK_NULL_HANDLE,
-        .offset = 0,
-        .size = VK_WHOLE_SIZE
-    };
-
-    std::array<VkBufferMemoryBarrier, 2> clearBufferMemoryBarriers;
-    clearBufferMemoryBarriers.fill(clearBufferMemoryBarrier);
-
-    clearBufferMemoryBarriers.at(0).buffer = mVolumeClustersSSBO.getBuffer();
-    clearBufferMemoryBarriers.at(1).buffer = mClusterLightListSSBO.getBuffer();
-
-    vkCmdPipelineBarrier(commandBuffer,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                         0,
-                         0, nullptr,
-                         clearBufferMemoryBarriers.size(), clearBufferMemoryBarriers.data(),
-                         0, nullptr);
-
     struct {
-        glm::mat4 invProj;
-        glm::uvec2 screenSize;
+        alignas(16) glm::mat4 invProj;
+        alignas(16) glm::uvec4 clusterGrid;
+        alignas(8) glm::uvec2 screenSize;
     } pushConstants {
         glm::inverse(mCamera.projection()),
+        glm::uvec4(mClusterGridSize, 0.),
         glm::uvec2(mWidth, mHeight)
     };
 
@@ -559,7 +537,7 @@ void Renderer::executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer
     VkBufferMemoryBarrier clustersBufferMemoryBarrier {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
         .buffer = mVolumeClustersSSBO.getBuffer(),
         .offset = 0,
         .size = VK_WHOLE_SIZE
@@ -579,18 +557,21 @@ void Renderer::executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer
 void Renderer::executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBuffer)
 {
     struct {
-        uint32_t pointLightCount;
+        alignas(16) glm::uvec4 clusterGrid;
+        alignas(4) uint32_t pointLightCount;
     } pushConstants {
+        glm::uvec4(mClusterGridSize, 0),
         static_cast<uint32_t>(mPointLights.size())
     };
 
     beginDebugLabel(commandBuffer, "Create Light List");
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, mAssignLightsToClustersPipeline);
 
+    std::array<VkDescriptorSet, 2> ds {mCameraDs, mAssignLightsToClustersDs};
     vkCmdBindDescriptorSets(commandBuffer,
                             VK_PIPELINE_BIND_POINT_COMPUTE,
                             mAssignLightsToClustersPipelineLayout,
-                            0, 1, &mAssignLightsToClustersDs,
+                            0, ds.size(), ds.data(),
                             0, nullptr);
 
     vkCmdPushConstants(commandBuffer,
@@ -603,7 +584,7 @@ void Renderer::executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBu
 
     VkBufferMemoryBarrier clustersBufferMemoryBarrier {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+        .srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
         .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
         .buffer = mVolumeClustersSSBO.getBuffer(),
         .offset = 0,
@@ -673,14 +654,14 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
     { // subpass 0: opaque pass
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mOpaqueForwardPassPipeline);
 
-        std::array<VkDescriptorSet, 4> ds {mCameraDs, mSsaoBlurTextureDs, mLightsDs, mClusterLightListDs};
+        std::array<VkDescriptorSet, 5> ds {mCameraDs, mSsaoBlurTextureDs, mLightsDs, mClustersDs, mSsaoDs};
         vkCmdBindDescriptorSets(commandBuffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 mOpaqueForwardPassPipeline,
                                 0, ds.size(), ds.data(),
                                 0, nullptr);
 
-        std::array<uint32_t, 10> pushConstants {
+        std::array<uint32_t, 9> pushConstants {
             static_cast<uint32_t>(mDirectionalLights.size()),
             static_cast<uint32_t>(mPointLights.size()),
             static_cast<uint32_t>(mSpotLights.size()),
@@ -689,8 +670,7 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
             mHeight,
             mClusterGridSize.x,
             mClusterGridSize.y,
-            mClusterGridSize.z,
-            0
+            mClusterGridSize.z
         };
 
         vkCmdPushConstants(commandBuffer,
@@ -699,8 +679,8 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                            0, sizeof(uint32_t) * pushConstants.size(),
                            pushConstants.data());
 
-        if (mOitOn) renderOpaque(commandBuffer, mOpaqueForwardPassPipeline, 4);
-        else renderAll(commandBuffer, mOpaqueForwardPassPipeline, 4);
+        if (mOitOn) renderOpaque(commandBuffer, mOpaqueForwardPassPipeline, 5);
+        else renderAll(commandBuffer, mOpaqueForwardPassPipeline, 5);
     }
 
     { // subpass 1: transparent fragment collection
@@ -1376,7 +1356,6 @@ void Renderer::createAssignLightsToClustersDsLayout()
         .bindings = {
             binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT),
             binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT),
-            binding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT),
         },
         .debugName = "Renderer::mAssignLightsToClustersDsLayout"
     };
@@ -1554,20 +1533,10 @@ void Renderer::createVolumeClusterSSBO()
 {
     uint32_t clusterCount = mClusterGridSize.x * mClusterGridSize.y * mClusterGridSize.z;
     mVolumeClustersSSBO = {mRenderDevice,
-                           sizeof(VolumeTileAABB) * clusterCount,
+                           sizeof(Cluster) * clusterCount,
                            BufferType::Storage,
                            MemoryType::Device};
     mVolumeClustersSSBO.setDebugName("Renderer::mVolumeClustersSSBO");
-}
-
-void Renderer::createClusterLightListSSBO()
-{
-    uint32_t clusterCount = mClusterGridSize.x * mClusterGridSize.y * mClusterGridSize.z;
-    mClusterLightListSSBO = {mRenderDevice,
-                             clusterCount * PerClusterCapacity * sizeof(uint32_t),
-                             BufferType::Storage,
-                             MemoryType::Device};
-    mClusterLightListSSBO.setDebugName("Renderer::mClusterLightListSSBO");
 }
 
 void Renderer::createFrustumClusterGenPipelineLayout()
@@ -1575,7 +1544,7 @@ void Renderer::createFrustumClusterGenPipelineLayout()
     VkPushConstantRange pushConstantRange {
         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
         .offset = 0,
-        .size = sizeof(glm::mat4) + sizeof(glm::vec2)
+        .size = sizeof(glm::mat4) + sizeof(glm::vec4) * 2
     };
 
     std::array<VkDescriptorSetLayout, 2> setLayouts {
@@ -1639,14 +1608,18 @@ void Renderer::createAssignLightsToClustersPipelineLayout()
     VkPushConstantRange pushConstantRange {
         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
         .offset = 0,
-        .size = sizeof(uint32_t)
+        .size = sizeof(glm::vec4) * 2
     };
 
-    VkDescriptorSetLayout dsLayout = mAssignLightsToClustersDsLayout;
+    std::array<VkDescriptorSetLayout, 2> dsLayouts {
+        mCameraRenderDataDsLayout,
+        mAssignLightsToClustersDsLayout
+    };
+
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &dsLayout,
+        .setLayoutCount = static_cast<uint32_t>(dsLayouts.size()),
+        .pSetLayouts = dsLayouts.data(),
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &pushConstantRange
     };
@@ -1661,8 +1634,6 @@ void Renderer::createAssignLightsToClustersPipelineLayout()
                              VK_OBJECT_TYPE_PIPELINE_LAYOUT,
                              "Renderer::mAssignLightsToClustersPipelineLayout",
                              mAssignLightsToClustersPipelineLayout);
-
-
 }
 
 void Renderer::createAssignLightsToClustersPipeline()
@@ -2479,12 +2450,13 @@ void Renderer::createOpaqueForwardPassPipeline()
                 mSingleImageDsLayout,
                 mLightsDsLayout,
                 mSingleSSBODsLayout,
+                mSSAODsLayout,
                 mMaterialsDsLayout
             },
             .pushConstantRange = VkPushConstantRange {
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .offset = 0,
-                .size = sizeof(uint32_t) * 12
+                .size = sizeof(uint32_t) * 9
             }
         },
         .renderPass = mForwardRenderpass,
@@ -3447,12 +3419,6 @@ void Renderer::createAssignLightsToClustersDs()
         .range = VK_WHOLE_SIZE
     };
 
-    VkDescriptorBufferInfo lightListBufferInfo {
-        .buffer = mClusterLightListSSBO.getBuffer(),
-        .offset = 0,
-        .range = VK_WHOLE_SIZE
-    };
-
     VkWriteDescriptorSet prototypeWriteDescriptorSet {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = mAssignLightsToClustersDs,
@@ -3463,7 +3429,7 @@ void Renderer::createAssignLightsToClustersDs()
         .pBufferInfo = nullptr
     };
 
-    std::array<VkWriteDescriptorSet, 3> writeDs;
+    std::array<VkWriteDescriptorSet, 2> writeDs;
     writeDs.fill(prototypeWriteDescriptorSet);
 
     writeDs.at(0).pBufferInfo = &clusterBufferInfo;
@@ -3472,13 +3438,10 @@ void Renderer::createAssignLightsToClustersDs()
     writeDs.at(1).pBufferInfo = &pointLightBufferInfo;
     writeDs.at(1).dstBinding = 1;
 
-    writeDs.at(2).pBufferInfo = &lightListBufferInfo;
-    writeDs.at(2).dstBinding = 2;
-
     vkUpdateDescriptorSets(mRenderDevice.device, writeDs.size(), writeDs.data(), 0, nullptr);
 }
 
-void Renderer::createClusterLightListDs()
+void Renderer::createClustersDs()
 {
     VkDescriptorSetLayout dsLayout = mSingleSSBODsLayout;
 
@@ -3489,28 +3452,28 @@ void Renderer::createClusterLightListDs()
         .pSetLayouts = &dsLayout
     };
 
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mClusterLightListDs);
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mClustersDs);
     vulkanCheck(result, "Failed to allocate descriptor set.");
 
     setVulkanObjectDebugName(mRenderDevice,
                              VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                             "Renderer::mClusterLightListDs",
-                             mClusterLightListDs);
+                             "Renderer::mClustersDs",
+                             mClustersDs);
 
-    VkDescriptorBufferInfo lightListBufferInfo {
-        .buffer = mClusterLightListSSBO.getBuffer(),
+    VkDescriptorBufferInfo clusterSSBO {
+        .buffer = mVolumeClustersSSBO.getBuffer(),
         .offset = 0,
         .range = VK_WHOLE_SIZE
     };
 
     VkWriteDescriptorSet writeDescriptorSet {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mClusterLightListDs,
+        .dstSet = mClustersDs,
         .dstBinding = 0,
         .dstArrayElement = 0,
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .pBufferInfo = &lightListBufferInfo
+        .pBufferInfo = &clusterSSBO
     };
 
     vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);

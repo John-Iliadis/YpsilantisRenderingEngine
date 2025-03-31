@@ -24,11 +24,11 @@ constexpr uint32_t MaxPointLights = 1024;
 constexpr uint32_t MaxSpotLights = 1024;
 constexpr uint32_t MaxSsaoKernelSamples = 128;
 constexpr uint32_t SsaoNoiseTextureSize = 4;
-constexpr uint32_t PerClusterCapacity = 50;
+constexpr uint32_t PerClusterCapacity = 32;
 
 struct TransparentNode;
 struct LightIconRenderData;
-struct VolumeTileAABB;
+struct Cluster;
 enum class Tonemap;
 
 class Renderer : public SubscriberSNS
@@ -112,7 +112,6 @@ private:
     void createPrepassPipeline();
 
     void createVolumeClusterSSBO();
-    void createClusterLightListSSBO();
     void createFrustumClusterGenPipelineLayout();
     void createFrustumClusterGenPipeline();
     void createAssignLightsToClustersPipelineLayout();
@@ -171,7 +170,7 @@ private:
     void createLightsDs();
     void createFrustumClusterGenDs();
     void createAssignLightsToClustersDs();
-    void createClusterLightListDs();
+    void createClustersDs();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
@@ -239,7 +238,6 @@ private:
     // forward+ rendering
     glm::uvec3 mClusterGridSize = glm::vec3(16, 16, 24);
     VulkanBuffer mVolumeClustersSSBO;
-    VulkanBuffer mClusterLightListSSBO;
     VkPipelineLayout mFrustumClusterGenPipelineLayout{};
     VkPipeline mFrustumClusterGenPipeline{};
     VkPipelineLayout mAssignLightsToClustersPipelineLayout{};
@@ -269,6 +267,10 @@ private:
     VkDescriptorSet mColor8UDs{};
     VkDescriptorSet mColor32FInputDs{};
     VkDescriptorSet mLightsDs{};
+    VkDescriptorSet mFrustumClusterGenDs{};
+    VkDescriptorSet mAssignLightsToClustersDs{};
+    VkDescriptorSet mClustersDs{};
+    VkDescriptorSet mViewPosDs{};
 
     // ssao
     std::uniform_real_distribution<float> mSsaoDistribution {0.f, 1.f};
@@ -292,9 +294,6 @@ private:
     VkDescriptorSet mScaleIconDs{};
     VkDescriptorSet mGlobalIconDs{};
     VkDescriptorSet mLocalIconDs{};
-    VkDescriptorSet mFrustumClusterGenDs{};
-    VkDescriptorSet mAssignLightsToClustersDs{};
-    VkDescriptorSet mClusterLightListDs{};
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
@@ -362,10 +361,12 @@ struct LightIconRenderData
     VulkanTexture* icon;
 };
 
-struct VolumeTileAABB
+struct Cluster
 {
     alignas(16) glm::vec4 minPoint;
     alignas(16) glm::vec4 maxPoint;
+    alignas(4) uint32_t lightCount;
+    alignas(16) uint32_t lightIndices[PerClusterCapacity];
 };
 
 enum class Tonemap

@@ -111,12 +111,12 @@ void Editor::cameraPanel()
 
     ImGui::DragFloat("Near Plane",
                      mRenderer.mCamera.nearPlane(),
-                     0.01f, 0.001f, *mRenderer.mCamera.farPlane(),
+                     0.001f, 0.001f, *mRenderer.mCamera.farPlane(),
                      "%.3f", ImGuiSliderFlags_AlwaysClamp);
 
     ImGui::DragFloat("Far Plane",
                      mRenderer.mCamera.farPlane(),
-                     0.1f, *mRenderer.mCamera.nearPlane(), 10000.f,
+                     0.01f, *mRenderer.mCamera.nearPlane(), 10000.f,
                      "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
     ImGui::SeparatorText("Camera Mode");

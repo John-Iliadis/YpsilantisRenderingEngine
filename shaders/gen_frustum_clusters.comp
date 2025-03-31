@@ -1,14 +1,11 @@
 #version 460 core
 
-struct VolumeTileAABB
-{
-    vec4 minPoint;
-    vec4 maxPoint;
-};
+#include "cluster.glsl"
 
 layout (push_constant) uniform PushConstants
 {
     mat4 inverseProj;
+    uvec4 clusterGrid;
     uvec2 screenSize;
 };
 
@@ -23,7 +20,7 @@ layout (set = 0, binding = 0) uniform CameraUBO
     float farPlane;
 };
 
-layout (set = 1, binding = 0) buffer volumeClusterSSBO { VolumeTileAABB cluster[]; };
+layout (set = 1, binding = 0) restrict buffer volumeClusterSSBO { Cluster clusters[]; };
 
 vec3 screenToView(vec2 screenCoords);
 vec3 lineIntersectPlane(vec3 a, vec3 b, float zDistance);
@@ -31,22 +28,22 @@ vec3 lineIntersectPlane(vec3 a, vec3 b, float zDistance);
 void main()
 {
     // per cluster variables
-    vec2 tileSize = screenSize / vec2(gl_NumWorkGroups.xy);
-    uint tileIndex = gl_WorkGroupID.x +
-                     gl_WorkGroupID.y * gl_NumWorkGroups.x +
-                     gl_WorkGroupID.z * gl_NumWorkGroups.x * gl_NumWorkGroups.y;
+    vec2 clusterSize = screenSize / vec2(clusterGrid.xy);
+    uint clusterIndex = gl_GlobalInvocationID.x +
+                        gl_GlobalInvocationID.y * clusterGrid.x +
+                        gl_GlobalInvocationID.z * clusterGrid.x * clusterGrid.y;
+
+    // calculate the z of the near and far cluster planes using the exponential equation
+    float nearClusterPlane = nearPlane * pow(farPlane / nearPlane, gl_GlobalInvocationID.z / float(clusterGrid.z));
+    float farClusterPlane = nearPlane * pow(farPlane / nearPlane, (gl_GlobalInvocationID.z + 1) / float(clusterGrid.z));
 
     // calculate the screen space min and max point of the cluster
-    vec2 minPointSS = gl_WorkGroupID.xy * tileSize; // top left
-    vec2 maxPointSS = (gl_WorkGroupID.xy + 1) * tileSize; // bottom right
+    vec2 minPointSS = gl_GlobalInvocationID.xy * clusterSize; // top left
+    vec2 maxPointSS = (gl_GlobalInvocationID.xy + 1) * clusterSize; // bottom right
 
     // transform the points from screen space to view space
     vec3 minPointVs = screenToView(minPointSS);
     vec3 maxPointVs = screenToView(maxPointSS);
-
-    // calculate the z of the near and far cluster planes using the exponential equation
-    float nearClusterPlane = nearPlane * pow(farPlane / nearPlane, gl_WorkGroupID.z / float(gl_NumWorkGroups.z));
-    float farClusterPlane = nearPlane * pow(farPlane / nearPlane, (gl_WorkGroupID.z + 1) / float(gl_NumWorkGroups.z));
 
     // find the intesection points of the cluster to the near and far planes
     vec3 minPointNear = lineIntersectPlane(vec3(0.0), minPointVs, nearClusterPlane);
@@ -58,14 +55,21 @@ void main()
     vec3 minPointAABB = min(min(minPointNear, minPointFar), min(maxPointNear, maxPointFar));
     vec3 maxPointAABB = max(max(minPointNear, minPointFar), max(maxPointNear, maxPointFar));
 
+    // for some reason the x coordinates are inverted. Quick fix
+    float minX = -maxPointAABB.x;
+    float maxX = -minPointAABB.x;
+    maxPointAABB.x = maxX;
+    minPointAABB.x = minX;
+
     // store the result
-    cluster[tileIndex].minPoint = vec4(minPointAABB, 1.0);
-    cluster[tileIndex].maxPoint = vec4(maxPointAABB, 1.0);
+    clusters[clusterIndex].minPoint = vec4(minPointAABB, 0.0);
+    clusters[clusterIndex].maxPoint = vec4(maxPointAABB, 0.0);
 }
 
 vec3 screenToView(vec2 screenCoords)
 {
-    vec4 ndc = vec4(screenCoords / screenSize * 2.0 - 1.0, 0.0, 1.0);
+    vec2 texCoords = screenCoords / screenSize;
+    vec4 ndc = vec4(vec2(texCoords.x, 1.0 - texCoords.y) * 2.0 - 1.0, 1.0, 1.0);
 
     vec4 viewCoord = inverseProj * ndc;
     viewCoord /= viewCoord.w;

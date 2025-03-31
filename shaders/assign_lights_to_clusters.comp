@@ -1,69 +1,61 @@
 #version 460 core
 
 #include "lights.glsl"
-
-struct LightGrid
-{
-    uint offset;
-    uint count;
-};
-
-struct VolumeTileAABB
-{
-    vec4 minPoint;
-    vec4 maxPoint;
-};
+#include "cluster.glsl"
 
 layout (push_constant) uniform PushConstants
 {
+    uvec4 clusterGrid;
     uint pointLightCount;
 };
 
-layout (set = 0, binding = 0) readonly buffer volumeClusterSSBO { VolumeTileAABB clusters[]; };
-layout (set = 0, binding = 1) readonly buffer PointLightSSBO { PointLight pointLights[]; };
-layout (set = 0, binding = 2) buffer LightIndexSSBO { uint lightIndexList[]; };
+layout (set = 0, binding = 0) uniform CameraUBO
+{
+    mat4 view;
+    mat4 projection;
+    mat4 viewProj;
+    vec4 cameraPos;
+    vec4 cameraDir;
+    float nearPlane;
+    float farPlane;
+};
 
-bool sphereIntersectAABB(vec3 minAABB, vec3 maxAABB, vec3 lightPos, float radius);
+layout (set = 1, binding = 0) restrict buffer volumeClusterSSBO { Cluster clusters[]; };
+layout (set = 1, binding = 1) readonly buffer PointLightSSBO { PointLight pointLights[]; };
 
-const uint perClusterCapacity = 50;
-const uint maxLightsPerCluster = perClusterCapacity - 1;
+bool sphereIntersectAABB(Cluster cluster, PointLight pointLight);
 
 void main()
 {
-    // per cluster variables
-    uint tileIndex = gl_WorkGroupID.x +
-                     gl_WorkGroupID.y * gl_NumWorkGroups.x +
-                     gl_WorkGroupID.z * gl_NumWorkGroups.x * gl_NumWorkGroups.y;
+    uint clusterIndex = gl_GlobalInvocationID.x +
+                        gl_GlobalInvocationID.y * clusterGrid.x +
+                        gl_GlobalInvocationID.z * clusterGrid.x * clusterGrid.y;
 
-    VolumeTileAABB aabb = clusters[tileIndex];
-
-    // iterate the light list
-    uint clusterBaseIndex = tileIndex * perClusterCapacity;
-    uint lightsInCluster = 0;
+    Cluster cluster = clusters[clusterIndex];
+    cluster.lightCount = 0;
 
     for (uint i = 0; i < pointLightCount; ++i)
     {
         PointLight pointLight = pointLights[i];
 
-        if (sphereIntersectAABB(aabb.minPoint.xyz, aabb.maxPoint.xyz, pointLight.position.xyz, pointLights[i].range))
+        if (sphereIntersectAABB(cluster, pointLight))
         {
-            uint lightIndex = clusterBaseIndex + lightsInCluster + 1;
-            lightIndexList[lightIndex] = i;
-            ++lightsInCluster;
+            cluster.lightIndices[cluster.lightCount] = i;
+            ++cluster.lightCount;
         }
 
-        if (lightsInCluster == maxLightsPerCluster)
+        if (cluster.lightCount == MAX_LIGHTS_PER_CLUSTER)
             break;
     }
 
-    // the first element of the cluster is the number of lights it contains
-    lightIndexList[clusterBaseIndex] = lightsInCluster;
+    clusters[clusterIndex] = cluster;
 }
 
-bool sphereIntersectAABB(vec3 minAABB, vec3 maxAABB, vec3 lightPos, float radius)
+bool sphereIntersectAABB(Cluster cluster, PointLight pointLight)
 {
-    // Find closest point on the box to the sphere center
-    vec3 closestPoint = clamp(lightPos, minAABB, maxAABB);
-    float dist = distance(closestPoint, lightPos);
-    return dist < radius;
+    vec3 lightPosVS = vec3(view * pointLight.position);
+    lightPosVS.z *= -1.0;
+    vec3 closestPoint = clamp(lightPosVS, cluster.minPoint.xyz, cluster.maxPoint.xyz);
+    float dist = distance(closestPoint, lightPosVS);
+    return dist < pointLight.range;
 }
