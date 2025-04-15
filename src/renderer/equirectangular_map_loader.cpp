@@ -4,15 +4,7 @@
 
 #include "equirectangular_map_loader.hpp"
 
-static const glm::mat4 proj = glm::perspective(90.f, 1.f, 0.1f, 10.f);
-static const std::array<glm::mat4, 6> views {
-    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
-    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
-    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))
-};
+extern const std::array<glm::mat4, 6> gViews;
 
 EquirectangularMapLoader::EquirectangularMapLoader(const VulkanRenderDevice &renderDevice, const std::string &path)
     : mRenderDevice(renderDevice)
@@ -31,7 +23,6 @@ EquirectangularMapLoader::EquirectangularMapLoader(const VulkanRenderDevice &ren
         createFramebuffer();
         createDescriptors();
         createPipeline();
-        allocateCommandBuffer();
         execute();
         mSuccess = true;
     }
@@ -48,7 +39,6 @@ EquirectangularMapLoader::~EquirectangularMapLoader()
     vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, 1, &mDs);
     vkDestroyFramebuffer(mRenderDevice.device, mFramebuffer, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mRenderpass, nullptr);
-    vkFreeCommandBuffers(mRenderDevice.device, mRenderDevice.commandPool, 1, &mCommandBuffer);
 }
 
 bool EquirectangularMapLoader::success() const
@@ -87,11 +77,10 @@ void EquirectangularMapLoader::createEquirectangularMap(float *data)
 void EquirectangularMapLoader::createUBO()
 {
     mUBO = VulkanBuffer(mRenderDevice,
-                        sizeof(glm::mat4) * 7,
+                        sizeof(gViews),
                         BufferType::Uniform,
                         MemoryType::HostCoherent);
-    mUBO.mapBufferMemory(0, sizeof(glm::mat4), glm::value_ptr(proj));
-    mUBO.mapBufferMemory(sizeof(glm::mat4), sizeof(glm::mat4) * 6, views.data());
+    mUBO.mapBufferMemory(0, sizeof(gViews), gViews.data());
     mUBO.setDebugName("EquirectangularMapLoader::mUBO");
 }
 
@@ -239,7 +228,7 @@ void EquirectangularMapLoader::createPipeline()
 {
     PipelineSpecification specification {
         .shaderStages = {
-            .vertShaderPath = "shaders/equirectangular.vert.spv",
+            .vertShaderPath = "shaders/quad.vert.spv",
             .geomShaderPath = "shaders/equirectangular.geom.spv",
             .fragShaderPath = "shaders/equirectangular.frag.spv"
         },
@@ -287,19 +276,6 @@ void EquirectangularMapLoader::createPipeline()
     mPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
-void EquirectangularMapLoader::allocateCommandBuffer()
-{
-    VkCommandBufferAllocateInfo allocateInfo {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = mRenderDevice.commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1
-    };
-
-    VkResult result = vkAllocateCommandBuffers(mRenderDevice.device, &allocateInfo, &mCommandBuffer);
-    vulkanCheck(result, "Failed to allocate command buffer");
-}
-
 void EquirectangularMapLoader::execute()
 {
     VkRenderPassBeginInfo renderPassBeginInfo {
@@ -317,34 +293,13 @@ void EquirectangularMapLoader::execute()
         .pClearValues = nullptr
     };
 
-    VkCommandBufferBeginInfo commandBufferBeginInfo {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-    };
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
 
-    VkResult result = vkBeginCommandBuffer(mCommandBuffer, &commandBufferBeginInfo);
-    vulkanCheck(result, "Failed to begin command buffer.");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline, 0, 1, &mDs, 0, nullptr);
+    vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
 
-    vkCmdBeginRenderPass(mCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(mCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline);
-    vkCmdBindDescriptorSets(mCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline, 0, 1, &mDs, 0, nullptr);
-    vkCmdDraw(mCommandBuffer, 6, 1, 0, 0);
-    vkCmdEndRenderPass(mCommandBuffer);
-    vkEndCommandBuffer(mCommandBuffer);
-
-    VkFence fence = createFence(mRenderDevice, false, "EquirectangularMapLoader::execute::fence");
-
-    VkSubmitInfo submitInfo {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount = 0,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &mCommandBuffer,
-        .signalSemaphoreCount = 0
-    };
-
-    result = vkQueueSubmit(mRenderDevice.graphicsQueue, 1, &submitInfo, fence);
-    vulkanCheck(result, "Failed queue submit");
-
-    vkWaitForFences(mRenderDevice.device, 1, &fence, VK_TRUE, UINT64_MAX);
-    vkDestroyFence(mRenderDevice.device, fence, nullptr);
+    endSingleTimeCommands(mRenderDevice, commandBuffer);
 }

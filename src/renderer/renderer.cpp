@@ -4,6 +4,15 @@
 
 #include "renderer.hpp"
 
+inline const std::array<glm::mat4, 6> gViews {
+    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)),
+    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f))
+};
+
 namespace ImGuizmo
 {
     void DecomposeMatrixToComponents(const float* matrix, float* translation, float* rotation, float* scale);
@@ -101,6 +110,14 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createGizmoIconResources();
 
     loadSkybox();
+    createIrradianceMap();
+    createViewsUBO();
+    createIrradianceConvolutionDsLayout();
+    createIrradianceConvolutionDs();
+    createIrradianceConvolutionRenderpass();
+    createIrradianceConvolutionFramebuffer();
+    createConvolutionPipeline();
+    executeIrradianceConvolutionRenderpass(); // todo: remove from here
 
     createCameraDs();
     createSingleImageDescriptorSets();
@@ -131,6 +148,7 @@ Renderer::~Renderer()
     vkDestroyFramebuffer(mRenderDevice.device, mGridFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mLightIconFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mIrradianceConvolutionFramebuffer, nullptr);
 
     vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSkyboxRenderpass, nullptr);
@@ -140,6 +158,7 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mGridRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mLightIconRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mIrradianceConvolutionRenderpass, nullptr);
 }
 
 void Renderer::update()
@@ -3041,6 +3060,243 @@ void Renderer::loadSkybox()
 {
     EquirectangularMapLoader eml(mRenderDevice, "../assets/cubemaps/hall.hdr");
     eml.get(mSkyboxTexture);
+}
+
+void Renderer::createIrradianceMap()
+{
+    uint32_t irradianceMapSize = 32;
+
+    TextureSpecification specification {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .width = irradianceMapSize,
+        .height = irradianceMapSize,
+        .layerCount = 6,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_CUBE,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Linear,
+        .minFilter = TextureMinFilter::LinearMipmapNearest,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .wrapR = TextureWrap::ClampToEdge,
+        .generateMipMaps = false,
+        .createFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
+    };
+
+    mIrradianceMap = VulkanTexture(mRenderDevice, specification);
+    mIrradianceMap.setDebugName("Renderer::mIrradianceMap");
+}
+
+void Renderer::createViewsUBO()
+{
+    mViewsUBO = VulkanBuffer(mRenderDevice,
+                        sizeof(gViews),
+                        BufferType::Uniform,
+                        MemoryType::Device,
+                        gViews.data());
+    mViewsUBO.setDebugName("EquirectangularMapLoader::mViewsUBO");
+}
+
+void Renderer::createIrradianceConvolutionDsLayout()
+{
+    DsLayoutSpecification specification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_GEOMETRY_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+        },
+        .debugName = "mIrradianceConvolutionDsLayout::mDsLayout"
+    };
+
+    mIrradianceConvolutionDsLayout = {mRenderDevice, specification};
+}
+
+void Renderer::createIrradianceConvolutionDs()
+{
+    VkDescriptorSetLayout dsLayout = mIrradianceConvolutionDsLayout;
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mIrradianceConvolutionDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    VkDescriptorBufferInfo bufferInfo {
+        .buffer = mViewsUBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorImageInfo imageInfo {
+        .sampler = mSkyboxTexture.vulkanSampler.sampler,
+        .imageView = mSkyboxTexture.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    std::array<VkWriteDescriptorSet, 2> dsWrites{};
+
+    dsWrites.at(0).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(0).dstSet = mIrradianceConvolutionDs;
+    dsWrites.at(0).dstBinding = 0;
+    dsWrites.at(0).dstArrayElement = 0;
+    dsWrites.at(0).descriptorCount = 1;
+    dsWrites.at(0).descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    dsWrites.at(0).pBufferInfo = &bufferInfo;
+
+    dsWrites.at(1).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(1).dstSet = mIrradianceConvolutionDs;
+    dsWrites.at(1).dstBinding = 1;
+    dsWrites.at(1).dstArrayElement = 0;
+    dsWrites.at(1).descriptorCount = 1;
+    dsWrites.at(1).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    dsWrites.at(1).pImageInfo = &imageInfo;
+
+    vkUpdateDescriptorSets(mRenderDevice.device, dsWrites.size(), dsWrites.data(), 0, nullptr);
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "EquirectangularMapLoader::mIrradianceConvolutionDs",
+                             mIrradianceConvolutionDs);
+}
+
+void Renderer::createIrradianceConvolutionRenderpass()
+{
+    VkAttachmentDescription attachment {
+        .format = mIrradianceMap.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentRef,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mIrradianceConvolutionRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mIrradianceConvolutionRenderpass, "EquirectangularMapLoader::mIrradianceConvolutionRenderpass");
+}
+
+void Renderer::createIrradianceConvolutionFramebuffer()
+{
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mIrradianceConvolutionRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &mIrradianceMap.imageView,
+        .width = mIrradianceMap.width,
+        .height = mIrradianceMap.height,
+        .layers = mIrradianceMap.layerCount
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mIrradianceConvolutionFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mIrradianceConvolutionFramebuffer, "EquirectangularMapLoader::mIrradianceConvolutionFramebuffer");
+}
+
+void Renderer::createConvolutionPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/quad.vert.spv",
+            .geomShaderPath = "shaders/equirectangular.geom.spv",
+            .fragShaderPath = "shaders/irradiance_convolution.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .viewportState = {
+            .viewport = VkViewport {
+                .x = 0.f,
+                .y = static_cast<float>(mIrradianceMap.height),
+                .width = static_cast<float>(mIrradianceMap.width),
+                .height = -static_cast<float>(mIrradianceMap.height),
+                .minDepth = 0.f,
+                .maxDepth = 1.f
+            },
+            .scissor = VkRect2D {
+                .offset = {.x = 0, .y = 0},
+                .extent = {
+                    .width = static_cast<uint32_t>(mIrradianceMap.width),
+                    .height = static_cast<uint32_t>(mIrradianceMap.height)
+                }
+            }
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = false,
+            .enableDepthWrite = false
+        },
+        .blendStates = {
+            {.enable = false}
+        },
+        .pipelineLayout = {.dsLayouts = {mIrradianceConvolutionDsLayout}},
+        .renderPass = mIrradianceConvolutionRenderpass,
+        .subpassIndex = 0,
+        .debugName = "EquirectangularMapLoader::mIrradianceConvolutionPipeline"
+    };
+
+    mIrradianceConvolutionPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::executeIrradianceConvolutionRenderpass()
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mIrradianceConvolutionRenderpass,
+        .framebuffer = mIrradianceConvolutionFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = static_cast<uint32_t>(mIrradianceMap.width),
+                .height = static_cast<uint32_t>(mIrradianceMap.height)
+            }
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mIrradianceConvolutionPipeline);
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mIrradianceConvolutionPipeline,
+                            0, 1, &mIrradianceConvolutionDs,
+                            0, nullptr);
+    vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
+
+    endSingleTimeCommands(mRenderDevice, commandBuffer);
 }
 
 void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &texture, const char *name)

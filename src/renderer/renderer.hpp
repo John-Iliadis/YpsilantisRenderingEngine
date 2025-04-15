@@ -160,6 +160,14 @@ private:
     void createGizmoIconResources();
 
     void loadSkybox();
+    void createIrradianceMap();
+    void createViewsUBO();
+    void createIrradianceConvolutionDsLayout();
+    void createIrradianceConvolutionDs();
+    void createIrradianceConvolutionRenderpass();
+    void createIrradianceConvolutionFramebuffer();
+    void createConvolutionPipeline();
+    void executeIrradianceConvolutionRenderpass();
 
     void createSingleImageDs(VkDescriptorSet& ds, const VulkanTexture& texture, const char* name);
     void createCameraDs();
@@ -242,6 +250,15 @@ private:
     VkPipeline mFrustumClusterGenPipeline{};
     VkPipelineLayout mAssignLightsToClustersPipelineLayout{};
     VkPipeline mAssignLightsToClustersPipeline{};
+
+    // IBL
+    VulkanTexture mIrradianceMap;
+    VulkanBuffer mViewsUBO;
+    VkRenderPass mIrradianceConvolutionRenderpass{};
+    VkFramebuffer mIrradianceConvolutionFramebuffer{};
+    VulkanDsLayout mIrradianceConvolutionDsLayout;
+    VkDescriptorSet mIrradianceConvolutionDs{};
+    VulkanGraphicsPipeline mIrradianceConvolutionPipeline;
 
     // descriptor set layouts
     VulkanDsLayout mSingleImageDsLayout;

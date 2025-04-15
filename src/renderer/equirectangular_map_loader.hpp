@@ -30,7 +30,6 @@ private:
     void createRenderpass();
     void createFramebuffer();
     void createPipeline();
-    void allocateCommandBuffer();
     void execute();
 
 private:
@@ -50,7 +49,6 @@ private:
     VulkanGraphicsPipeline mPipeline;
     VulkanDsLayout mDsLayout;
     VkDescriptorSet mDs;
-    VkCommandBuffer mCommandBuffer;
 };
 
 #endif //VULKANRENDERINGENGINE_EQUIRECTANGULAR_MAP_LOADER_HPP
