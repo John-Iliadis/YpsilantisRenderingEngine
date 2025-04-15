@@ -10,8 +10,8 @@
 #include "../utils/main_thread_task_queue.hpp"
 #include "../app/save_data.hpp"
 #include "../vk/vulkan_pipeline.hpp"
-#include "loaders/cubemap_loader.hpp"
 #include "../scene_graph/scene_graph.hpp"
+#include "equirectangular_map_loader.hpp"
 #include "camera.hpp"
 #include "model.hpp"
 #include "model_importer.hpp"
@@ -41,7 +41,6 @@ public:
     void render(VkCommandBuffer commandBuffer);
 
     void importModel(const ModelImportData& importData);
-    void importSkybox(const std::array<std::string, 6>& paths);
     void resize(uint32_t width, uint32_t height);
     void notify(const Message &message) override;
 
@@ -171,6 +170,7 @@ private:
     void createFrustumClusterGenDs();
     void createAssignLightsToClustersDs();
     void createClustersDs();
+    void createSkyboxDs();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
@@ -325,20 +325,13 @@ private:
     float mExposure = 1.f;
     float mMaxWhite = 4.f;
 
-    struct SkyboxData
-    {
-        alignas(4) int32_t flipX = false;
-        alignas(4) int32_t flipY = false;
-        alignas(4) int32_t flipZ = false;
-    } mSkyboxData;
-
     struct GridData
     {
         alignas(16) glm::vec4 thinLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 80.f / 255.f);
         alignas(16) glm::vec4 thickLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 1.f);
     } mGridData;
 
-    bool mRenderSkybox = true;
+    bool mRenderSkybox = false;
     bool mSsaoOn = true;
     bool mOitOn = true;
     bool mRenderGrid = true;

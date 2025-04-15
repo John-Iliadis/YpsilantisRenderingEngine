@@ -1,6 +1,6 @@
 #version 460 core
 
-#include "cube_data.glsl"
+#include "cube_vertices.glsl"
 
 layout (location = 0) out vec3 vTexCoords;
 

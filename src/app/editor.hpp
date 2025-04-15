@@ -78,7 +78,7 @@ private:
     void sharedPopups();
     void assetPanelPopup();
     void sceneGraphPopup();
-    void skyboxImportPopup();
+//    void skyboxImportPopup();
     void modelImportPopup();
 
     bool transformGizmo();

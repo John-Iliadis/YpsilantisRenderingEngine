@@ -233,18 +233,13 @@ void Editor::rendererPanel()
         ImGui::ColorEdit4("Thick line color", glm::value_ptr(mRenderer.mGridData.thickLineColor), colorEditFlags);
     }
 
-    if (ImGui::CollapsingHeader("Skybox", ImGuiTreeNodeFlags_DefaultOpen))
+    if (ImGui::CollapsingHeader("Image Based Lighting", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Checkbox("Render Skybox", &mRenderer.mRenderSkybox);
-        ImGui::Separator();
-
-        ImGui::Checkbox("Flip X-axis##skyboxX", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipX));
-        ImGui::Checkbox("Flip Y-axis##skyboxY", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipY));
-        ImGui::Checkbox("Flip Z-axis##skyboxZ", reinterpret_cast<bool*>(&mRenderer.mSkyboxData.flipZ));
+        ImGui::Checkbox("Enable##IBL", &mRenderer.mRenderSkybox);
         ImGui::Separator();
 
         if (ImGui::Button("Import New"))
-            ImGui::OpenPopup("skyboxImportPopup");
+            0;
     }
 
     if (ImGui::CollapsingHeader("HDR", ImGuiTreeNodeFlags_DefaultOpen))
@@ -332,7 +327,7 @@ void Editor::rendererPanel()
         helpMarker(mem.data());
     }
 
-    skyboxImportPopup();
+//    skyboxImportPopup();
 
     ImGui::End();
 }
@@ -1311,104 +1306,104 @@ void Editor::sceneGraphPopup()
     }
 }
 
-void Editor::skyboxImportPopup()
-{
-    static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoScrollbar;
-
-    static const char* preview = "...";
-    static std::array<std::string, 6> paths;
-
-    static auto loadPath = [] (const char* buttonLabel, std::string& outPath) {
-        if (ImGui::Button(buttonLabel))
-        {
-            static const char* filter = "Image files *.png *.jpeg *.jpg *.bmp\0*.jpeg;*.png;*.jpg;*.bmp;\0";
-            std::filesystem::path path = fileDialog("Select Texture", filter);
-            if (!path.empty()) outPath = path.string();
-        }
-    };
-
-    static auto displayPath = [] (std::string& path) {
-        ImGui::SameLine();
-        ImGui::BeginDisabled();
-
-        float textBoxLen = ImGui::GetContentRegionAvail().x;
-        if (!path.empty()) textBoxLen = std::min(textBoxLen, ImGui::CalcTextSize(path.data()).x + 8);
-
-        ImGui::PushItemWidth(textBoxLen);
-
-        if (path.empty()) ImGui::InputText("##skybox-path", const_cast<char*>(preview), 3);
-        else ImGui::InputText("##skybox-path", path.data(), path.size());
-
-        ImGui::PopItemWidth();
-        ImGui::EndDisabled();
-    };
-
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-
-    ImGui::SetNextWindowBgAlpha(1.0f);
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Appearing);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(250, 250), ImVec2(FLT_MAX, FLT_MAX));
-
-    if (ImGui::BeginPopupModal("skyboxImportPopup", nullptr, windowFlags))
-    {
-        ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign, ImVec2(0.5f, 0.5f));
-        ImGui::SeparatorText("Import Skybox Textures");
-        ImGui::PopStyleVar();
-        ImGui::Separator();
-
-        loadPath("Add X+", paths.at(0));
-        displayPath(paths.at(0));
-
-        loadPath("Add X-", paths.at(1));
-        displayPath(paths.at(1));
-
-        loadPath("Add Y+", paths.at(2));
-        displayPath(paths.at(2));
-
-        loadPath("Add Y-", paths.at(3));
-        displayPath(paths.at(3));
-
-        loadPath("Add Z+", paths.at(4));
-        displayPath(paths.at(4));
-
-        loadPath("Add Z-", paths.at(5));
-        displayPath(paths.at(5));
-
-        ImGui::Separator();
-        helpMarker("The coordinate system is right handed with the positive Y-axis pointing up.");
-
-        float padding = 10.0f;  // Padding from the edge
-        float buttonWidth = 80.0f;
-        float spacing = 10.0f;  // Space between buttons
-        float totalWidth = (buttonWidth * 2) + spacing;
-
-        // Align to bottom-right
-        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - totalWidth - padding);
-        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - padding);
-
-        if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
-        {
-            paths.fill({});
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::SameLine();
-
-        ImGui::BeginDisabled(std::any_of(paths.begin(), paths.end(), [] (const auto& s) {return s.empty();}));
-        if (ImGui::Button("OK", ImVec2(buttonWidth, 0)))
-        {
-            mRenderer.importSkybox(paths);
-            paths.fill({});
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndDisabled();
-
-        ImGui::EndPopup();
-    }
-}
+//void Editor::skyboxImportPopup()
+//{
+//    static ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
+//        ImGuiWindowFlags_NoSavedSettings |
+//        ImGuiWindowFlags_NoScrollbar;
+//
+//    static const char* preview = "...";
+//    static std::array<std::string, 6> paths;
+//
+//    static auto loadPath = [] (const char* buttonLabel, std::string& outPath) {
+//        if (ImGui::Button(buttonLabel))
+//        {
+//            static const char* filter = "Image files *.png *.jpeg *.jpg *.bmp\0*.jpeg;*.png;*.jpg;*.bmp;\0";
+//            std::filesystem::path path = fileDialog("Select Texture", filter);
+//            if (!path.empty()) outPath = path.string();
+//        }
+//    };
+//
+//    static auto displayPath = [] (std::string& path) {
+//        ImGui::SameLine();
+//        ImGui::BeginDisabled();
+//
+//        float textBoxLen = ImGui::GetContentRegionAvail().x;
+//        if (!path.empty()) textBoxLen = std::min(textBoxLen, ImGui::CalcTextSize(path.data()).x + 8);
+//
+//        ImGui::PushItemWidth(textBoxLen);
+//
+//        if (path.empty()) ImGui::InputText("##skybox-path", const_cast<char*>(preview), 3);
+//        else ImGui::InputText("##skybox-path", path.data(), path.size());
+//
+//        ImGui::PopItemWidth();
+//        ImGui::EndDisabled();
+//    };
+//
+//    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+//
+//    ImGui::SetNextWindowBgAlpha(1.0f);
+//    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+//    ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Appearing);
+//    ImGui::SetNextWindowSizeConstraints(ImVec2(250, 250), ImVec2(FLT_MAX, FLT_MAX));
+//
+//    if (ImGui::BeginPopupModal("skyboxImportPopup", nullptr, windowFlags))
+//    {
+//        ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextAlign, ImVec2(0.5f, 0.5f));
+//        ImGui::SeparatorText("Import Skybox Textures");
+//        ImGui::PopStyleVar();
+//        ImGui::Separator();
+//
+//        loadPath("Add X+", paths.at(0));
+//        displayPath(paths.at(0));
+//
+//        loadPath("Add X-", paths.at(1));
+//        displayPath(paths.at(1));
+//
+//        loadPath("Add Y+", paths.at(2));
+//        displayPath(paths.at(2));
+//
+//        loadPath("Add Y-", paths.at(3));
+//        displayPath(paths.at(3));
+//
+//        loadPath("Add Z+", paths.at(4));
+//        displayPath(paths.at(4));
+//
+//        loadPath("Add Z-", paths.at(5));
+//        displayPath(paths.at(5));
+//
+//        ImGui::Separator();
+//        helpMarker("The coordinate system is right handed with the positive Y-axis pointing up.");
+//
+//        float padding = 10.0f;  // Padding from the edge
+//        float buttonWidth = 80.0f;
+//        float spacing = 10.0f;  // Space between buttons
+//        float totalWidth = (buttonWidth * 2) + spacing;
+//
+//        // Align to bottom-right
+//        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - totalWidth - padding);
+//        ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetFrameHeight() - padding);
+//
+//        if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0)))
+//        {
+//            paths.fill({});
+//            ImGui::CloseCurrentPopup();
+//        }
+//
+//        ImGui::SameLine();
+//
+//        ImGui::BeginDisabled(std::any_of(paths.begin(), paths.end(), [] (const auto& s) {return s.empty();}));
+//        if (ImGui::Button("OK", ImVec2(buttonWidth, 0)))
+//        {
+//            mRenderer.importSkybox(paths);
+//            paths.fill({});
+//            ImGui::CloseCurrentPopup();
+//        }
+//        ImGui::EndDisabled();
+//
+//        ImGui::EndPopup();
+//    }
+//}
 
 void Editor::modelImportPopup()
 {
