@@ -5,9 +5,9 @@
 #ifndef VULKANRENDERINGENGINE_EQUIRECTANGULAR_MAP_LOADER_HPP
 #define VULKANRENDERINGENGINE_EQUIRECTANGULAR_MAP_LOADER_HPP
 
-#include "glm/gtc/matrix_transform.hpp"
-#include "glm/gtc/type_ptr.hpp"
-#include "stb/stb_image.h"
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <stb/stb_image.h>
 #include "../vk/vulkan_texture.hpp"
 #include "../vk/vulkan_descriptor.hpp"
 #include "../vk/vulkan_pipeline.hpp"
@@ -44,7 +44,6 @@ private:
     int32_t mWidth;
     int32_t mHeight;
     int32_t mCubemapSize;
-    glm::mat4 mProj;
 
     VkRenderPass mRenderpass;
     VkFramebuffer mFramebuffer;

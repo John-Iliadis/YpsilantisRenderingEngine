@@ -1,14 +1,10 @@
 #version 460 core
 
-#include "cube_vertices.glsl"
-
-layout (location = 0) out vec3 vPos;
+#include "quad_vertices.glsl"
 
 void main()
 {
-    uint index = cubeIndices[gl_VertexIndex];
-    vec3 pos = cubeVertices[index];
-
-    vPos = pos;
+    uint index = quadIndices[gl_VertexIndex];
+    vec3 pos = quadVertices[index];
     gl_Position = vec4(pos, 1.0);
 }

@@ -3,8 +3,6 @@
 layout (triangles) in;
 layout (triangle_strip, max_vertices = 18) out;
 
-layout (location = 0) in vec3 vDir[];
-
 layout (location = 0) out vec3 vTexCoords;
 
 layout (set = 0, binding = 0) uniform UBO {
@@ -20,12 +18,9 @@ void main()
 
         for (int i = 0; i < 3; ++i)
         {
-            vTexCoords = vDir[i]; // Direction for sampling
-            gl_Position = proj * views[layer] * vec4(vDir[i], 1.0);
+            vTexCoords = vec3(views[layer] * gl_in[i].gl_Position);
+            gl_Position = gl_in[i].gl_Position;
             EmitVertex();
-//            vTexCoords = gl_in[i].gl_Position.xyz;
-//            gl_Position = proj * views[layer] * gl_in[i].gl_Position;
-//            EmitVertex();
         }
 
         EndPrimitive();

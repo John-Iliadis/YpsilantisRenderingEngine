@@ -4,13 +4,14 @@
 
 #include "equirectangular_map_loader.hpp"
 
+static const glm::mat4 proj = glm::perspective(90.f, 1.f, 0.1f, 10.f);
 static const std::array<glm::mat4, 6> views {
-    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
     glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
     glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
     glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
     glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
+    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))
 };
 
 EquirectangularMapLoader::EquirectangularMapLoader(const VulkanRenderDevice &renderDevice, const std::string &path)
@@ -20,9 +21,6 @@ EquirectangularMapLoader::EquirectangularMapLoader(const VulkanRenderDevice &ren
     float* data = stbi_loadf(path.data(), &mWidth, &mHeight, nullptr, 4);
 
     if (!data) return;
-
-    mProj = glm::perspective(90.f, 1.f, 0.1f, 10.f);
-    mProj[1][1] *= -1.f;
 
     try
     {
@@ -92,7 +90,7 @@ void EquirectangularMapLoader::createUBO()
                         sizeof(glm::mat4) * 7,
                         BufferType::Uniform,
                         MemoryType::HostCoherent);
-    mUBO.mapBufferMemory(0, sizeof(glm::mat4), glm::value_ptr(mProj));
+    mUBO.mapBufferMemory(0, sizeof(glm::mat4), glm::value_ptr(proj));
     mUBO.mapBufferMemory(sizeof(glm::mat4), sizeof(glm::mat4) * 6, views.data());
     mUBO.setDebugName("EquirectangularMapLoader::mUBO");
 }
@@ -249,19 +247,11 @@ void EquirectangularMapLoader::createPipeline()
             .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
         },
         .viewportState = {
-//            .viewport = VkViewport {
-//                .x = 0.f,
-//                .y = static_cast<float>(mCubemapSize),
-//                .width = static_cast<float>(mCubemapSize),
-//                .height = -static_cast<float>(mCubemapSize),
-//                .minDepth = 0.f,
-//                .maxDepth = 1.f
-//            },
             .viewport = VkViewport {
                 .x = 0.f,
-                .y = 0.f,
+                .y = static_cast<float>(mCubemapSize),
                 .width = static_cast<float>(mCubemapSize),
-                .height = static_cast<float>(mCubemapSize),
+                .height = -static_cast<float>(mCubemapSize),
                 .minDepth = 0.f,
                 .maxDepth = 1.f
             },
@@ -338,7 +328,7 @@ void EquirectangularMapLoader::execute()
     vkCmdBeginRenderPass(mCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(mCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline);
     vkCmdBindDescriptorSets(mCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline, 0, 1, &mDs, 0, nullptr);
-    vkCmdDraw(mCommandBuffer, 36, 1, 0, 0);
+    vkCmdDraw(mCommandBuffer, 6, 1, 0, 0);
     vkCmdEndRenderPass(mCommandBuffer);
     vkEndCommandBuffer(mCommandBuffer);
 

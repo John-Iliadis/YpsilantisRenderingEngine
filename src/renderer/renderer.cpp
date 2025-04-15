@@ -3039,7 +3039,7 @@ void Renderer::createGizmoIconResources()
 
 void Renderer::loadSkybox()
 {
-    EquirectangularMapLoader eml(mRenderDevice, "../assets/cubemaps/test.hdr");
+    EquirectangularMapLoader eml(mRenderDevice, "../assets/cubemaps/hall.hdr");
     eml.get(mSkyboxTexture);
 }
 
