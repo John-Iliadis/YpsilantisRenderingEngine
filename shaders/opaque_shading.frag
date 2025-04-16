@@ -38,22 +38,21 @@ layout (set = 0, binding = 0) uniform CameraUBO
 };
 
 layout (set = 1, binding = 0) uniform sampler2D ssaoTexture;
+layout (set = 1, binding = 1) buffer readonly ClustersSSBO { Cluster clusters[]; };
+layout (set = 1, binding = 2) uniform sampler2D viewPosTexture;
+layout (set = 1, binding = 3) uniform samplerCube irradianceMap;
 
 layout (set = 2, binding = 0) buffer readonly DirLightsSSBO { DirectionalLight dirLights[]; };
 layout (set = 2, binding = 1) buffer readonly PointLightsSSBO { PointLight pointLights[]; };
 layout (set = 2, binding = 2) buffer readonly SpotLightSSBO { SpotLight spotLights[]; };
 
-layout (set = 3, binding = 0) buffer readonly ClustersSSBO { Cluster clusters[]; };
-
-layout (set = 4, binding = 0) uniform sampler2D viewPosTexture;
-
-layout (set = 5, binding = 0) uniform MaterialsUBO { Material material; };
-layout (set = 5, binding = 1) uniform sampler2D baseColorTex;
-layout (set = 5, binding = 2) uniform sampler2D metallicTex;
-layout (set = 5, binding = 3) uniform sampler2D roughnessTex;
-layout (set = 5, binding = 4) uniform sampler2D normalTex;
-layout (set = 5, binding = 5) uniform sampler2D aoTex;
-layout (set = 5, binding = 6) uniform sampler2D emissionTex;
+layout (set = 3, binding = 0) uniform MaterialsUBO { Material material; };
+layout (set = 3, binding = 1) uniform sampler2D baseColorTex;
+layout (set = 3, binding = 2) uniform sampler2D metallicTex;
+layout (set = 3, binding = 3) uniform sampler2D roughnessTex;
+layout (set = 3, binding = 4) uniform sampler2D normalTex;
+layout (set = 3, binding = 5) uniform sampler2D aoTex;
+layout (set = 3, binding = 6) uniform sampler2D emissionTex;
 
 uint getClusterIndex(vec3 viewPos)
 {

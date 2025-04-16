@@ -54,7 +54,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createLightsDsLayout();
     createFrustumClusterGenDsLayout();
     createAssignLightsToClustersDsLayout();
-    createSingleSSBODsLayout();
+    createForwardShadingDsLayout();
 
     createPrepassRenderpass();
     createPrepassFramebuffer();
@@ -117,7 +117,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createIrradianceConvolutionRenderpass();
     createIrradianceConvolutionFramebuffer();
     createConvolutionPipeline();
-    executeIrradianceConvolutionRenderpass(); // todo: remove from here
+    executeIrradianceConvolutionRenderpass();
 
     createCameraDs();
     createSingleImageDescriptorSets();
@@ -126,8 +126,9 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createLightsDs();
     createFrustumClusterGenDs();
     createAssignLightsToClustersDs();
-    createClustersDs();
     createSkyboxDs();
+    createForwardShadingDs();
+    updateForwardShadingDs();
 }
 
 Renderer::~Renderer()
@@ -239,6 +240,7 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createSingleImageDescriptorSets();
     createSsaoDs();
     createColor32FInputDs();
+    updateForwardShadingDs();
 
     createOitBuffers();
     updateOitResourcesDs();
@@ -639,7 +641,7 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
     { // subpass 0: opaque pass
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mOpaqueForwardPassPipeline);
 
-        std::array<VkDescriptorSet, 5> ds {mCameraDs, mSsaoBlurTextureDs, mLightsDs, mClustersDs, mSsaoDs};
+        std::array<VkDescriptorSet, 3> ds {mCameraDs, mForwardShadingDs, mLightsDs};
         vkCmdBindDescriptorSets(commandBuffer,
                                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 mOpaqueForwardPassPipeline,
@@ -664,8 +666,8 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                            0, sizeof(uint32_t) * pushConstants.size(),
                            pushConstants.data());
 
-        if (mOitOn) renderOpaque(commandBuffer, mOpaqueForwardPassPipeline, 5);
-        else renderAll(commandBuffer, mOpaqueForwardPassPipeline, 5);
+        if (mOitOn) renderOpaque(commandBuffer, mOpaqueForwardPassPipeline, 3);
+        else renderAll(commandBuffer, mOpaqueForwardPassPipeline, 3);
     }
 
     { // subpass 1: transparent fragment collection
@@ -1348,16 +1350,19 @@ void Renderer::createAssignLightsToClustersDsLayout()
     mAssignLightsToClustersDsLayout = {mRenderDevice, specification};
 }
 
-void Renderer::createSingleSSBODsLayout()
+void Renderer::createForwardShadingDsLayout()
 {
     DsLayoutSpecification specification {
         .bindings = {
-            binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
         },
-        .debugName = "Renderer::mSingleSSBODsLayout"
+        .debugName = "Renderer::mForwardShadingDsLayout"
     };
 
-    mSingleSSBODsLayout = {mRenderDevice, specification};
+    mForwardShadingDsLayout = {mRenderDevice, specification};
 }
 
 void Renderer::createPrepassRenderpass()
@@ -2427,11 +2432,9 @@ void Renderer::createOpaqueForwardPassPipeline()
         .pipelineLayout = {
             .dsLayouts = {
                 mCameraRenderDataDsLayout,
-                mSingleImageDsLayout,
+                mForwardShadingDsLayout,
                 mLightsDsLayout,
-                mSingleSSBODsLayout,
-                mSSAODsLayout,
-                mMaterialsDsLayout
+                mMaterialsDsLayout,
             },
             .pushConstantRange = VkPushConstantRange {
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -3638,44 +3641,6 @@ void Renderer::createAssignLightsToClustersDs()
     vkUpdateDescriptorSets(mRenderDevice.device, writeDs.size(), writeDs.data(), 0, nullptr);
 }
 
-void Renderer::createClustersDs()
-{
-    VkDescriptorSetLayout dsLayout = mSingleSSBODsLayout;
-
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &dsLayout
-    };
-
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mClustersDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-
-    setVulkanObjectDebugName(mRenderDevice,
-                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                             "Renderer::mClustersDs",
-                             mClustersDs);
-
-    VkDescriptorBufferInfo clusterSSBO {
-        .buffer = mVolumeClustersSSBO.getBuffer(),
-        .offset = 0,
-        .range = VK_WHOLE_SIZE
-    };
-
-    VkWriteDescriptorSet writeDescriptorSet {
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = mClustersDs,
-        .dstBinding = 0,
-        .dstArrayElement = 0,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-        .pBufferInfo = &clusterSSBO
-    };
-
-    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
-}
-
 void Renderer::createSkyboxDs()
 {
     VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
@@ -3712,4 +3677,86 @@ void Renderer::createSkyboxDs()
     };
 
     vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::createForwardShadingDs()
+{
+    VkDescriptorSetLayout dsLayout = mForwardShadingDsLayout;
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mForwardShadingDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mForwardShadingDs",
+                             mForwardShadingDs);
+}
+
+void Renderer::updateForwardShadingDs()
+{
+    VkDescriptorImageInfo ssaoImageInfo {
+        .sampler = mSsaoBlurTexture.vulkanSampler.sampler,
+        .imageView = mSsaoBlurTexture.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkDescriptorBufferInfo clusterBufferInfo {
+        .buffer = mVolumeClustersSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorImageInfo viewPosImageInfo {
+        .sampler = mPosTexture.vulkanSampler.sampler,
+        .imageView = mPosTexture.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkDescriptorImageInfo irradianceMapImageInfo {
+        .sampler = mIrradianceMap.vulkanSampler.sampler,
+        .imageView = mIrradianceMap.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    std::array<VkWriteDescriptorSet, 4> dsWrites {};
+
+    dsWrites.at(0).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(0).dstSet = mForwardShadingDs;
+    dsWrites.at(0).dstBinding = 0;
+    dsWrites.at(0).dstArrayElement = 0;
+    dsWrites.at(0).descriptorCount = 1;
+    dsWrites.at(0).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    dsWrites.at(0).pImageInfo = &ssaoImageInfo;
+
+    dsWrites.at(1).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(1).dstSet = mForwardShadingDs;
+    dsWrites.at(1).dstBinding = 1;
+    dsWrites.at(1).dstArrayElement = 0;
+    dsWrites.at(1).descriptorCount = 1;
+    dsWrites.at(1).descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    dsWrites.at(1).pBufferInfo = &clusterBufferInfo;
+
+    dsWrites.at(2).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(2).dstSet = mForwardShadingDs;
+    dsWrites.at(2).dstBinding = 2;
+    dsWrites.at(2).dstArrayElement = 0;
+    dsWrites.at(2).descriptorCount = 1;
+    dsWrites.at(2).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    dsWrites.at(2).pImageInfo = &viewPosImageInfo;
+
+    dsWrites.at(3).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(3).dstSet = mForwardShadingDs;
+    dsWrites.at(3).dstBinding = 3;
+    dsWrites.at(3).dstArrayElement = 0;
+    dsWrites.at(3).descriptorCount = 1;
+    dsWrites.at(3).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    dsWrites.at(3).pImageInfo = &irradianceMapImageInfo;
+
+    vkUpdateDescriptorSets(mRenderDevice.device, dsWrites.size(), dsWrites.data(), 0, nullptr);
 }

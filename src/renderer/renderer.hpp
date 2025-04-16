@@ -104,7 +104,7 @@ private:
     void createLightsDsLayout();
     void createFrustumClusterGenDsLayout();
     void createAssignLightsToClustersDsLayout();
-    void createSingleSSBODsLayout();
+    void createForwardShadingDsLayout();
 
     void createPrepassRenderpass();
     void createPrepassFramebuffer();
@@ -177,8 +177,9 @@ private:
     void createLightsDs();
     void createFrustumClusterGenDs();
     void createAssignLightsToClustersDs();
-    void createClustersDs();
     void createSkyboxDs();
+    void createForwardShadingDs();
+    void updateForwardShadingDs();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
@@ -271,7 +272,7 @@ private:
     VulkanDsLayout mLightsDsLayout;
     VulkanDsLayout mFrustumClusterGenDsLayout;
     VulkanDsLayout mAssignLightsToClustersDsLayout;
-    VulkanDsLayout mSingleSSBODsLayout;
+    VulkanDsLayout mForwardShadingDsLayout;
 
     // descriptor sets
     VkDescriptorSet mCameraDs{};
@@ -286,8 +287,7 @@ private:
     VkDescriptorSet mLightsDs{};
     VkDescriptorSet mFrustumClusterGenDs{};
     VkDescriptorSet mAssignLightsToClustersDs{};
-    VkDescriptorSet mClustersDs{};
-    VkDescriptorSet mViewPosDs{};
+    VkDescriptorSet mForwardShadingDs{};
 
     // ssao
     std::uniform_real_distribution<float> mSsaoDistribution {0.f, 1.f};
