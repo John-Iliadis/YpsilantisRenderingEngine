@@ -24,6 +24,8 @@ public:
     VkFormat format;
     VkImageAspectFlags imageAspect;
 
+    std::vector<VkImageView> mipLevelImageViews;
+
 public:
     VulkanImage();
     VulkanImage(const VulkanRenderDevice& renderDevice,
@@ -46,6 +48,7 @@ public:
 
     void uploadImageData(VkCommandBuffer commandBuffer, const VulkanBuffer& buffer, uint32_t layerIndex = 0);
     void uploadImageData(const void* data, uint32_t layerIndex = 0);
+
     void transitionLayout(VkCommandBuffer commandBuffer,
                           VkImageLayout oldLayout, VkImageLayout newLayout,
                           VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
@@ -53,8 +56,12 @@ public:
     void transitionLayout(VkImageLayout oldLayout, VkImageLayout newLayout,
                           VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
                           VkAccessFlags srcAccess, VkAccessFlags dstAccess);
+
     void copyBuffer(VkCommandBuffer commandBuffer, const VulkanBuffer& buffer, uint32_t layerIndex = 0);
     void swap(VulkanImage& other) noexcept;
+
+    void createMipLevelImageViews(VkImageViewType viewType);
+
     virtual void setDebugName(const std::string& debugName);
 
 protected:
@@ -66,6 +73,7 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
                             VkImageViewType imageViewType,
                             VkFormat format,
                             VkImageAspectFlags aspectFlags,
+                            uint32_t baseMipLevel = 0,
                             uint32_t mipLevels = 1,
                             uint32_t layerIndex = 0,
                             uint32_t layerCount = 1);

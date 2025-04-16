@@ -85,7 +85,7 @@ VulkanImage::VulkanImage(const VulkanRenderDevice &renderDevice,
     vkBindImageMemory(renderDevice.device, image, memory, 0);
 
     // create image view
-    imageView = createImageView(*mRenderDevice, image, viewType, format, imageAspect, mipLevels, 0, layerCount);
+    imageView = createImageView(*mRenderDevice, image, viewType, format, imageAspect, 0, mipLevels, 0, layerCount);
 }
 
 VulkanImage::~VulkanImage()
@@ -93,6 +93,9 @@ VulkanImage::~VulkanImage()
     if (mRenderDevice)
     {
         vkDestroyImageView(mRenderDevice->device, imageView, nullptr);
+        for (auto iv : mipLevelImageViews)
+            vkDestroyImageView(mRenderDevice->device, iv, nullptr);
+
         vkDestroyImage(mRenderDevice->device, image, nullptr);
         vkFreeMemory(mRenderDevice->device, memory, nullptr);
 
@@ -131,6 +134,24 @@ void VulkanImage::swap(VulkanImage &other) noexcept
     std::swap(layerCount, other.layerCount);
     std::swap(format, other.format);
     std::swap(imageAspect, other.imageAspect);
+}
+
+void VulkanImage::createMipLevelImageViews(VkImageViewType viewType)
+{
+    assert(mipLevels > 1);
+    assert(mipLevelImageViews.size() == 0);
+
+    mipLevelImageViews.resize(mipLevels);
+    for (uint32_t i = 0; i < mipLevels; ++i)
+    {
+        mipLevelImageViews.at(i) = createImageView(*mRenderDevice,
+                                                image,
+                                                viewType,
+                                                format,
+                                                imageAspect,
+                                                i, 1,
+                                                0, layerCount);
+    }
 }
 
 void VulkanImage::transitionLayout(VkCommandBuffer commandBuffer,
@@ -225,6 +246,7 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
                             VkImageViewType imageViewType,
                             VkFormat format,
                             VkImageAspectFlags aspectFlags,
+                            uint32_t baseMipLevel,
                             uint32_t mipLevels,
                             uint32_t layerIndex,
                             uint32_t layerCount)
@@ -239,7 +261,7 @@ VkImageView createImageView(const VulkanRenderDevice& renderDevice,
         .components = {},
         .subresourceRange = {
             .aspectMask = aspectFlags,
-            .baseMipLevel = 0,
+            .baseMipLevel = baseMipLevel,
             .levelCount = mipLevels,
             .baseArrayLayer = layerIndex,
             .layerCount = layerCount

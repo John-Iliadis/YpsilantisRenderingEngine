@@ -15,12 +15,9 @@ float distributionGGX(vec3 normal, vec3 halfwayVec, float roughness)
 
 float geometrySchlickGGX(float NdotV, float roughness)
 {
-    float k_direct = pow(roughness + 1.0, 2.0) / 8.0;
+     float k_ibl = (roughness * roughness) / 2.0;
 
-    // todo: check
-    // float k_ibl = (roughness * roughness) / 2.0;
-
-    return NdotV / (NdotV * (1 - k_direct) + k_direct);
+    return NdotV / (NdotV * (1 - k_ibl) + k_ibl);
 }
 
 float geometrySmith(vec3 normal, vec3 viewVec, vec3 lightVec, float roughness)
@@ -32,11 +29,11 @@ float geometrySmith(vec3 normal, vec3 viewVec, vec3 lightVec, float roughness)
            geometrySchlickGGX(NdotL, roughness);
 }
 
-vec3 fresnelSchlick(vec3 viewVec, vec3 halfwayVec, vec3 F_0)
+vec3 fresnelSchlick(vec3 viewVec, vec3 halfwayVec, vec3 F_0, float roughness)
 {
     float VdotH = max(dot(viewVec, halfwayVec), 0.0);
 
-    return F_0 + (1 - F_0) * pow(1 - VdotH, 5.0);
+    return F_0 + (max(vec3(1.0 - roughness), F_0) - F_0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
 }
 
 vec3 renderingEquation(vec3 normal, vec3 lightVec, vec3 viewVec, vec3 halfwayVec,
@@ -44,13 +41,54 @@ vec3 renderingEquation(vec3 normal, vec3 lightVec, vec3 viewVec, vec3 halfwayVec
 {
     float distribution = distributionGGX(normal, halfwayVec, roughness);
     float geometry = geometrySmith(normal, viewVec, lightVec, roughness);
-    vec3 frensel = fresnelSchlick(viewVec, halfwayVec, F_0);
+    vec3 frensel = fresnelSchlick(viewVec, halfwayVec, F_0, roughness);
 
     vec3 numerator = (distribution * geometry) * frensel;
     float denominator = 4 * max(dot(viewVec, normal), 0.0) * max(dot(lightVec, normal), 0.0) + 1e-5;
     vec3 specular = numerator / denominator;
 
-    vec3 diffuseTerm = baseColor * (vec3(1.0) - frensel) * (1.0 - metallic) / PI;
+    vec3 kS = frensel;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - metallic;
 
-    return (diffuseTerm + specular) * lightRadiance * max(dot(normal, lightVec), 0.0);
+    float NdotL = max(dot(normal, lightVec), 0.0);
+
+    return (kD * baseColor / PI + specular) * lightRadiance * NdotL;
+}
+
+float radicalInverseVDC(uint bits)
+{
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float(bits) * 2.3283064365386963e-10;
+}
+
+vec2 hammersley(uint i, uint n)
+{
+    return vec2(float(i) / float(n), radicalInverseVDC(i));
+}
+
+vec3 importanceSampleGGX(vec2 xi, vec3 normal, float roughness)
+{
+    float a = roughness * roughness;
+
+    float phi = 2.0 * PI * xi.x;
+    float cosTheta = sqrt((1.0 - xi.y) / (1.0 + (a * a - 1.0) * xi.y));
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+
+    vec3 H;
+    H.x = cos(phi) * sinTheta;
+    H.y = sin(phi) * sinTheta;
+    H.z = cosTheta;
+
+    vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(up, normal));
+    vec3 bitangent = cross(normal, tangent);
+
+    vec3 sampleVec = tangent * H.x + bitangent * H.y + normal * H.z;
+
+    return normalize(sampleVec);
 }

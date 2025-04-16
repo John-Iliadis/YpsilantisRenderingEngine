@@ -111,6 +111,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 
     loadSkybox();
     createIrradianceMap();
+    createPrefilterMap();
     createViewsUBO();
     createIrradianceConvolutionDsLayout();
     createIrradianceConvolutionDs();
@@ -118,6 +119,10 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createIrradianceConvolutionFramebuffer();
     createConvolutionPipeline();
     executeIrradianceConvolutionRenderpass();
+    createPrefilterRenderpass();
+    createPrefilterFramebuffers();
+    createPrefilterPipeline();
+    executePrefilterRenderpass();
 
     createCameraDs();
     createSingleImageDescriptorSets();
@@ -150,6 +155,8 @@ Renderer::~Renderer()
     vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mLightIconFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mIrradianceConvolutionFramebuffer, nullptr);
+    for (auto fb : mPrefilterFramebuffers)
+        vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
 
     vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSkyboxRenderpass, nullptr);
@@ -160,6 +167,7 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mPostProcessingRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mLightIconRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mIrradianceConvolutionRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mPrefilterRenderpass, nullptr);
 }
 
 void Renderer::update()
@@ -3061,7 +3069,7 @@ void Renderer::createGizmoIconResources()
 
 void Renderer::loadSkybox()
 {
-    EquirectangularMapLoader eml(mRenderDevice, "../assets/cubemaps/hall.hdr");
+    EquirectangularMapLoader eml(mRenderDevice, "../assets/cubemaps/loft.hdr");
     eml.get(mSkyboxTexture);
 }
 
@@ -3092,6 +3100,35 @@ void Renderer::createIrradianceMap()
     mIrradianceMap.setDebugName("Renderer::mIrradianceMap");
 }
 
+// todo: increase resolution
+void Renderer::createPrefilterMap()
+{
+    uint32_t prefilterMapSize = 128;
+
+    TextureSpecification specification {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .width = prefilterMapSize,
+        .height = prefilterMapSize,
+        .layerCount = 6,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_CUBE,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Linear,
+        .minFilter = TextureMinFilter::LinearMipmapLinear,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .wrapR = TextureWrap::ClampToEdge,
+        .generateMipMaps = true,
+        .createFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
+    };
+
+    mPrefilterMap = VulkanTexture(mRenderDevice, specification);
+    mPrefilterMap.createMipLevelImageViews(VK_IMAGE_VIEW_TYPE_CUBE);
+    mPrefilterMap.setDebugName("Renderer::mPrefilterMap");
+}
+
 void Renderer::createViewsUBO()
 {
     mViewsUBO = VulkanBuffer(mRenderDevice,
@@ -3099,7 +3136,7 @@ void Renderer::createViewsUBO()
                         BufferType::Uniform,
                         MemoryType::Device,
                         gViews.data());
-    mViewsUBO.setDebugName("EquirectangularMapLoader::mViewsUBO");
+    mViewsUBO.setDebugName("Renderer::mViewsUBO");
 }
 
 void Renderer::createIrradianceConvolutionDsLayout()
@@ -3127,6 +3164,11 @@ void Renderer::createIrradianceConvolutionDs()
 
     VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mIrradianceConvolutionDs);
     vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mIrradianceConvolutionDs",
+                             mIrradianceConvolutionDs);
 
     VkDescriptorBufferInfo bufferInfo {
         .buffer = mViewsUBO.getBuffer(),
@@ -3162,7 +3204,7 @@ void Renderer::createIrradianceConvolutionDs()
 
     setVulkanObjectDebugName(mRenderDevice,
                              VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                             "EquirectangularMapLoader::mIrradianceConvolutionDs",
+                             "Renderer::mIrradianceConvolutionDs",
                              mIrradianceConvolutionDs);
 }
 
@@ -3198,7 +3240,7 @@ void Renderer::createIrradianceConvolutionRenderpass()
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mIrradianceConvolutionRenderpass);
     vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mIrradianceConvolutionRenderpass, "EquirectangularMapLoader::mIrradianceConvolutionRenderpass");
+    setRenderpassDebugName(mRenderDevice, mIrradianceConvolutionRenderpass, "Renderer::mIrradianceConvolutionRenderpass");
 }
 
 void Renderer::createIrradianceConvolutionFramebuffer()
@@ -3215,7 +3257,7 @@ void Renderer::createIrradianceConvolutionFramebuffer()
 
     VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mIrradianceConvolutionFramebuffer);
     vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mIrradianceConvolutionFramebuffer, "EquirectangularMapLoader::mIrradianceConvolutionFramebuffer");
+    setFramebufferDebugName(mRenderDevice, mIrradianceConvolutionFramebuffer, "Renderer::mIrradianceConvolutionFramebuffer");
 }
 
 void Renderer::createConvolutionPipeline()
@@ -3264,7 +3306,7 @@ void Renderer::createConvolutionPipeline()
         .pipelineLayout = {.dsLayouts = {mIrradianceConvolutionDsLayout}},
         .renderPass = mIrradianceConvolutionRenderpass,
         .subpassIndex = 0,
-        .debugName = "EquirectangularMapLoader::mIrradianceConvolutionPipeline"
+        .debugName = "Renderer::mIrradianceConvolutionPipeline"
     };
 
     mIrradianceConvolutionPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
@@ -3298,6 +3340,186 @@ void Renderer::executeIrradianceConvolutionRenderpass()
                             0, nullptr);
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
+
+    endSingleTimeCommands(mRenderDevice, commandBuffer);
+}
+
+void Renderer::createPrefilterRenderpass()
+{
+    VkAttachmentDescription attachment {
+        .format = mPrefilterMap.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentRef,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mPrefilterRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mPrefilterRenderpass, "Renderer::mPrefilterRenderpass");
+}
+
+void Renderer::createPrefilterFramebuffers()
+{
+    uint32_t width = mPrefilterMap.width;
+    uint32_t height = mPrefilterMap.height;
+
+    mPrefilterFramebuffers.resize(mMaxPrefilterMipLevels);
+    for (uint32_t i = 0; i < mMaxPrefilterMipLevels; ++i)
+    {
+        VkFramebufferCreateInfo framebufferCreateInfo {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = mPrefilterRenderpass,
+            .attachmentCount = 1,
+            .pAttachments = &mPrefilterMap.mipLevelImageViews.at(i),
+            .width = width,
+            .height = height,
+            .layers = mPrefilterMap.layerCount
+        };
+
+        VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mPrefilterFramebuffers.at(i));
+        vulkanCheck(result, "Failed to create framebuffer.");
+        setFramebufferDebugName(mRenderDevice, mPrefilterFramebuffers.at(i), "Renderer::mPrefilterFramebuffers");
+
+        width /= 2;
+        height /= 2;
+    }
+}
+
+void Renderer::createPrefilterPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/quad.vert.spv",
+            .geomShaderPath = "shaders/equirectangular.geom.spv",
+            .fragShaderPath = "shaders/prefilter.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = false,
+            .enableDepthWrite = false
+        },
+        .blendStates = {
+            {.enable = false}
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {
+            .dsLayouts = {
+                mIrradianceConvolutionDsLayout
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(float)
+            }
+        },
+        .renderPass = mPrefilterRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mPrefilterPipeline"
+    };
+
+    mPrefilterPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::executePrefilterRenderpass()
+{
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
+
+    uint32_t width = mPrefilterMap.width;
+    uint32_t height = mPrefilterMap.height;
+
+    for (uint32_t i = 0; i < mMaxPrefilterMipLevels; ++i)
+    {
+        VkRenderPassBeginInfo renderPassBeginInfo {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = mPrefilterRenderpass,
+            .framebuffer = mPrefilterFramebuffers.at(i),
+            .renderArea = {
+                .offset = {.x = 0, .y = 0},
+                .extent = {
+                    .width = width,
+                    .height = height
+                }
+            },
+            .clearValueCount = 0,
+            .pClearValues = nullptr
+        };
+
+        VkViewport viewport {
+            .x = 0.f,
+            .y = static_cast<float>(height),
+            .width = static_cast<float>(width),
+            .height = -static_cast<float>(height),
+            .minDepth = 0.f,
+            .maxDepth = 1.f
+        };
+
+        VkRect2D scissor {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = static_cast<uint32_t>(width),
+                .height = static_cast<uint32_t>(height)
+            }
+        };
+
+        float roughness = static_cast<float>(i) / static_cast<float>(mMaxPrefilterMipLevels - 1);
+
+        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPrefilterPipeline);
+
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mPrefilterPipeline,
+                                0, 1, &mIrradianceConvolutionDs,
+                                0, nullptr);
+
+        vkCmdPushConstants(commandBuffer,
+                           mPrefilterPipeline,
+                           VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(float),
+                           &roughness);
+
+        vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+        vkCmdEndRenderPass(commandBuffer);
+
+        width /= 2;
+        height /= 2;
+    }
 
     endSingleTimeCommands(mRenderDevice, commandBuffer);
 }

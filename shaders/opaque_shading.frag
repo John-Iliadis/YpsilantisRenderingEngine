@@ -128,7 +128,11 @@ void main()
         L_0 += renderingEquation(normal, lightVec, viewVec, halfwayVec, lightRadiance, baseColor, F_0, metallic, roughness);
     }
 
-    vec3 ambient = vec3(0.1) * baseColor * ao;
+    vec3 kS = fresnelSchlick(normal, viewVec, F_0, roughness);
+    vec3 kD = 1.0 - kS;
+    vec3 irradiance = texture(irradianceMap, normal).rgb;
+    vec3 diffuse = irradiance * baseColor;
+    vec3 ambient = (kD * diffuse) * ao;
 
     outFragColor = vec4(emission + L_0 + ambient, 1.0) * occlusionFactor * (1.0 - float(debugNormals)) +
                    vec4(normal, 1.0) * float(debugNormals);
