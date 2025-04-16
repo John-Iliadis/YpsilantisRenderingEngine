@@ -41,6 +41,8 @@ layout (set = 1, binding = 0) uniform sampler2D ssaoTexture;
 layout (set = 1, binding = 1) buffer readonly ClustersSSBO { Cluster clusters[]; };
 layout (set = 1, binding = 2) uniform sampler2D viewPosTexture;
 layout (set = 1, binding = 3) uniform samplerCube irradianceMap;
+layout (set = 1, binding = 4) uniform samplerCube prefilterMap;
+layout (set = 1, binding = 5) uniform sampler2D brdfLut;
 
 layout (set = 2, binding = 0) buffer readonly DirLightsSSBO { DirectionalLight dirLights[]; };
 layout (set = 2, binding = 1) buffer readonly PointLightsSSBO { PointLight pointLights[]; };

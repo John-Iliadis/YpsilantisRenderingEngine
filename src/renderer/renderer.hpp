@@ -162,6 +162,7 @@ private:
     void loadSkybox();
     void createIrradianceMap();
     void createPrefilterMap();
+    void createBrdfLut();
     void createViewsUBO();
     void createIrradianceConvolutionDsLayout();
     void createIrradianceConvolutionDs();
@@ -172,7 +173,11 @@ private:
     void createPrefilterRenderpass();
     void createPrefilterFramebuffers();
     void createPrefilterPipeline();
-    void executePrefilterRenderpass();
+    void executePrefilterRenderpasses();
+    void createBrdfLutRenderpass();
+    void createBrdfLutFramebuffer();
+    void createBrdfLutPipeline();
+    void executeBrdfLutRenderpass();
 
     void createSingleImageDs(VkDescriptorSet& ds, const VulkanTexture& texture, const char* name);
     void createCameraDs();
@@ -270,6 +275,10 @@ private:
     VkRenderPass mPrefilterRenderpass{};
     std::vector<VkFramebuffer> mPrefilterFramebuffers{}; // todo: handle imports
     VulkanGraphicsPipeline mPrefilterPipeline;
+    VulkanTexture mBrdfLut;
+    VkRenderPass mBrdfLutRenderpass{};
+    VkFramebuffer mBrdfLutFramebuffer{};
+    VulkanGraphicsPipeline mBrdfLutPipeline;
 
     // descriptor set layouts
     VulkanDsLayout mSingleImageDsLayout;

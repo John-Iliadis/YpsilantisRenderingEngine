@@ -112,6 +112,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     loadSkybox();
     createIrradianceMap();
     createPrefilterMap();
+    createBrdfLut();
     createViewsUBO();
     createIrradianceConvolutionDsLayout();
     createIrradianceConvolutionDs();
@@ -122,7 +123,11 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createPrefilterRenderpass();
     createPrefilterFramebuffers();
     createPrefilterPipeline();
-    executePrefilterRenderpass();
+    executePrefilterRenderpasses();
+    createBrdfLutRenderpass();
+    createBrdfLutFramebuffer();
+    createBrdfLutPipeline();
+    executeBrdfLutRenderpass();
 
     createCameraDs();
     createSingleImageDescriptorSets();
@@ -155,6 +160,7 @@ Renderer::~Renderer()
     vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mLightIconFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mIrradianceConvolutionFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mBrdfLutFramebuffer, nullptr);
     for (auto fb : mPrefilterFramebuffers)
         vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
 
@@ -168,6 +174,7 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mLightIconRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mIrradianceConvolutionRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPrefilterRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mBrdfLutRenderpass, nullptr);
 }
 
 void Renderer::update()
@@ -1365,7 +1372,9 @@ void Renderer::createForwardShadingDsLayout()
             binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
             binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
             binding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
-            binding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+            binding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         .debugName = "Renderer::mForwardShadingDsLayout"
     };
@@ -3129,6 +3138,30 @@ void Renderer::createPrefilterMap()
     mPrefilterMap.setDebugName("Renderer::mPrefilterMap");
 }
 
+void Renderer::createBrdfLut()
+{
+    TextureSpecification specification {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .width = 512,
+        .height = 512,
+        .layerCount = 1,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Linear,
+        .minFilter = TextureMinFilter::LinearMipmapNearest,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .wrapR = TextureWrap::ClampToEdge,
+        .generateMipMaps = false,
+    };
+
+    mBrdfLut = VulkanTexture(mRenderDevice, specification);
+    mBrdfLut.setDebugName("Renderer::mBrdfLut");
+}
+
 void Renderer::createViewsUBO()
 {
     mViewsUBO = VulkanBuffer(mRenderDevice,
@@ -3454,7 +3487,7 @@ void Renderer::createPrefilterPipeline()
     mPrefilterPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
-void Renderer::executePrefilterRenderpass()
+void Renderer::executePrefilterRenderpasses()
 {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
 
@@ -3520,6 +3553,135 @@ void Renderer::executePrefilterRenderpass()
         width /= 2;
         height /= 2;
     }
+
+    endSingleTimeCommands(mRenderDevice, commandBuffer);
+}
+
+void Renderer::createBrdfLutRenderpass()
+{
+    VkAttachmentDescription attachment {
+        .format = mBrdfLut.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentRef,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mBrdfLutRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mBrdfLutRenderpass, "Renderer::mBrdfLutRenderpass");
+}
+
+void Renderer::createBrdfLutFramebuffer()
+{
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mBrdfLutRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &mBrdfLut.imageView,
+        .width = mBrdfLut.width,
+        .height = mBrdfLut.height,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mBrdfLutFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mBrdfLutFramebuffer, "Renderer::mBrdfLutFramebuffer");
+}
+
+void Renderer::createBrdfLutPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/fullscreen_render.vert.spv",
+            .fragShaderPath = "shaders/integrate_brdf.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .viewportState = {
+            .viewport = VkViewport {
+                .x = 0,
+                .y = 0,
+                .width = static_cast<float>(mBrdfLut.width),
+                .height = static_cast<float>(mBrdfLut.height),
+                .minDepth = 0.0,
+                .maxDepth = 1.0
+            },
+            .scissor = VkRect2D {
+                .offset = {.x = 0, .y = 0},
+                .extent = {
+                    .width = mBrdfLut.width,
+                    .height = mBrdfLut.height
+                }
+            }
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = false,
+            .enableDepthWrite = false
+        },
+        .blendStates = {
+            {.enable = false}
+        },
+        .renderPass = mBrdfLutRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mBrdfLutPipeline"
+    };
+
+    mBrdfLutPipeline = {mRenderDevice, specification};
+}
+
+void Renderer::executeBrdfLutRenderpass()
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mBrdfLutRenderpass,
+        .framebuffer = mBrdfLutFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = static_cast<uint32_t>(mBrdfLut.width),
+                .height = static_cast<uint32_t>(mBrdfLut.height)
+            }
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mBrdfLutPipeline);
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
 
     endSingleTimeCommands(mRenderDevice, commandBuffer);
 }
@@ -3946,7 +4108,19 @@ void Renderer::updateForwardShadingDs()
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
-    std::array<VkWriteDescriptorSet, 4> dsWrites {};
+    VkDescriptorImageInfo prefilterMapImageInfo {
+        .sampler = mPrefilterMap.vulkanSampler.sampler,
+        .imageView = mPrefilterMap.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkDescriptorImageInfo brdfLutImageInfo {
+        .sampler = mBrdfLut.vulkanSampler.sampler,
+        .imageView = mBrdfLut.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    std::array<VkWriteDescriptorSet, 6> dsWrites {};
 
     dsWrites.at(0).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     dsWrites.at(0).dstSet = mForwardShadingDs;
@@ -3979,6 +4153,22 @@ void Renderer::updateForwardShadingDs()
     dsWrites.at(3).descriptorCount = 1;
     dsWrites.at(3).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     dsWrites.at(3).pImageInfo = &irradianceMapImageInfo;
+
+    dsWrites.at(4).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(4).dstSet = mForwardShadingDs;
+    dsWrites.at(4).dstBinding = 4;
+    dsWrites.at(4).dstArrayElement = 0;
+    dsWrites.at(4).descriptorCount = 1;
+    dsWrites.at(4).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    dsWrites.at(4).pImageInfo = &prefilterMapImageInfo;
+
+    dsWrites.at(5).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(5).dstSet = mForwardShadingDs;
+    dsWrites.at(5).dstBinding = 5;
+    dsWrites.at(5).dstArrayElement = 0;
+    dsWrites.at(5).descriptorCount = 1;
+    dsWrites.at(5).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    dsWrites.at(5).pImageInfo = &brdfLutImageInfo;
 
     vkUpdateDescriptorSets(mRenderDevice.device, dsWrites.size(), dsWrites.data(), 0, nullptr);
 }
