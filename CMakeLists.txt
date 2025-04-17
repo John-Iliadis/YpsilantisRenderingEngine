@@ -82,8 +82,6 @@ add_executable(${PROJECT_NAME}
         src/renderer/material.hpp
         src/renderer/material.cpp
         src/renderer/lights.hpp
-        src/renderer/equirectangular_map_loader.hpp
-        src/renderer/equirectangular_map_loader.cpp
 )
 
 add_subdirectory(${DEPENDENCY_DIR}/stb/)

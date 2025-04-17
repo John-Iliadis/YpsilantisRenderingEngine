@@ -11,7 +11,6 @@
 #include "../app/save_data.hpp"
 #include "../vk/vulkan_pipeline.hpp"
 #include "../scene_graph/scene_graph.hpp"
-#include "equirectangular_map_loader.hpp"
 #include "camera.hpp"
 #include "model.hpp"
 #include "model_importer.hpp"
@@ -159,11 +158,18 @@ private:
 
     void createGizmoIconResources();
 
-    void loadSkybox();
+    void createEquirectangularTexture();
+    void createEnvMap();
     void createIrradianceMap();
     void createPrefilterMap();
     void createBrdfLut();
     void createViewsUBO();
+    void createCubemapConvertRenderpass();
+    void createCubemapConvertFramebuffer();
+    void createCubemapConvertDsLayout();
+    void createCubemapConvertDs();
+    void createCubemapConvertPipeline();
+    void executeCubemapConvertRenderpass();
     void createIrradianceConvolutionDsLayout();
     void createIrradianceConvolutionDs();
     void createIrradianceConvolutionRenderpass();
@@ -219,7 +225,6 @@ private:
     VulkanTexture mNormalTexture;
     VulkanTexture mSsaoTexture;
     VulkanTexture mSsaoBlurTexture;
-    VulkanTexture mSkyboxTexture;
 
     // render passes
     VkRenderPass mPrepassRenderpass{};
@@ -263,6 +268,14 @@ private:
     VkPipeline mAssignLightsToClustersPipeline{};
 
     // IBL
+    VulkanTexture mEquirectangularTexture;
+    VulkanTexture mEnvMap;
+    uint32_t mEnvMapFaceSize{};
+    VkRenderPass mCubemapConvertRenderpass{};
+    VkFramebuffer mCubemapConvertFramebuffer{};
+    VulkanDsLayout mCubemapConvertDsLayout;
+    VkDescriptorSet mCubemapConvertDs{};
+    VulkanGraphicsPipeline mCubemapConvertPipeline;
     float mSkyboxFov = 45.f;
     VulkanTexture mIrradianceMap;
     VulkanBuffer mViewsUBO;
