@@ -8,9 +8,6 @@ layout (location = 0) out vec4 outFragColor;
 
 layout (set = 0, binding = 1) uniform samplerCube envMap;
 
-// todo: change theta and phi
-// todo: change sampleCount to weight
-
 void main()
 {
     vec3 normal = normalize(vTexCoords);

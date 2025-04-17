@@ -56,7 +56,7 @@ layout (set = 3, binding = 4) uniform sampler2D normalTex;
 layout (set = 3, binding = 5) uniform sampler2D aoTex;
 layout (set = 3, binding = 6) uniform sampler2D emissionTex;
 
-const float maxReflectionLod = 4.0;
+const float maxReflectionLod = 5.0;
 
 uint getClusterIndex(vec3 viewPos)
 {
@@ -69,7 +69,6 @@ uint getClusterIndex(vec3 viewPos)
            cluster.z * clusterGridX * clusterGridY;
 }
 
-// todo: modify normal back
 void main()
 {
     vec2 texCoords = vTexCoords * material.tiling + material.offset;
@@ -84,8 +83,7 @@ void main()
     float occlusionFactor = texture(ssaoTexture, screenSpaceTexCoords).r;
     vec3 viewPos = texture(viewPosTexture, screenSpaceTexCoords).xyz;
 
-//    vec3 normal = normalize(vTBN * normalSample);
-    vec3 normal = vTBN[2];
+    vec3 normal = normalize(vTBN * normalSample);
     vec3 viewVec = normalize(cameraPos.xyz - vFragWorldPos);
     vec3 R = reflect(-viewVec, normal);
 

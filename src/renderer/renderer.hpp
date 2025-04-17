@@ -287,9 +287,9 @@ private:
     VkDescriptorSet mIrradianceConvolutionDs{};
     VulkanGraphicsPipeline mIrradianceConvolutionPipeline;
     VulkanTexture mPrefilterMap;
-    const uint32_t mMaxPrefilterMipLevels = 5;
+    const uint32_t mMaxPrefilterMipLevels = 6;
     VkRenderPass mPrefilterRenderpass{};
-    std::vector<VkFramebuffer> mPrefilterFramebuffers{}; // todo: handle imports
+    std::vector<VkFramebuffer> mPrefilterFramebuffers{};
     VulkanGraphicsPipeline mPrefilterPipeline;
     VulkanTexture mBrdfLut;
     VkRenderPass mBrdfLutRenderpass{};

@@ -3223,7 +3223,6 @@ void Renderer::createCubemapConvertDsLayout()
     mCubemapConvertDsLayout = VulkanDsLayout(mRenderDevice, dsLayoutSpecification);
 }
 
-// todo: update this
 void Renderer::createCubemapConvertDs()
 {
     VkDescriptorSetLayout dsLayout = mCubemapConvertDsLayout;
@@ -3377,7 +3376,7 @@ void Renderer::executeCubemapConvertRenderpass()
 
 void Renderer::createIrradianceMap()
 {
-    uint32_t irradianceMapSize = 32;
+    uint32_t irradianceMapSize = 64;
 
     TextureSpecification specification {
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
@@ -3404,7 +3403,7 @@ void Renderer::createIrradianceMap()
 
 void Renderer::createPrefilterMap()
 {
-    uint32_t prefilterMapSize = 128;
+    uint32_t prefilterMapSize = 256;
 
     TextureSpecification specification {
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
