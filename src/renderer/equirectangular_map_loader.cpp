@@ -95,19 +95,22 @@ void EquirectangularMapLoader::createTarget()
         .layerCount = 6,
         .imageViewType = VK_IMAGE_VIEW_TYPE_CUBE,
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                      VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                       VK_IMAGE_USAGE_SAMPLED_BIT,
         .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .magFilter = TextureMagFilter::Linear,
-        .minFilter = TextureMinFilter::LinearMipmapNearest,
+        .minFilter = TextureMinFilter::Linear,
         .wrapS = TextureWrap::ClampToEdge,
         .wrapT = TextureWrap::ClampToEdge,
         .wrapR = TextureWrap::ClampToEdge,
-        .generateMipMaps = false,
+        .generateMipMaps = true,
         .createFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
     };
 
     mTarget = VulkanTexture(mRenderDevice, specification);
+    mTarget.createMipLevelImageViews(VK_IMAGE_VIEW_TYPE_CUBE);
     mTarget.setDebugName("CubemapCreatedFromEquirectangularTexture");
 }
 
@@ -119,7 +122,7 @@ void EquirectangularMapLoader::createRenderpass()
         .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
     };
 
     VkAttachmentReference attachmentRef {
@@ -152,7 +155,7 @@ void EquirectangularMapLoader::createFramebuffer()
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = mRenderpass,
         .attachmentCount = 1,
-        .pAttachments = &mTarget.imageView,
+        .pAttachments = &mTarget.mipLevelImageViews.at(0),
         .width = mTarget.width,
         .height = mTarget.height,
         .layers = 6
@@ -300,6 +303,22 @@ void EquirectangularMapLoader::execute()
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipeline, 0, 1, &mDs, 0, nullptr);
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
+
+    mTarget.transitionLayout(commandBuffer,
+                             VK_IMAGE_LAYOUT_UNDEFINED,
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0,
+                             VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+    mTarget.generateMipMaps(commandBuffer);
+    mTarget.transitionLayout(commandBuffer,
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+                             VK_ACCESS_SHADER_READ_BIT);
 
     endSingleTimeCommands(mRenderDevice, commandBuffer);
 }

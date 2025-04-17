@@ -13,7 +13,6 @@ layout (push_constant) uniform PushConstants
 
 layout (set = 0, binding = 1) uniform samplerCube envMap;
 
-// can increase this to prevent dots
 const uint sampleCount = 1024;
 
 void main()
@@ -25,16 +24,32 @@ void main()
     vec3 prefilteredColor = vec3(0.0);
     float weight = 0.0;
 
+    ivec2 faceSize = textureSize(envMap, 0);
+
     for (uint i = 0; i < sampleCount; ++i)
     {
         vec2 xi = hammersley(i, sampleCount);
         vec3 H = importanceSampleGGX(xi, normal, roughness);
         vec3 L = normalize(2.0 * dot(V, H) * H - V);
 
-        float NdotL = max(dot(normal, L), 0.0);
+        float NdotL = dot(normal, L);
 
-        prefilteredColor += texture(envMap, L).rgb * NdotL;
-        weight += NdotL;
+        if(NdotL > 0.0)
+        {
+            float D = distributionGGX(normal, H, roughness);
+            float NdotH = max(dot(normal, H), 0.0);
+            float HdotV = max(dot(H, V), 0.0);
+            float pdf = D * NdotH / (4.0 * HdotV) + 0.0001;
+
+            float resolution = faceSize.x;
+            float saTexel  = 4.0 * PI / (6.0 * resolution * resolution);
+            float saSample = 1.0 / (float(sampleCount) * pdf + 0.0001);
+
+            float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
+
+            prefilteredColor += textureLod(envMap, L, mipLevel).rgb * NdotL;
+            weight += NdotL;
+        }
     }
 
     prefilteredColor /= weight;

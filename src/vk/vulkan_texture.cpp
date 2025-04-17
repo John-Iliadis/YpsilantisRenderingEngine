@@ -140,7 +140,7 @@ void VulkanTexture::generateMipMaps(VkCommandBuffer commandBuffer)
             .baseMipLevel = 0,
             .levelCount = 1,
             .baseArrayLayer = 0,
-            .layerCount = 1
+            .layerCount = layerCount
         }
     };
 
@@ -164,7 +164,7 @@ void VulkanTexture::generateMipMaps(VkCommandBuffer commandBuffer)
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                 .mipLevel = i,
                 .baseArrayLayer = 0,
-                .layerCount = 1
+                .layerCount = layerCount
             },
             .srcOffsets {
                 {0, 0, 0},
@@ -174,7 +174,7 @@ void VulkanTexture::generateMipMaps(VkCommandBuffer commandBuffer)
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                 .mipLevel = i + 1,
                 .baseArrayLayer = 0,
-                .layerCount = 1
+                .layerCount = layerCount
             },
             .dstOffsets {
                 {0, 0, 0},
@@ -203,7 +203,6 @@ void VulkanTexture::generateMipMaps(VkCommandBuffer commandBuffer)
                              0, 0, nullptr, 0, nullptr,
                              1, &imageMemoryBarrier);
     }
-
 }
 
 void VulkanTexture::generateMipMaps()

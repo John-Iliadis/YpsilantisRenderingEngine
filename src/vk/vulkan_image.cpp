@@ -134,6 +134,7 @@ void VulkanImage::swap(VulkanImage &other) noexcept
     std::swap(layerCount, other.layerCount);
     std::swap(format, other.format);
     std::swap(imageAspect, other.imageAspect);
+    std::swap(mipLevelImageViews, other.mipLevelImageViews);
 }
 
 void VulkanImage::createMipLevelImageViews(VkImageViewType viewType)
