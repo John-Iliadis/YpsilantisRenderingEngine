@@ -107,7 +107,7 @@ void Editor::cameraPanel()
     ImGui::Begin("Camera", &mShowCameraPanel);
 
     ImGui::SeparatorText("Settings");
-    ImGui::SliderFloat("Field of View", mRenderer.mCamera.fov(), 1.f, 145.f, "%0.f");
+    ImGui::SliderFloat("Field of View##Cam", mRenderer.mCamera.fov(), 1.f, 145.f, "%0.f");
 
     ImGui::DragFloat("Near Plane",
                      mRenderer.mCamera.nearPlane(),
@@ -237,6 +237,8 @@ void Editor::rendererPanel()
     {
         ImGui::Checkbox("Enable##IBL", &mRenderer.mRenderSkybox);
         ImGui::Separator();
+
+        ImGui::SliderFloat("Skybox Field of View", &mRenderer.mSkyboxFov, 1.f, 145.f, "%0.f");
 
         if (ImGui::Button("Import New"))
             0;

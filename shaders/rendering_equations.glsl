@@ -29,7 +29,14 @@ float geometrySmith(vec3 normal, vec3 viewVec, vec3 lightVec, float roughness)
            geometrySchlickGGX(NdotL, roughness);
 }
 
-vec3 fresnelSchlick(vec3 viewVec, vec3 halfwayVec, vec3 F_0, float roughness)
+vec3 fresnelSchlick(vec3 viewVec, vec3 halfwayVec, vec3 F_0)
+{
+    float VdotH = max(dot(viewVec, halfwayVec), 0.0);
+
+    return F_0 + (1.0 - F_0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+}
+
+vec3 fresnelSchlickRoughness(vec3 viewVec, vec3 halfwayVec, vec3 F_0, float roughness)
 {
     float VdotH = max(dot(viewVec, halfwayVec), 0.0);
 
@@ -41,7 +48,7 @@ vec3 renderingEquation(vec3 normal, vec3 lightVec, vec3 viewVec, vec3 halfwayVec
 {
     float distribution = distributionGGX(normal, halfwayVec, roughness);
     float geometry = geometrySmith(normal, viewVec, lightVec, roughness);
-    vec3 frensel = fresnelSchlick(viewVec, halfwayVec, F_0, roughness);
+    vec3 frensel = fresnelSchlick(viewVec, halfwayVec, F_0);
 
     vec3 numerator = (distribution * geometry) * frensel;
     float denominator = 4 * max(dot(viewVec, normal), 0.0) * max(dot(lightVec, normal), 0.0) + 1e-5;

@@ -10,7 +10,7 @@ inline const std::array<glm::mat4, 6> gViews {
     glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)),
     glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
     glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
-    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f))
+    glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
 };
 
 namespace ImGuizmo
@@ -395,6 +395,12 @@ void Renderer::executeSkyboxRenderpass(VkCommandBuffer commandBuffer)
 
     if (mRenderSkybox)
     {
+        glm::mat4 proj = glm::perspective(glm::radians(mSkyboxFov),
+                                          static_cast<float>(mWidth) / mHeight,
+                                          *mCamera.nearPlane(),
+                                          *mCamera.farPlane());
+        proj[1][1] *= -1.f;
+
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSkyboxPipeline);
 
         std::array<VkDescriptorSet, 2> descriptorSets {mCameraDs, mSkyboxDs};
@@ -403,6 +409,12 @@ void Renderer::executeSkyboxRenderpass(VkCommandBuffer commandBuffer)
                                 mSkyboxPipeline,
                                 0, descriptorSets.size(), descriptorSets.data(),
                                 0, nullptr);
+
+        vkCmdPushConstants(commandBuffer,
+                           mSkyboxPipeline,
+                           VK_SHADER_STAGE_VERTEX_BIT,
+                           0, sizeof(proj),
+                           glm::value_ptr(proj));
 
         vkCmdDraw(commandBuffer, 36, 1, 0, 0);
     }
@@ -1791,6 +1803,11 @@ void Renderer::createSkyboxPipeline()
             .dsLayouts = {
                 mCameraRenderDataDsLayout,
                 mSingleImageDsLayout
+            },
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                .offset = 0,
+                .size = sizeof(glm::mat4)
             }
         },
         .renderPass = mSkyboxRenderpass,
@@ -3079,6 +3096,7 @@ void Renderer::createGizmoIconResources()
 void Renderer::loadSkybox()
 {
     EquirectangularMapLoader eml(mRenderDevice, "../assets/cubemaps/loft.hdr");
+    assert(eml.success());
     eml.get(mSkyboxTexture);
 }
 
@@ -3109,7 +3127,6 @@ void Renderer::createIrradianceMap()
     mIrradianceMap.setDebugName("Renderer::mIrradianceMap");
 }
 
-// todo: increase resolution
 void Renderer::createPrefilterMap()
 {
     uint32_t prefilterMapSize = 128;
@@ -3417,8 +3434,8 @@ void Renderer::createPrefilterFramebuffers()
     uint32_t width = mPrefilterMap.width;
     uint32_t height = mPrefilterMap.height;
 
-    mPrefilterFramebuffers.resize(mMaxPrefilterMipLevels);
-    for (uint32_t i = 0; i < mMaxPrefilterMipLevels; ++i)
+    mPrefilterFramebuffers.resize(mPrefilterMap.mipLevels);
+    for (uint32_t i = 0; i < mPrefilterMap.mipLevels; ++i)
     {
         VkFramebufferCreateInfo framebufferCreateInfo {
             .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -3494,7 +3511,7 @@ void Renderer::executePrefilterRenderpasses()
     uint32_t width = mPrefilterMap.width;
     uint32_t height = mPrefilterMap.height;
 
-    for (uint32_t i = 0; i < mMaxPrefilterMipLevels; ++i)
+    for (uint32_t i = 0; i < mPrefilterMap.mipLevels; ++i)
     {
         VkRenderPassBeginInfo renderPassBeginInfo {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -3528,7 +3545,7 @@ void Renderer::executePrefilterRenderpasses()
             }
         };
 
-        float roughness = static_cast<float>(i) / static_cast<float>(mMaxPrefilterMipLevels - 1);
+        float roughness = glm::clamp(static_cast<float>(i) / static_cast<float>(mMaxPrefilterMipLevels - 1), 0.f, 1.f);
 
         vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);

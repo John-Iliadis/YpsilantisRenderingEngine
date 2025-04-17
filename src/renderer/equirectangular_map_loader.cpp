@@ -86,7 +86,7 @@ void EquirectangularMapLoader::createUBO()
 
 void EquirectangularMapLoader::createTarget()
 {
-    mCubemapSize = mWidth / 4;
+    mCubemapSize = mHeight;
 
     TextureSpecification specification {
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,

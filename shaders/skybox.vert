@@ -4,6 +4,11 @@
 
 layout (location = 0) out vec3 vTexCoords;
 
+layout (push_constant) uniform PushConstants
+{
+    mat4 proj;
+};
+
 layout (set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 projection;
@@ -23,6 +28,6 @@ void main()
 
     mat4 viewNoTranslation = mat4(mat3(view));
 
-    vec4 viewProjPos = projection * viewNoTranslation * vec4(position, 1.0);
+    vec4 viewProjPos = proj * viewNoTranslation * vec4(position, 1.0);
     gl_Position = viewProjPos.xyww;
 }

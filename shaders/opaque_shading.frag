@@ -56,6 +56,8 @@ layout (set = 3, binding = 4) uniform sampler2D normalTex;
 layout (set = 3, binding = 5) uniform sampler2D aoTex;
 layout (set = 3, binding = 6) uniform sampler2D emissionTex;
 
+const float maxReflectionLod = 4.0;
+
 uint getClusterIndex(vec3 viewPos)
 {
     vec2 clusterSizeXY = vec2(screenWidth, screenHeight) / vec2(clusterGridX, clusterGridY);
@@ -67,6 +69,7 @@ uint getClusterIndex(vec3 viewPos)
            cluster.z * clusterGridX * clusterGridY;
 }
 
+// todo: modify normal back
 void main()
 {
     vec2 texCoords = vTexCoords * material.tiling + material.offset;
@@ -81,8 +84,10 @@ void main()
     float occlusionFactor = texture(ssaoTexture, screenSpaceTexCoords).r;
     vec3 viewPos = texture(viewPosTexture, screenSpaceTexCoords).xyz;
 
-    vec3 normal = normalize(vTBN * normalSample);
+//    vec3 normal = normalize(vTBN * normalSample);
+    vec3 normal = vTBN[2];
     vec3 viewVec = normalize(cameraPos.xyz - vFragWorldPos);
+    vec3 R = reflect(-viewVec, normal);
 
     vec3 L_0 = vec3(0.0);
     vec3 F_0 = mix(vec3(0.04), baseColor, metallic);
@@ -130,11 +135,19 @@ void main()
         L_0 += renderingEquation(normal, lightVec, viewVec, halfwayVec, lightRadiance, baseColor, F_0, metallic, roughness);
     }
 
-    vec3 kS = fresnelSchlick(normal, viewVec, F_0, roughness);
+    vec3 F = fresnelSchlickRoughness(normal, viewVec, F_0, roughness);
+    vec3 kS = F;
     vec3 kD = 1.0 - kS;
+    kD *= 1.0 - metallic;
+
     vec3 irradiance = texture(irradianceMap, normal).rgb;
     vec3 diffuse = irradiance * baseColor;
-    vec3 ambient = (kD * diffuse) * ao;
+
+    vec3 prefilterColor = textureLod(prefilterMap, R, roughness * maxReflectionLod).rgb;
+    vec2 brdf = texture(brdfLut, vec2(max(dot(normal, viewVec), 0.0), roughness)).rg;
+    vec3 specular = prefilterColor * (F * brdf.x + brdf.y);
+
+    vec3 ambient = (kD * diffuse + specular) * ao;
 
     outFragColor = vec4(emission + L_0 + ambient, 1.0) * occlusionFactor * (1.0 - float(debugNormals)) +
                    vec4(normal, 1.0) * float(debugNormals);

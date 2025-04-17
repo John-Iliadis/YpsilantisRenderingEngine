@@ -263,6 +263,7 @@ private:
     VkPipeline mAssignLightsToClustersPipeline{};
 
     // IBL
+    float mSkyboxFov = 45.f;
     VulkanTexture mIrradianceMap;
     VulkanBuffer mViewsUBO;
     VkRenderPass mIrradianceConvolutionRenderpass{};
@@ -367,7 +368,7 @@ private:
         alignas(16) glm::vec4 thickLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 1.f);
     } mGridData;
 
-    bool mRenderSkybox = false;
+    bool mRenderSkybox = true;
     bool mSsaoOn = true;
     bool mOitOn = true;
     bool mRenderGrid = true;
