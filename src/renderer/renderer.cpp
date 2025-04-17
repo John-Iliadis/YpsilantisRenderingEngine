@@ -4,15 +4,6 @@
 
 #include "renderer.hpp"
 
-inline const std::array<glm::mat4, 6> gViews {
-    glm::lookAt(glm::vec3(0.f), glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
-    glm::lookAt(glm::vec3(0.f), glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
-    glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
-    glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)),
-    glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
-    glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
-};
-
 namespace ImGuizmo
 {
     void DecomposeMatrixToComponents(const float* matrix, float* translation, float* rotation, float* scale);
@@ -114,7 +105,8 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createIrradianceMap();
     createPrefilterMap();
     createBrdfLut();
-    createViewsUBO();
+    createEnvMapViewsUBO();
+    createIrradianceViewsUBO();
     createCubemapConvertRenderpass();
     createCubemapConvertFramebuffer();
     createCubemapConvertDsLayout();
@@ -3109,7 +3101,6 @@ void Renderer::createEquirectangularTexture()
     int32_t width;
     int32_t height;
 
-//    stbi_set_flip_vertically_on_load(true);
     float* data = stbi_loadf(path.data(), &width, &height, nullptr, 4);
 
     assert(data);
@@ -3135,7 +3126,6 @@ void Renderer::createEquirectangularTexture()
     mEquirectangularTexture.setDebugName("Renderer::mEquirectangularTexture");
 
     stbi_image_free(data);
-//    stbi_set_flip_vertically_on_load(false);
 }
 
 void Renderer::createEnvMap()
@@ -3248,7 +3238,7 @@ void Renderer::createCubemapConvertDs()
     vulkanCheck(result, "Failed to allocate descriptor set.");
 
     VkDescriptorBufferInfo bufferInfo {
-        .buffer = mViewsUBO.getBuffer(),
+        .buffer = mEnvMapViewsUBO.getBuffer(),
         .offset = 0,
         .range = VK_WHOLE_SIZE
     };
@@ -3464,14 +3454,42 @@ void Renderer::createBrdfLut()
     mBrdfLut.setDebugName("Renderer::mBrdfLut");
 }
 
-void Renderer::createViewsUBO()
+void Renderer::createEnvMapViewsUBO()
 {
-    mViewsUBO = VulkanBuffer(mRenderDevice,
-                        sizeof(gViews),
-                        BufferType::Uniform,
-                        MemoryType::Device,
-                        gViews.data());
-    mViewsUBO.setDebugName("Renderer::mViewsUBO");
+    static const std::array<glm::mat4, 6> views {
+        glm::lookAt(glm::vec3(0.f), glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+        glm::lookAt(glm::vec3(0.f), glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+        glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)),
+        glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+        glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+        glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f)),
+    };
+
+    mEnvMapViewsUBO = VulkanBuffer(mRenderDevice,
+                                   sizeof(views),
+                                   BufferType::Uniform,
+                                   MemoryType::Device,
+                                   views.data());
+    mEnvMapViewsUBO.setDebugName("Renderer::mEnvMapViewsUBO");
+}
+
+void Renderer::createIrradianceViewsUBO()
+{
+    static const std::array<glm::mat4, 6> views {
+        glm::lookAt(glm::vec3(0.f), glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+        glm::lookAt(glm::vec3(0.f), glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+        glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+        glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f)),
+        glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+        glm::lookAt(glm::vec3(0.f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+    };
+
+    mIrradianceViewsUBO = VulkanBuffer(mRenderDevice,
+                                   sizeof(views),
+                                   BufferType::Uniform,
+                                   MemoryType::Device,
+                                   views.data());
+    mIrradianceViewsUBO.setDebugName("Renderer::mIrradianceViewsUBO");
 }
 
 void Renderer::createIrradianceConvolutionDsLayout()
@@ -3506,7 +3524,7 @@ void Renderer::createIrradianceConvolutionDs()
                              mIrradianceConvolutionDs);
 
     VkDescriptorBufferInfo bufferInfo {
-        .buffer = mViewsUBO.getBuffer(),
+        .buffer = mIrradianceViewsUBO.getBuffer(),
         .offset = 0,
         .range = VK_WHOLE_SIZE
     };
@@ -3609,9 +3627,9 @@ void Renderer::createConvolutionPipeline()
         .viewportState = {
             .viewport = VkViewport {
                 .x = 0.f,
-                .y = 0.f,
+                .y = static_cast<float>(mIrradianceMap.height),
                 .width = static_cast<float>(mIrradianceMap.width),
-                .height = static_cast<float>(mIrradianceMap.height),
+                .height = -static_cast<float>(mIrradianceMap.height),
                 .minDepth = 0.f,
                 .maxDepth = 1.f
             },
@@ -3815,9 +3833,9 @@ void Renderer::executePrefilterRenderpasses()
 
         VkViewport viewport {
             .x = 0.f,
-            .y = 0.f,
+            .y = static_cast<float>(height),
             .width = static_cast<float>(width),
-            .height = static_cast<float>(height),
+            .height = -static_cast<float>(height),
             .minDepth = 0.f,
             .maxDepth = 1.f
         };

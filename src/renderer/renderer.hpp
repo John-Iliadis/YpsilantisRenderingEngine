@@ -163,7 +163,8 @@ private:
     void createIrradianceMap();
     void createPrefilterMap();
     void createBrdfLut();
-    void createViewsUBO();
+    void createEnvMapViewsUBO();
+    void createIrradianceViewsUBO();
     void createCubemapConvertRenderpass();
     void createCubemapConvertFramebuffer();
     void createCubemapConvertDsLayout();
@@ -270,6 +271,7 @@ private:
     // IBL
     VulkanTexture mEquirectangularTexture;
     VulkanTexture mEnvMap;
+    VulkanBuffer mEnvMapViewsUBO;
     uint32_t mEnvMapFaceSize{};
     VkRenderPass mCubemapConvertRenderpass{};
     VkFramebuffer mCubemapConvertFramebuffer{};
@@ -278,7 +280,7 @@ private:
     VulkanGraphicsPipeline mCubemapConvertPipeline;
     float mSkyboxFov = 45.f;
     VulkanTexture mIrradianceMap;
-    VulkanBuffer mViewsUBO;
+    VulkanBuffer mIrradianceViewsUBO;
     VkRenderPass mIrradianceConvolutionRenderpass{};
     VkFramebuffer mIrradianceConvolutionFramebuffer{};
     VulkanDsLayout mIrradianceConvolutionDsLayout;
