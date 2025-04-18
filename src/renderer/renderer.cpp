@@ -682,7 +682,7 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 0, ds.size(), ds.data(),
                                 0, nullptr);
 
-        std::array<uint32_t, 9> pushConstants {
+        std::array<uint32_t, 10> pushConstants {
             static_cast<uint32_t>(mDirectionalLights.size()),
             static_cast<uint32_t>(mPointLights.size()),
             static_cast<uint32_t>(mSpotLights.size()),
@@ -691,7 +691,8 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
             mHeight,
             mClusterGridSize.x,
             mClusterGridSize.y,
-            mClusterGridSize.z
+            mClusterGridSize.z,
+            static_cast<uint32_t>(mEnableIblLighting)
         };
 
         vkCmdPushConstants(commandBuffer,
@@ -2480,7 +2481,7 @@ void Renderer::createOpaqueForwardPassPipeline()
             .pushConstantRange = VkPushConstantRange {
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .offset = 0,
-                .size = sizeof(uint32_t) * 9
+                .size = sizeof(uint32_t) * 10
             }
         },
         .renderPass = mForwardRenderpass,

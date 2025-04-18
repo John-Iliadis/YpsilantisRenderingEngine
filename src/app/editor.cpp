@@ -235,8 +235,8 @@ void Editor::rendererPanel()
 
     if (ImGui::CollapsingHeader("Image Based Lighting", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Checkbox("Enable##IBL", &mRenderer.mRenderSkybox);
-        ImGui::Separator();
+        ImGui::Checkbox("Render Skybox##IBL", &mRenderer.mRenderSkybox);
+        ImGui::Checkbox("Enable IBL Lighting", &mRenderer.mEnableIblLighting);
 
         ImGui::SliderFloat("Skybox Field of View", &mRenderer.mSkyboxFov, 1.f, 145.f, "%0.f");
 

@@ -24,6 +24,7 @@ layout (push_constant) uniform PushConstants
     uint clusterGridX;
     uint clusterGridY;
     uint clusterGridZ;
+    uint enableIblLighting;
 };
 
 layout (set = 0, binding = 0) uniform CameraUBO
@@ -133,19 +134,27 @@ void main()
         L_0 += renderingEquation(normal, lightVec, viewVec, halfwayVec, lightRadiance, baseColor, F_0, metallic, roughness);
     }
 
-    vec3 F = fresnelSchlickRoughness(normal, viewVec, F_0, roughness);
-    vec3 kS = F;
-    vec3 kD = 1.0 - kS;
-    kD *= 1.0 - metallic;
+    vec3 ambient;
+    if (enableIblLighting == 1)
+    {
+        vec3 F = fresnelSchlickRoughness(normal, viewVec, F_0, roughness);
+        vec3 kS = F;
+        vec3 kD = 1.0 - kS;
+        kD *= 1.0 - metallic;
 
-    vec3 irradiance = texture(irradianceMap, normal).rgb;
-    vec3 diffuse = irradiance * baseColor;
+        vec3 irradiance = texture(irradianceMap, normal).rgb;
+        vec3 diffuse = irradiance * baseColor;
 
-    vec3 prefilterColor = textureLod(prefilterMap, R, roughness * maxReflectionLod).rgb;
-    vec2 brdf = texture(brdfLut, vec2(max(dot(normal, viewVec), 0.0), roughness)).rg;
-    vec3 specular = prefilterColor * (F * brdf.x + brdf.y);
+        vec3 prefilterColor = textureLod(prefilterMap, R, roughness * maxReflectionLod).rgb;
+        vec2 brdf = texture(brdfLut, vec2(max(dot(normal, viewVec), 0.0), roughness)).rg;
+        vec3 specular = prefilterColor * (F * brdf.x + brdf.y);
 
-    vec3 ambient = (kD * diffuse + specular) * ao;
+        ambient = (kD * diffuse + specular) * ao;
+    }
+    else
+    {
+        ambient = vec3(0.1) * baseColor * ao;
+    }
 
     outFragColor = vec4(emission + L_0 + ambient, 1.0) * occlusionFactor * (1.0 - float(debugNormals)) +
                    vec4(normal, 1.0) * float(debugNormals);

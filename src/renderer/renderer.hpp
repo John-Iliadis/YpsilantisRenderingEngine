@@ -387,6 +387,7 @@ private:
     } mGridData;
 
     bool mRenderSkybox = true;
+    bool mEnableIblLighting = true;
     bool mSsaoOn = true;
     bool mOitOn = true;
     bool mRenderGrid = true;
