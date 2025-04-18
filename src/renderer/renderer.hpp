@@ -40,6 +40,7 @@ public:
     void render(VkCommandBuffer commandBuffer);
 
     void importModel(const ModelImportData& importData);
+    void importEnvMap(std::string path);
     void resize(uint32_t width, uint32_t height);
     void notify(const Message &message) override;
 
@@ -158,32 +159,34 @@ private:
 
     void createGizmoIconResources();
 
-    void createEquirectangularTexture();
-    void createEnvMap();
     void createIrradianceMap();
     void createPrefilterMap();
     void createBrdfLut();
     void createEnvMapViewsUBO();
     void createIrradianceViewsUBO();
     void createCubemapConvertRenderpass();
-    void createCubemapConvertFramebuffer();
-    void createCubemapConvertDsLayout();
-    void createCubemapConvertDs();
-    void createCubemapConvertPipeline();
-    void executeCubemapConvertRenderpass();
-    void createIrradianceConvolutionDsLayout();
-    void createIrradianceConvolutionDs();
     void createIrradianceConvolutionRenderpass();
-    void createIrradianceConvolutionFramebuffer();
-    void createConvolutionPipeline();
-    void executeIrradianceConvolutionRenderpass();
     void createPrefilterRenderpass();
-    void createPrefilterFramebuffers();
-    void createPrefilterPipeline();
-    void executePrefilterRenderpasses();
     void createBrdfLutRenderpass();
-    void createBrdfLutFramebuffer();
+    void createCubemapConvertDsLayout();
+    void createIrradianceConvolutionDsLayout();
+    void createCubemapConvertPipeline();
+    void createConvolutionPipeline();
+    void createPrefilterPipeline();
     void createBrdfLutPipeline();
+    void createIrradianceConvolutionFramebuffer();
+    void createPrefilterFramebuffers();
+    void createBrdfLutFramebuffer();
+
+    void createEquirectangularTexture(const std::string& path);
+    void createEnvMap();
+    void createCubemapConvertFramebuffer();
+    void createCubemapConvertDs();
+    void createIrradianceConvolutionDs();
+
+    void executeCubemapConvertRenderpass();
+    void executeIrradianceConvolutionRenderpass();
+    void executePrefilterRenderpasses();
     void executeBrdfLutRenderpass();
 
     void createSingleImageDs(VkDescriptorSet& ds, const VulkanTexture& texture, const char* name);
@@ -269,32 +272,32 @@ private:
     VkPipeline mAssignLightsToClustersPipeline{};
 
     // IBL
+    VulkanTexture mIrradianceMap;
+    VulkanTexture mPrefilterMap;
+    VulkanTexture mBrdfLut;
+    VulkanBuffer mIrradianceViewsUBO;
+    VulkanBuffer mEnvMapViewsUBO;
+    VkRenderPass mCubemapConvertRenderpass{};
+    VkRenderPass mIrradianceConvolutionRenderpass{};
+    VkRenderPass mPrefilterRenderpass{};
+    VkRenderPass mBrdfLutRenderpass{};
+    VulkanDsLayout mCubemapConvertDsLayout;
+    VulkanDsLayout mIrradianceConvolutionDsLayout;
+    VulkanGraphicsPipeline mCubemapConvertPipeline;
+    VulkanGraphicsPipeline mIrradianceConvolutionPipeline;
+    VulkanGraphicsPipeline mPrefilterPipeline;
+    VulkanGraphicsPipeline mBrdfLutPipeline;
+    VkFramebuffer mIrradianceConvolutionFramebuffer{};
+    std::vector<VkFramebuffer> mPrefilterFramebuffers;
+    VkFramebuffer mBrdfLutFramebuffer{};
     VulkanTexture mEquirectangularTexture;
     VulkanTexture mEnvMap;
-    VulkanBuffer mEnvMapViewsUBO;
-    uint32_t mEnvMapFaceSize{};
-    VkRenderPass mCubemapConvertRenderpass{};
     VkFramebuffer mCubemapConvertFramebuffer{};
-    VulkanDsLayout mCubemapConvertDsLayout;
     VkDescriptorSet mCubemapConvertDs{};
-    VulkanGraphicsPipeline mCubemapConvertPipeline;
-    float mSkyboxFov = 45.f;
-    VulkanTexture mIrradianceMap;
-    VulkanBuffer mIrradianceViewsUBO;
-    VkRenderPass mIrradianceConvolutionRenderpass{};
-    VkFramebuffer mIrradianceConvolutionFramebuffer{};
-    VulkanDsLayout mIrradianceConvolutionDsLayout;
     VkDescriptorSet mIrradianceConvolutionDs{};
-    VulkanGraphicsPipeline mIrradianceConvolutionPipeline;
-    VulkanTexture mPrefilterMap;
+    uint32_t mEnvMapFaceSize{};
+    float mSkyboxFov = 45.f;
     const uint32_t mMaxPrefilterMipLevels = 6;
-    VkRenderPass mPrefilterRenderpass{};
-    std::vector<VkFramebuffer> mPrefilterFramebuffers{};
-    VulkanGraphicsPipeline mPrefilterPipeline;
-    VulkanTexture mBrdfLut;
-    VkRenderPass mBrdfLutRenderpass{};
-    VkFramebuffer mBrdfLutFramebuffer{};
-    VulkanGraphicsPipeline mBrdfLutPipeline;
 
     // descriptor set layouts
     VulkanDsLayout mSingleImageDsLayout;

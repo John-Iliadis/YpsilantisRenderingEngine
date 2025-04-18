@@ -100,33 +100,25 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
 
     createGizmoIconResources();
 
-    createEquirectangularTexture();
-    createEnvMap();
     createIrradianceMap();
     createPrefilterMap();
     createBrdfLut();
     createEnvMapViewsUBO();
     createIrradianceViewsUBO();
     createCubemapConvertRenderpass();
-    createCubemapConvertFramebuffer();
-    createCubemapConvertDsLayout();
-    createCubemapConvertDs();
-    createCubemapConvertPipeline();
-    executeCubemapConvertRenderpass();
-    createIrradianceConvolutionDsLayout();
-    createIrradianceConvolutionDs();
     createIrradianceConvolutionRenderpass();
-    createIrradianceConvolutionFramebuffer();
-    createConvolutionPipeline();
-    executeIrradianceConvolutionRenderpass();
     createPrefilterRenderpass();
-    createPrefilterFramebuffers();
-    createPrefilterPipeline();
-    executePrefilterRenderpasses();
     createBrdfLutRenderpass();
-    createBrdfLutFramebuffer();
+    createCubemapConvertDsLayout();
+    createIrradianceConvolutionDsLayout();
+    createCubemapConvertPipeline();
+    createConvolutionPipeline();
+    createPrefilterPipeline();
     createBrdfLutPipeline();
-    executeBrdfLutRenderpass();
+    createIrradianceConvolutionFramebuffer();
+    createPrefilterFramebuffers();
+    createBrdfLutFramebuffer();
+    importEnvMap("../assets/cubemaps/test.hdr");
 
     createCameraDs();
     createSingleImageDescriptorSets();
@@ -135,7 +127,6 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createLightsDs();
     createFrustumClusterGenDs();
     createAssignLightsToClustersDs();
-    createSkyboxDs();
     createForwardShadingDs();
     updateForwardShadingDs();
 }
@@ -215,6 +206,21 @@ void Renderer::importModel(const ModelImportData& importData)
                         Message::loadModel(importData.path,
                                            importData.normalize,
                                            importData.flipUVs));
+}
+
+void Renderer::importEnvMap(std::string path)
+{
+    createEquirectangularTexture(path);
+    createEnvMap();
+    createSkyboxDs();
+    createCubemapConvertFramebuffer();
+    createCubemapConvertDs();
+    createIrradianceConvolutionDs();
+
+    executeCubemapConvertRenderpass();
+    executeIrradianceConvolutionRenderpass();
+    executePrefilterRenderpasses();
+    executeBrdfLutRenderpass();
 }
 
 void Renderer::resize(uint32_t width, uint32_t height)
@@ -3094,286 +3100,6 @@ void Renderer::createGizmoIconResources()
     createSingleImageDs(mLocalIconDs, mLocalIcon, "Renderer::mLocalIconDs");
 }
 
-void Renderer::createEquirectangularTexture()
-{
-    std::string path = "../assets/cubemaps/test.hdr";
-
-    int32_t width;
-    int32_t height;
-
-    float* data = stbi_loadf(path.data(), &width, &height, nullptr, 4);
-
-    assert(data);
-
-    TextureSpecification specification {
-        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-        .width = static_cast<uint32_t>(width),
-        .height = static_cast<uint32_t>(height),
-        .layerCount = 1,
-        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
-        .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                      VK_IMAGE_USAGE_SAMPLED_BIT,
-        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .magFilter = TextureMagFilter::Linear,
-        .minFilter = TextureMinFilter::LinearMipmapNearest,
-        .wrapS = TextureWrap::ClampToEdge,
-        .wrapT = TextureWrap::ClampToEdge,
-        .generateMipMaps = false
-    };
-
-    mEquirectangularTexture = VulkanTexture(mRenderDevice, specification, data);
-    mEquirectangularTexture.setDebugName("Renderer::mEquirectangularTexture");
-
-    stbi_image_free(data);
-}
-
-void Renderer::createEnvMap()
-{
-    mEnvMapFaceSize = mEquirectangularTexture.height;
-
-    TextureSpecification specification {
-        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-        .width = static_cast<uint32_t>(mEnvMapFaceSize),
-        .height = static_cast<uint32_t>(mEnvMapFaceSize),
-        .layerCount = 6,
-        .imageViewType = VK_IMAGE_VIEW_TYPE_CUBE,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                      VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                      VK_IMAGE_USAGE_SAMPLED_BIT,
-        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .magFilter = TextureMagFilter::Linear,
-        .minFilter = TextureMinFilter::Linear,
-        .wrapS = TextureWrap::ClampToEdge,
-        .wrapT = TextureWrap::ClampToEdge,
-        .wrapR = TextureWrap::ClampToEdge,
-        .generateMipMaps = true,
-        .createFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
-    };
-
-    mEnvMap = VulkanTexture(mRenderDevice, specification);
-    mEnvMap.createMipLevelImageViews(VK_IMAGE_VIEW_TYPE_CUBE);
-    mEnvMap.setDebugName("Renderer::mEnvMap");
-}
-
-void Renderer::createCubemapConvertRenderpass()
-{
-    VkAttachmentDescription attachment {
-        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
-    };
-
-    VkAttachmentReference attachmentRef {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkSubpassDescription subpass {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &attachmentRef,
-    };
-
-    VkRenderPassCreateInfo renderPassCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &attachment,
-        .subpassCount = 1,
-        .pSubpasses = &subpass
-    };
-
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mCubemapConvertRenderpass);
-    vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mCubemapConvertRenderpass, "Renderer::mCubemapConvertRenderpass");
-}
-
-void Renderer::createCubemapConvertFramebuffer()
-{
-    VkFramebufferCreateInfo framebufferCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mCubemapConvertRenderpass,
-        .attachmentCount = 1,
-        .pAttachments = &mEnvMap.mipLevelImageViews.at(0),
-        .width = mEnvMap.width,
-        .height = mEnvMap.height,
-        .layers = 6
-    };
-
-    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mCubemapConvertFramebuffer);
-    vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mCubemapConvertFramebuffer, "Renderer::mCubemapConvertFramebuffer");
-}
-
-void Renderer::createCubemapConvertDsLayout()
-{
-    DsLayoutSpecification dsLayoutSpecification {
-        .bindings = {
-            binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_GEOMETRY_BIT),
-            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
-        },
-        .debugName = "Renderer::mCubemapConvertDsLayout"
-    };
-
-    mCubemapConvertDsLayout = VulkanDsLayout(mRenderDevice, dsLayoutSpecification);
-}
-
-void Renderer::createCubemapConvertDs()
-{
-    VkDescriptorSetLayout dsLayout = mCubemapConvertDsLayout;
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &dsLayout
-    };
-
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mCubemapConvertDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-
-    VkDescriptorBufferInfo bufferInfo {
-        .buffer = mEnvMapViewsUBO.getBuffer(),
-        .offset = 0,
-        .range = VK_WHOLE_SIZE
-    };
-
-    VkDescriptorImageInfo imageInfo {
-        .sampler = mEquirectangularTexture.vulkanSampler.sampler,
-        .imageView = mEquirectangularTexture.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    std::array<VkWriteDescriptorSet, 2> dsWrites{};
-
-    dsWrites.at(0).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    dsWrites.at(0).dstSet = mCubemapConvertDs;
-    dsWrites.at(0).dstBinding = 0;
-    dsWrites.at(0).dstArrayElement = 0;
-    dsWrites.at(0).descriptorCount = 1;
-    dsWrites.at(0).descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    dsWrites.at(0).pBufferInfo = &bufferInfo;
-
-    dsWrites.at(1).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    dsWrites.at(1).dstSet = mCubemapConvertDs;
-    dsWrites.at(1).dstBinding = 1;
-    dsWrites.at(1).dstArrayElement = 0;
-    dsWrites.at(1).descriptorCount = 1;
-    dsWrites.at(1).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    dsWrites.at(1).pImageInfo = &imageInfo;
-
-    vkUpdateDescriptorSets(mRenderDevice.device, dsWrites.size(), dsWrites.data(), 0, nullptr);
-
-    setVulkanObjectDebugName(mRenderDevice,
-                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                             "Renderer::mCubemapConvertDs",
-                             mCubemapConvertDs);
-}
-
-void Renderer::createCubemapConvertPipeline()
-{
-    PipelineSpecification specification {
-        .shaderStages = {
-            .vertShaderPath = "shaders/quad.vert.spv",
-            .geomShaderPath = "shaders/equirectangular.geom.spv",
-            .fragShaderPath = "shaders/equirectangular.frag.spv"
-        },
-        .inputAssembly = {
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
-        },
-        .viewportState = {
-            .viewport = VkViewport {
-                .x = 0.f,
-                .y = static_cast<float>(mEnvMapFaceSize),
-                .width = static_cast<float>(mEnvMapFaceSize),
-                .height = -static_cast<float>(mEnvMapFaceSize),
-                .minDepth = 0.f,
-                .maxDepth = 1.f
-            },
-            .scissor = VkRect2D {
-                .offset = {.x = 0, .y = 0},
-                .extent = {
-                    .width = static_cast<uint32_t>(mEnvMapFaceSize),
-                    .height = static_cast<uint32_t>(mEnvMapFaceSize)
-                }
-            }
-        },
-        .rasterization = {
-            .rasterizerDiscardPrimitives = false,
-            .polygonMode = VK_POLYGON_MODE_FILL,
-            .lineWidth = 1.f
-        },
-        .multisampling = {
-            .samples = VK_SAMPLE_COUNT_1_BIT
-        },
-        .depthStencil = {
-            .enableDepthTest = false,
-            .enableDepthWrite = false
-        },
-        .blendStates = {
-            {.enable = false}
-        },
-        .pipelineLayout = {.dsLayouts = {mCubemapConvertDsLayout}},
-        .renderPass = mCubemapConvertRenderpass,
-        .subpassIndex = 0,
-        .debugName = "Renderer::mCubemapConvertPipeline"
-    };
-
-    mCubemapConvertPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
-}
-
-void Renderer::executeCubemapConvertRenderpass()
-{
-    VkRenderPassBeginInfo renderPassBeginInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mCubemapConvertRenderpass,
-        .framebuffer = mCubemapConvertFramebuffer,
-        .renderArea = {
-            .offset = {.x = 0, .y = 0},
-            .extent = {
-                .width = mEnvMapFaceSize,
-                .height = mEnvMapFaceSize
-            }
-        },
-        .clearValueCount = 0,
-        .pClearValues = nullptr
-    };
-
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
-
-    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCubemapConvertPipeline);
-    vkCmdBindDescriptorSets(commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mCubemapConvertPipeline,
-                            0, 1, &mCubemapConvertDs,
-                            0, nullptr);
-    vkCmdDraw(commandBuffer, 6, 1, 0, 0);
-    vkCmdEndRenderPass(commandBuffer);
-
-    mEnvMap.transitionLayout(commandBuffer,
-                             VK_IMAGE_LAYOUT_UNDEFINED,
-                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             0,
-                             VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
-    mEnvMap.generateMipMaps(commandBuffer);
-    mEnvMap.transitionLayout(commandBuffer,
-                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                             VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
-                             VK_ACCESS_SHADER_READ_BIT);
-
-    endSingleTimeCommands(mRenderDevice, commandBuffer);
-}
-
 void Renderer::createIrradianceMap()
 {
     uint32_t irradianceMapSize = 64;
@@ -3484,80 +3210,46 @@ void Renderer::createIrradianceViewsUBO()
     };
 
     mIrradianceViewsUBO = VulkanBuffer(mRenderDevice,
-                                   sizeof(views),
-                                   BufferType::Uniform,
-                                   MemoryType::Device,
-                                   views.data());
+                                       sizeof(views),
+                                       BufferType::Uniform,
+                                       MemoryType::Device,
+                                       views.data());
     mIrradianceViewsUBO.setDebugName("Renderer::mIrradianceViewsUBO");
 }
 
-void Renderer::createIrradianceConvolutionDsLayout()
+void Renderer::createCubemapConvertRenderpass()
 {
-    DsLayoutSpecification specification {
-        .bindings = {
-            binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_GEOMETRY_BIT),
-            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
-        },
-        .debugName = "mIrradianceConvolutionDsLayout::mDsLayout"
+    VkAttachmentDescription attachment {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
     };
 
-    mIrradianceConvolutionDsLayout = {mRenderDevice, specification};
-}
-
-void Renderer::createIrradianceConvolutionDs()
-{
-    VkDescriptorSetLayout dsLayout = mIrradianceConvolutionDsLayout;
-    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &dsLayout
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
-    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mIrradianceConvolutionDs);
-    vulkanCheck(result, "Failed to allocate descriptor set.");
-
-    setVulkanObjectDebugName(mRenderDevice,
-                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                             "Renderer::mIrradianceConvolutionDs",
-                             mIrradianceConvolutionDs);
-
-    VkDescriptorBufferInfo bufferInfo {
-        .buffer = mIrradianceViewsUBO.getBuffer(),
-        .offset = 0,
-        .range = VK_WHOLE_SIZE
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentRef,
     };
 
-    VkDescriptorImageInfo imageInfo {
-        .sampler = mEnvMap.vulkanSampler.sampler,
-        .imageView = mEnvMap.imageView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
     };
 
-    std::array<VkWriteDescriptorSet, 2> dsWrites{};
-
-    dsWrites.at(0).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    dsWrites.at(0).dstSet = mIrradianceConvolutionDs;
-    dsWrites.at(0).dstBinding = 0;
-    dsWrites.at(0).dstArrayElement = 0;
-    dsWrites.at(0).descriptorCount = 1;
-    dsWrites.at(0).descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    dsWrites.at(0).pBufferInfo = &bufferInfo;
-
-    dsWrites.at(1).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    dsWrites.at(1).dstSet = mIrradianceConvolutionDs;
-    dsWrites.at(1).dstBinding = 1;
-    dsWrites.at(1).dstArrayElement = 0;
-    dsWrites.at(1).descriptorCount = 1;
-    dsWrites.at(1).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    dsWrites.at(1).pImageInfo = &imageInfo;
-
-    vkUpdateDescriptorSets(mRenderDevice.device, dsWrites.size(), dsWrites.data(), 0, nullptr);
-
-    setVulkanObjectDebugName(mRenderDevice,
-                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                             "Renderer::mIrradianceConvolutionDs",
-                             mIrradianceConvolutionDs);
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mCubemapConvertRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mCubemapConvertRenderpass, "Renderer::mCubemapConvertRenderpass");
 }
 
 void Renderer::createIrradianceConvolutionRenderpass()
@@ -3595,21 +3287,139 @@ void Renderer::createIrradianceConvolutionRenderpass()
     setRenderpassDebugName(mRenderDevice, mIrradianceConvolutionRenderpass, "Renderer::mIrradianceConvolutionRenderpass");
 }
 
-void Renderer::createIrradianceConvolutionFramebuffer()
+void Renderer::createPrefilterRenderpass()
 {
-    VkFramebufferCreateInfo framebufferCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mIrradianceConvolutionRenderpass,
-        .attachmentCount = 1,
-        .pAttachments = &mIrradianceMap.imageView,
-        .width = mIrradianceMap.width,
-        .height = mIrradianceMap.height,
-        .layers = mIrradianceMap.layerCount
+    VkAttachmentDescription attachment {
+        .format = mPrefilterMap.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
-    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mIrradianceConvolutionFramebuffer);
-    vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mIrradianceConvolutionFramebuffer, "Renderer::mIrradianceConvolutionFramebuffer");
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentRef,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mPrefilterRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mPrefilterRenderpass, "Renderer::mPrefilterRenderpass");
+}
+
+void Renderer::createBrdfLutRenderpass()
+{
+    VkAttachmentDescription attachment {
+        .format = mBrdfLut.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentRef,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mBrdfLutRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mBrdfLutRenderpass, "Renderer::mBrdfLutRenderpass");
+}
+
+void Renderer::createCubemapConvertDsLayout()
+{
+    DsLayoutSpecification dsLayoutSpecification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_GEOMETRY_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+        },
+        .debugName = "Renderer::mCubemapConvertDsLayout"
+    };
+
+    mCubemapConvertDsLayout = VulkanDsLayout(mRenderDevice, dsLayoutSpecification);
+}
+
+void Renderer::createIrradianceConvolutionDsLayout()
+{
+    DsLayoutSpecification specification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_GEOMETRY_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+        },
+        .debugName = "mIrradianceConvolutionDsLayout::mDsLayout"
+    };
+
+    mIrradianceConvolutionDsLayout = {mRenderDevice, specification};
+}
+
+void Renderer::createCubemapConvertPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/quad.vert.spv",
+            .geomShaderPath = "shaders/equirectangular.geom.spv",
+            .fragShaderPath = "shaders/equirectangular.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = false,
+            .enableDepthWrite = false
+        },
+        .blendStates = {
+            {.enable = false}
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {.dsLayouts = {mCubemapConvertDsLayout}},
+        .renderPass = mCubemapConvertRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mCubemapConvertPipeline"
+    };
+
+    mCubemapConvertPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
 void Renderer::createConvolutionPipeline()
@@ -3664,100 +3474,6 @@ void Renderer::createConvolutionPipeline()
     mIrradianceConvolutionPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
 }
 
-void Renderer::executeIrradianceConvolutionRenderpass()
-{
-    VkRenderPassBeginInfo renderPassBeginInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = mIrradianceConvolutionRenderpass,
-        .framebuffer = mIrradianceConvolutionFramebuffer,
-        .renderArea = {
-            .offset = {.x = 0, .y = 0},
-            .extent = {
-                .width = static_cast<uint32_t>(mIrradianceMap.width),
-                .height = static_cast<uint32_t>(mIrradianceMap.height)
-            }
-        },
-        .clearValueCount = 0,
-        .pClearValues = nullptr
-    };
-
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
-
-    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mIrradianceConvolutionPipeline);
-    vkCmdBindDescriptorSets(commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mIrradianceConvolutionPipeline,
-                            0, 1, &mIrradianceConvolutionDs,
-                            0, nullptr);
-    vkCmdDraw(commandBuffer, 6, 1, 0, 0);
-    vkCmdEndRenderPass(commandBuffer);
-
-    endSingleTimeCommands(mRenderDevice, commandBuffer);
-}
-
-void Renderer::createPrefilterRenderpass()
-{
-    VkAttachmentDescription attachment {
-        .format = mPrefilterMap.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkAttachmentReference attachmentRef {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkSubpassDescription subpass {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &attachmentRef,
-    };
-
-    VkRenderPassCreateInfo renderPassCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &attachment,
-        .subpassCount = 1,
-        .pSubpasses = &subpass
-    };
-
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mPrefilterRenderpass);
-    vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mPrefilterRenderpass, "Renderer::mPrefilterRenderpass");
-}
-
-void Renderer::createPrefilterFramebuffers()
-{
-    uint32_t width = mPrefilterMap.width;
-    uint32_t height = mPrefilterMap.height;
-
-    mPrefilterFramebuffers.resize(mPrefilterMap.mipLevels);
-    for (uint32_t i = 0; i < mPrefilterMap.mipLevels; ++i)
-    {
-        VkFramebufferCreateInfo framebufferCreateInfo {
-            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            .renderPass = mPrefilterRenderpass,
-            .attachmentCount = 1,
-            .pAttachments = &mPrefilterMap.mipLevelImageViews.at(i),
-            .width = width,
-            .height = height,
-            .layers = mPrefilterMap.layerCount
-        };
-
-        VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mPrefilterFramebuffers.at(i));
-        vulkanCheck(result, "Failed to create framebuffer.");
-        setFramebufferDebugName(mRenderDevice, mPrefilterFramebuffers.at(i), "Renderer::mPrefilterFramebuffers");
-
-        width /= 2;
-        height /= 2;
-    }
-}
-
 void Renderer::createPrefilterPipeline()
 {
     PipelineSpecification specification {
@@ -3804,6 +3520,408 @@ void Renderer::createPrefilterPipeline()
     };
 
     mPrefilterPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::createBrdfLutPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/fullscreen_render.vert.spv",
+            .fragShaderPath = "shaders/integrate_brdf.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .viewportState = {
+            .viewport = VkViewport {
+                .x = 0,
+                .y = 0,
+                .width = static_cast<float>(mBrdfLut.width),
+                .height = static_cast<float>(mBrdfLut.height),
+                .minDepth = 0.0,
+                .maxDepth = 1.0
+            },
+            .scissor = VkRect2D {
+                .offset = {.x = 0, .y = 0},
+                .extent = {
+                    .width = mBrdfLut.width,
+                    .height = mBrdfLut.height
+                }
+            }
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = false,
+            .enableDepthWrite = false
+        },
+        .blendStates = {
+            {.enable = false}
+        },
+        .renderPass = mBrdfLutRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mBrdfLutPipeline"
+    };
+
+    mBrdfLutPipeline = {mRenderDevice, specification};
+}
+
+void Renderer::createIrradianceConvolutionFramebuffer()
+{
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mIrradianceConvolutionRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &mIrradianceMap.imageView,
+        .width = mIrradianceMap.width,
+        .height = mIrradianceMap.height,
+        .layers = mIrradianceMap.layerCount
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mIrradianceConvolutionFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mIrradianceConvolutionFramebuffer, "Renderer::mIrradianceConvolutionFramebuffer");
+}
+
+void Renderer::createPrefilterFramebuffers()
+{
+    uint32_t width = mPrefilterMap.width;
+    uint32_t height = mPrefilterMap.height;
+
+    mPrefilterFramebuffers.resize(mPrefilterMap.mipLevels);
+    for (uint32_t i = 0; i < mPrefilterMap.mipLevels; ++i)
+    {
+        VkFramebufferCreateInfo framebufferCreateInfo {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = mPrefilterRenderpass,
+            .attachmentCount = 1,
+            .pAttachments = &mPrefilterMap.mipLevelImageViews.at(i),
+            .width = width,
+            .height = height,
+            .layers = mPrefilterMap.layerCount
+        };
+
+        VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mPrefilterFramebuffers.at(i));
+        vulkanCheck(result, "Failed to create framebuffer.");
+        setFramebufferDebugName(mRenderDevice, mPrefilterFramebuffers.at(i), "Renderer::mPrefilterFramebuffers");
+
+        width /= 2;
+        height /= 2;
+    }
+}
+
+void Renderer::createBrdfLutFramebuffer()
+{
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mBrdfLutRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &mBrdfLut.imageView,
+        .width = mBrdfLut.width,
+        .height = mBrdfLut.height,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mBrdfLutFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mBrdfLutFramebuffer, "Renderer::mBrdfLutFramebuffer");
+}
+
+void Renderer::createEquirectangularTexture(const std::string& path)
+{
+    int32_t width;
+    int32_t height;
+
+    float* data = stbi_loadf(path.data(), &width, &height, nullptr, 4);
+
+    assert(data);
+
+    TextureSpecification specification {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .width = static_cast<uint32_t>(width),
+        .height = static_cast<uint32_t>(height),
+        .layerCount = 1,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+        .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Linear,
+        .minFilter = TextureMinFilter::LinearMipmapNearest,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .generateMipMaps = false
+    };
+
+    mEquirectangularTexture = VulkanTexture(mRenderDevice, specification, data);
+    mEquirectangularTexture.setDebugName("Renderer::mEquirectangularTexture");
+
+    stbi_image_free(data);
+}
+
+void Renderer::createEnvMap()
+{
+    mEnvMapFaceSize = mEquirectangularTexture.height;
+
+    TextureSpecification specification {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .width = static_cast<uint32_t>(mEnvMapFaceSize),
+        .height = static_cast<uint32_t>(mEnvMapFaceSize),
+        .layerCount = 6,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_CUBE,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                      VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                      VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Linear,
+        .minFilter = TextureMinFilter::Linear,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .wrapR = TextureWrap::ClampToEdge,
+        .generateMipMaps = true,
+        .createFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
+    };
+
+    mEnvMap = VulkanTexture(mRenderDevice, specification);
+    mEnvMap.createMipLevelImageViews(VK_IMAGE_VIEW_TYPE_CUBE);
+    mEnvMap.setDebugName("Renderer::mEnvMap");
+}
+
+void Renderer::createCubemapConvertFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mCubemapConvertFramebuffer, nullptr);
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mCubemapConvertRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &mEnvMap.mipLevelImageViews.at(0),
+        .width = mEnvMap.width,
+        .height = mEnvMap.height,
+        .layers = 6
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mCubemapConvertFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mCubemapConvertFramebuffer, "Renderer::mCubemapConvertFramebuffer");
+}
+
+void Renderer::createCubemapConvertDs()
+{
+    vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, 1, &mCubemapConvertDs);
+
+    VkDescriptorSetLayout dsLayout = mCubemapConvertDsLayout;
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mCubemapConvertDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    VkDescriptorBufferInfo bufferInfo {
+        .buffer = mEnvMapViewsUBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorImageInfo imageInfo {
+        .sampler = mEquirectangularTexture.vulkanSampler.sampler,
+        .imageView = mEquirectangularTexture.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    std::array<VkWriteDescriptorSet, 2> dsWrites{};
+
+    dsWrites.at(0).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(0).dstSet = mCubemapConvertDs;
+    dsWrites.at(0).dstBinding = 0;
+    dsWrites.at(0).dstArrayElement = 0;
+    dsWrites.at(0).descriptorCount = 1;
+    dsWrites.at(0).descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    dsWrites.at(0).pBufferInfo = &bufferInfo;
+
+    dsWrites.at(1).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(1).dstSet = mCubemapConvertDs;
+    dsWrites.at(1).dstBinding = 1;
+    dsWrites.at(1).dstArrayElement = 0;
+    dsWrites.at(1).descriptorCount = 1;
+    dsWrites.at(1).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    dsWrites.at(1).pImageInfo = &imageInfo;
+
+    vkUpdateDescriptorSets(mRenderDevice.device, dsWrites.size(), dsWrites.data(), 0, nullptr);
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mCubemapConvertDs",
+                             mCubemapConvertDs);
+}
+
+void Renderer::createIrradianceConvolutionDs()
+{
+    vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, 1, &mIrradianceConvolutionDs);
+
+    VkDescriptorSetLayout dsLayout = mIrradianceConvolutionDsLayout;
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mIrradianceConvolutionDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mIrradianceConvolutionDs",
+                             mIrradianceConvolutionDs);
+
+    VkDescriptorBufferInfo bufferInfo {
+        .buffer = mIrradianceViewsUBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorImageInfo imageInfo {
+        .sampler = mEnvMap.vulkanSampler.sampler,
+        .imageView = mEnvMap.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    std::array<VkWriteDescriptorSet, 2> dsWrites{};
+
+    dsWrites.at(0).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(0).dstSet = mIrradianceConvolutionDs;
+    dsWrites.at(0).dstBinding = 0;
+    dsWrites.at(0).dstArrayElement = 0;
+    dsWrites.at(0).descriptorCount = 1;
+    dsWrites.at(0).descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    dsWrites.at(0).pBufferInfo = &bufferInfo;
+
+    dsWrites.at(1).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    dsWrites.at(1).dstSet = mIrradianceConvolutionDs;
+    dsWrites.at(1).dstBinding = 1;
+    dsWrites.at(1).dstArrayElement = 0;
+    dsWrites.at(1).descriptorCount = 1;
+    dsWrites.at(1).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    dsWrites.at(1).pImageInfo = &imageInfo;
+
+    vkUpdateDescriptorSets(mRenderDevice.device, dsWrites.size(), dsWrites.data(), 0, nullptr);
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mIrradianceConvolutionDs",
+                             mIrradianceConvolutionDs);
+}
+
+void Renderer::executeCubemapConvertRenderpass()
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mCubemapConvertRenderpass,
+        .framebuffer = mCubemapConvertFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = mEnvMapFaceSize,
+                .height = mEnvMapFaceSize
+            }
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    VkViewport viewport {
+        .x = 0.f,
+        .y = static_cast<float>(mEnvMapFaceSize),
+        .width = static_cast<float>(mEnvMapFaceSize),
+        .height = -static_cast<float>(mEnvMapFaceSize),
+        .minDepth = 0.f,
+        .maxDepth = 1.f
+    };
+
+    VkRect2D scissor {
+        .offset = {.x = 0, .y = 0},
+        .extent = {
+            .width = static_cast<uint32_t>(mEnvMapFaceSize),
+            .height = static_cast<uint32_t>(mEnvMapFaceSize)
+        }
+    };
+
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCubemapConvertPipeline);
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mCubemapConvertPipeline,
+                            0, 1, &mCubemapConvertDs,
+                            0, nullptr);
+    vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
+
+    mEnvMap.transitionLayout(commandBuffer,
+                             VK_IMAGE_LAYOUT_UNDEFINED,
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0,
+                             VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
+    mEnvMap.generateMipMaps(commandBuffer);
+    mEnvMap.transitionLayout(commandBuffer,
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+                             VK_ACCESS_SHADER_READ_BIT);
+
+    endSingleTimeCommands(mRenderDevice, commandBuffer);
+}
+
+void Renderer::executeIrradianceConvolutionRenderpass()
+{
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mIrradianceConvolutionRenderpass,
+        .framebuffer = mIrradianceConvolutionFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = static_cast<uint32_t>(mIrradianceMap.width),
+                .height = static_cast<uint32_t>(mIrradianceMap.height)
+            }
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(mRenderDevice);
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mIrradianceConvolutionPipeline);
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mIrradianceConvolutionPipeline,
+                            0, 1, &mIrradianceConvolutionDs,
+                            0, nullptr);
+    vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
+
+    endSingleTimeCommands(mRenderDevice, commandBuffer);
 }
 
 void Renderer::executePrefilterRenderpasses()
@@ -3874,108 +3992,6 @@ void Renderer::executePrefilterRenderpasses()
     }
 
     endSingleTimeCommands(mRenderDevice, commandBuffer);
-}
-
-void Renderer::createBrdfLutRenderpass()
-{
-    VkAttachmentDescription attachment {
-        .format = mBrdfLut.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkAttachmentReference attachmentRef {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-    };
-
-    VkSubpassDescription subpass {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &attachmentRef,
-    };
-
-    VkRenderPassCreateInfo renderPassCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &attachment,
-        .subpassCount = 1,
-        .pSubpasses = &subpass
-    };
-
-    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mBrdfLutRenderpass);
-    vulkanCheck(result, "Failed to create renderpass.");
-    setRenderpassDebugName(mRenderDevice, mBrdfLutRenderpass, "Renderer::mBrdfLutRenderpass");
-}
-
-void Renderer::createBrdfLutFramebuffer()
-{
-    VkFramebufferCreateInfo framebufferCreateInfo {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = mBrdfLutRenderpass,
-        .attachmentCount = 1,
-        .pAttachments = &mBrdfLut.imageView,
-        .width = mBrdfLut.width,
-        .height = mBrdfLut.height,
-        .layers = 1
-    };
-
-    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mBrdfLutFramebuffer);
-    vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mBrdfLutFramebuffer, "Renderer::mBrdfLutFramebuffer");
-}
-
-void Renderer::createBrdfLutPipeline()
-{
-    PipelineSpecification specification {
-        .shaderStages = {
-            .vertShaderPath = "shaders/fullscreen_render.vert.spv",
-            .fragShaderPath = "shaders/integrate_brdf.frag.spv"
-        },
-        .inputAssembly = {
-            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
-        },
-        .viewportState = {
-            .viewport = VkViewport {
-                .x = 0,
-                .y = 0,
-                .width = static_cast<float>(mBrdfLut.width),
-                .height = static_cast<float>(mBrdfLut.height),
-                .minDepth = 0.0,
-                .maxDepth = 1.0
-            },
-            .scissor = VkRect2D {
-                .offset = {.x = 0, .y = 0},
-                .extent = {
-                    .width = mBrdfLut.width,
-                    .height = mBrdfLut.height
-                }
-            }
-        },
-        .rasterization = {
-            .rasterizerDiscardPrimitives = false,
-            .polygonMode = VK_POLYGON_MODE_FILL,
-            .lineWidth = 1.f
-        },
-        .multisampling = {
-            .samples = VK_SAMPLE_COUNT_1_BIT
-        },
-        .depthStencil = {
-            .enableDepthTest = false,
-            .enableDepthWrite = false
-        },
-        .blendStates = {
-            {.enable = false}
-        },
-        .renderPass = mBrdfLutRenderpass,
-        .subpassIndex = 0,
-        .debugName = "Renderer::mBrdfLutPipeline"
-    };
-
-    mBrdfLutPipeline = {mRenderDevice, specification};
 }
 
 void Renderer::executeBrdfLutRenderpass()
@@ -4346,8 +4362,9 @@ void Renderer::createAssignLightsToClustersDs()
 
 void Renderer::createSkyboxDs()
 {
-    VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
+    vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, 1, &mSkyboxDs);
 
+    VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = mRenderDevice.descriptorPool,

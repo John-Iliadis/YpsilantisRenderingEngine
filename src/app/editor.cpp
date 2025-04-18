@@ -241,7 +241,13 @@ void Editor::rendererPanel()
         ImGui::SliderFloat("Skybox Field of View", &mRenderer.mSkyboxFov, 1.f, 145.f, "%0.f");
 
         if (ImGui::Button("Import New"))
-            0;
+        {
+            std::filesystem::path path = fileDialog("Select HDR environment map", "HDR files *.hdr\0*.hdr;\0");
+            if (!path.empty())
+            {
+                mRenderer.importEnvMap(path.string());
+            }
+        }
     }
 
     if (ImGui::CollapsingHeader("HDR", ImGuiTreeNodeFlags_DefaultOpen))
