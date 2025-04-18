@@ -65,6 +65,7 @@ private:
     void executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer);
     void executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBuffer);
     void executeForwardRenderpass(VkCommandBuffer commandBuffer);
+    void executeBloomRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
     void executeGridRenderpass(VkCommandBuffer commandBuffer);
     void executeLightIconRenderpass(VkCommandBuffer commandBuffer);
@@ -189,6 +190,18 @@ private:
     void executePrefilterRenderpasses();
     void executeBrdfLutRenderpass();
 
+    void createBloomMipChain();
+    void createCaptureBrightPixelsRenderpass();
+    void createCaptureBrightPixelsFramebuffer();
+    void createCaptureBrightPixelsPipeline();
+    void createBloomDownsampleRenderpass();
+    void createBloomDownsampleFramebuffers();
+    void createBloomDownsamplePipeline();
+    void createBloomUpsampleRenderpass();
+    void createBloomUpsampleFramebuffers();
+    void createBloomUpsamplePipeline();
+    void createBloomMipChainDs();
+
     void createSingleImageDs(VkDescriptorSet& ds, const VulkanTexture& texture, const char* name);
     void createCameraDs();
     void createSingleImageDescriptorSets();
@@ -298,6 +311,22 @@ private:
     uint32_t mEnvMapFaceSize{};
     float mSkyboxFov = 45.f;
     const uint32_t mMaxPrefilterMipLevels = 6;
+
+    // Bloom
+    static constexpr uint32_t BloomMipChainSize = 6;
+    float mBrightnessThreshold = 1.f;
+    float mFilterRadius = 0.005f;
+    std::array<VulkanTexture, BloomMipChainSize> mBloomMipChain;
+    VkRenderPass mCaptureBrightPixelsRenderpass{};
+    VkFramebuffer mCaptureBrightPixelsFramebuffer{};
+    VulkanGraphicsPipeline mCaptureBrightPixelsPipeline;
+    VkRenderPass mBloomDownsampleRenderpass{};
+    std::array<VkFramebuffer, BloomMipChainSize> mBloomDownsampleFramebuffers{};
+    VulkanGraphicsPipeline mBloomDownsamplePipeline;
+    VkRenderPass mBloomUpsampleRenderpass{};
+    std::array<VkFramebuffer, BloomMipChainSize> mBloomUpsampleFramebuffers{};
+    VulkanGraphicsPipeline mBloomUpsamplePipeline;
+    std::array<VkDescriptorSet, BloomMipChainSize> mBloomMipChainDs{};
 
     // descriptor set layouts
     VulkanDsLayout mSingleImageDsLayout;

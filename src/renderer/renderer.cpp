@@ -120,6 +120,18 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createBrdfLutFramebuffer();
     importEnvMap("../assets/cubemaps/test.hdr");
 
+    createBloomMipChain();
+    createCaptureBrightPixelsRenderpass();
+    createCaptureBrightPixelsFramebuffer();
+    createCaptureBrightPixelsPipeline();
+    createBloomDownsampleRenderpass();
+    createBloomDownsampleFramebuffers();
+    createBloomDownsamplePipeline();
+    createBloomUpsampleRenderpass();
+    createBloomUpsampleFramebuffers();
+    createBloomUpsamplePipeline();
+    createBloomMipChainDs();
+
     createCameraDs();
     createSingleImageDescriptorSets();
     createSsaoDs();
@@ -152,7 +164,12 @@ Renderer::~Renderer()
     vkDestroyFramebuffer(mRenderDevice.device, mCubemapConvertFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mIrradianceConvolutionFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mBrdfLutFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mCaptureBrightPixelsFramebuffer, nullptr);
     for (auto fb : mPrefilterFramebuffers)
+        vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
+    for (auto fb : mBloomDownsampleFramebuffers)
+        vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
+    for (auto fb : mBloomUpsampleFramebuffers)
         vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
 
     vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderpass, nullptr);
@@ -167,6 +184,9 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mIrradianceConvolutionRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPrefilterRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mBrdfLutRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mCaptureBrightPixelsRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mBloomDownsampleRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mBloomUpsampleRenderpass, nullptr);
 }
 
 void Renderer::update()
@@ -185,6 +205,7 @@ void Renderer::render(VkCommandBuffer commandBuffer)
     executeGenFrustumClustersRenderpass(commandBuffer);
     executeAssignLightsToClustersRenderpass(commandBuffer);
     executeForwardRenderpass(commandBuffer);
+    executeBloomRenderpass(commandBuffer);
     executePostProcessingRenderpass(commandBuffer);
     executeGridRenderpass(commandBuffer);
     executeLightIconRenderpass(commandBuffer);
@@ -249,6 +270,7 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createNormalTexture();
     createSsaoTextures();
     createColorTexture8U();
+    createBloomMipChain();
 
     createPrepassFramebuffer();
     createSkyboxFramebuffer();
@@ -258,11 +280,15 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createGridFramebuffer();
     createPostProcessingFramebuffer();
     createLightIconFramebuffer();
+    createCaptureBrightPixelsFramebuffer();
+    createBloomDownsampleFramebuffers();
+    createBloomUpsampleFramebuffers();
 
     createSingleImageDescriptorSets();
     createSsaoDs();
     createColor32FInputDs();
     updateForwardShadingDs();
+    createBloomMipChainDs();
 
     createOitBuffers();
     updateOitResourcesDs();
@@ -523,7 +549,6 @@ void Renderer::executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer)
     endDebugLabel(commandBuffer);
 }
 
-// todo: only needs to be calculated when resized
 void Renderer::executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer)
 {
     beginDebugLabel(commandBuffer, "Gen Frustum Clusters");
@@ -757,6 +782,168 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
     }
 
     vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
+{
+    // 1. capture bright pixels
+    VkRenderPassBeginInfo captureBrightPixelsRenderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mCaptureBrightPixelsRenderpass,
+        .framebuffer = mCaptureBrightPixelsFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = mWidth,
+                .height = mHeight
+            }
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    beginDebugLabel(commandBuffer, "Capture Bright Pixels Pass");
+    vkCmdBeginRenderPass(commandBuffer, &captureBrightPixelsRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCaptureBrightPixelsPipeline);
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mCaptureBrightPixelsPipeline,
+                            0, 1, &mColor32FDs,
+                            0, nullptr);
+    vkCmdPushConstants(commandBuffer,
+                       mCaptureBrightPixelsPipeline,
+                       VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(float),
+                       &mBrightnessThreshold);
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+
+    // 2. Mip chain downsampling
+    beginDebugLabel(commandBuffer, "Bloom Mip Chain Downsampling Pass");
+
+    for (uint32_t i = 1; i < BloomMipChainSize; ++i)
+    {
+        uint32_t width = mBloomMipChain.at(i).width;
+        uint32_t height = mBloomMipChain.at(i).height;
+
+        VkRenderPassBeginInfo mipChainDownsampleRenderpassInfo {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = mBloomDownsampleRenderpass,
+            .framebuffer = mBloomDownsampleFramebuffers.at(i),
+            .renderArea = {
+                .offset = {.x = 0, .y = 0},
+                .extent = {
+                    .width = width,
+                    .height = height
+                }
+            },
+            .clearValueCount = 0,
+            .pClearValues = nullptr
+        };
+
+        VkViewport viewport {
+            .x = 0.f,
+            .y = 0.f,
+            .width = static_cast<float>(width),
+            .height = static_cast<float>(height),
+            .minDepth = 0.f,
+            .maxDepth = 1.f
+        };
+
+        VkRect2D scissor {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = width,
+                .height = height
+            }
+        };
+
+        std::array<uint32_t, 3> pushConstants {
+            width,
+            height,
+            i
+        };
+
+        vkCmdBeginRenderPass(commandBuffer, &mipChainDownsampleRenderpassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mBloomDownsamplePipeline);
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mBloomDownsamplePipeline,
+                                0, 1, &mBloomMipChainDs.at(i - 1),
+                                0, nullptr);
+        vkCmdPushConstants(commandBuffer,
+                           mBloomDownsamplePipeline,
+                           VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(pushConstants),
+                           pushConstants.data());
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        vkCmdEndRenderPass(commandBuffer);
+    }
+
+    endDebugLabel(commandBuffer);
+
+    // 3. Mip chain upsampling
+    beginDebugLabel(commandBuffer, "Bloom Mip Chain Upsampling Pass");
+
+    for (int32_t i = BloomMipChainSize - 2; i >= 0; --i)
+    {
+        uint32_t width = mBloomMipChain.at(i).width;
+        uint32_t height = mBloomMipChain.at(i).height;
+
+        VkRenderPassBeginInfo mipChainUpsampleRenderpassInfo {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = mBloomUpsampleRenderpass,
+            .framebuffer = mBloomUpsampleFramebuffers.at(i),
+            .renderArea = {
+                .offset = {.x = 0, .y = 0},
+                .extent = {
+                    .width = width,
+                    .height = height
+                }
+            },
+            .clearValueCount = 0,
+            .pClearValues = nullptr
+        };
+
+        VkViewport viewport {
+            .x = 0.f,
+            .y = 0.f,
+            .width = static_cast<float>(width),
+            .height = static_cast<float>(height),
+            .minDepth = 0.f,
+            .maxDepth = 1.f
+        };
+
+        VkRect2D scissor {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = width,
+                .height = height
+            }
+        };
+
+        vkCmdBeginRenderPass(commandBuffer, &mipChainUpsampleRenderpassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mBloomUpsamplePipeline);
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mBloomUpsamplePipeline,
+                                0, 1, &mBloomMipChainDs.at(i + 1),
+                                0, nullptr);
+        vkCmdPushConstants(commandBuffer,
+                           mBloomUpsamplePipeline,
+                           VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(float),
+                           &mFilterRadius);
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        vkCmdEndRenderPass(commandBuffer);
+    }
+
     endDebugLabel(commandBuffer);
 }
 
@@ -4020,6 +4207,395 @@ void Renderer::executeBrdfLutRenderpass()
     vkCmdEndRenderPass(commandBuffer);
 
     endSingleTimeCommands(mRenderDevice, commandBuffer);
+}
+
+void Renderer::createBloomMipChain()
+{
+    TextureSpecification specification {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .width = 0,
+        .height = 0,
+        .layerCount = 1,
+        .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT,
+        .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .magFilter = TextureMagFilter::Linear,
+        .minFilter = TextureMinFilter::LinearMipmapNearest,
+        .wrapS = TextureWrap::ClampToEdge,
+        .wrapT = TextureWrap::ClampToEdge,
+        .generateMipMaps = false
+    };
+
+    uint32_t width = mWidth;
+    uint32_t height = mHeight;
+
+    for (uint32_t i = 0; i < mBloomMipChain.size(); ++i)
+    {
+        specification.width = width;
+        specification.height = height;
+
+        mBloomMipChain.at(i) = {mRenderDevice, specification};
+        mBloomMipChain.at(i).setDebugName(std::format("Renderer::mBloomMipChain.at({})", i));
+
+        width = glm::max(1u, width / 2u);
+        height = glm::max(1u, height / 2u);
+    }
+}
+
+void Renderer::createCaptureBrightPixelsRenderpass()
+{
+    VkAttachmentDescription attachment {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentRef,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mCaptureBrightPixelsRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mCaptureBrightPixelsRenderpass, "Renderer::mCaptureBrightPixelsRenderpass");
+}
+
+void Renderer::createCaptureBrightPixelsFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mCaptureBrightPixelsFramebuffer, nullptr);
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mCaptureBrightPixelsRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &mBloomMipChain.at(0).imageView,
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mCaptureBrightPixelsFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mCaptureBrightPixelsFramebuffer, "Renderer::mCaptureBrightPixelsFramebuffer");
+}
+
+void Renderer::createCaptureBrightPixelsPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/fullscreen_render.vert.spv",
+            .fragShaderPath = "shaders/capture_bright_pixels.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = false,
+            .enableDepthWrite = false
+        },
+        .blendStates = {
+            {.enable = false}
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {
+            .dsLayouts = {mSingleImageDsLayout},
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(float)
+            }
+        },
+        .renderPass = mCaptureBrightPixelsRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mCaptureBrightPixelsPipeline"
+    };
+
+    mCaptureBrightPixelsPipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::createBloomDownsampleRenderpass()
+{
+    VkAttachmentDescription attachment {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentRef,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mBloomDownsampleRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mBloomDownsampleRenderpass, "Renderer::mBloomDownsampleRenderpass");
+}
+
+void Renderer::createBloomDownsampleFramebuffers()
+{
+    for (uint32_t i = 0; i < mBloomMipChain.size(); ++i)
+    {
+        vkDestroyFramebuffer(mRenderDevice.device, mBloomDownsampleFramebuffers.at(i), nullptr);
+
+        VkFramebufferCreateInfo framebufferCreateInfo {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = mBloomDownsampleRenderpass,
+            .attachmentCount = 1,
+            .pAttachments = &mBloomMipChain.at(i).imageView,
+            .width = mBloomMipChain.at(i).width,
+            .height = mBloomMipChain.at(i).height,
+            .layers = 1
+        };
+
+        VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mBloomDownsampleFramebuffers.at(i));
+        vulkanCheck(result, "Failed to create framebuffer.");
+
+        setFramebufferDebugName(mRenderDevice,
+                                mBloomDownsampleFramebuffers.at(i),
+                                std::format("Renderer::mBloomDownsampleFramebuffers.at({})", i));
+    }
+}
+
+void Renderer::createBloomDownsamplePipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/fullscreen_render.vert.spv",
+            .fragShaderPath = "shaders/bloom_downsample.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = false,
+            .enableDepthWrite = false
+        },
+        .blendStates = {
+            {.enable = false}
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {
+            .dsLayouts = {mSingleImageDsLayout},
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(uint32_t) * 3
+            }
+        },
+        .renderPass = mBloomDownsampleRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mBloomDownsampleRenderpass"
+    };
+
+    mBloomDownsamplePipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::createBloomUpsampleRenderpass()
+{
+    VkAttachmentDescription attachment {
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentRef,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mBloomUpsampleRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mBloomUpsampleRenderpass, "Renderer::mBloomUpsampleRenderpass");
+}
+
+void Renderer::createBloomUpsampleFramebuffers()
+{
+    for (uint32_t i = 0; i < mBloomMipChain.size(); ++i)
+    {
+        vkDestroyFramebuffer(mRenderDevice.device, mBloomUpsampleFramebuffers.at(i), nullptr);
+
+        VkFramebufferCreateInfo framebufferCreateInfo {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = mBloomUpsampleRenderpass,
+            .attachmentCount = 1,
+            .pAttachments = &mBloomMipChain.at(i).imageView,
+            .width = mBloomMipChain.at(i).width,
+            .height = mBloomMipChain.at(i).height,
+            .layers = 1
+        };
+
+        VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mBloomUpsampleFramebuffers.at(i));
+        vulkanCheck(result, "Failed to create framebuffer.");
+
+        setFramebufferDebugName(mRenderDevice,
+                                mBloomUpsampleFramebuffers.at(i),
+                                std::format("Renderer::mBloomUpsampleFramebuffers.at({})", i));
+    }
+}
+
+void Renderer::createBloomUpsamplePipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/fullscreen_render.vert.spv",
+            .fragShaderPath = "shaders/bloom_upsample.frag.spv"
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = false,
+            .enableDepthWrite = false
+        },
+        .blendStates = {
+            {.enable = false}
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        },
+        .pipelineLayout = {
+            .dsLayouts = {mSingleImageDsLayout},
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .offset = 0,
+                .size = sizeof(float)
+            }
+        },
+        .renderPass = mBloomUpsampleRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mBloomUpsamplePipeline"
+    };
+
+    mBloomUpsamplePipeline = VulkanGraphicsPipeline(mRenderDevice, specification);
+}
+
+void Renderer::createBloomMipChainDs()
+{
+    for (uint32_t i = 0; i < BloomMipChainSize; ++i)
+    {
+        vkFreeDescriptorSets(mRenderDevice.device,
+                             mRenderDevice.descriptorPool,
+                             1,
+                             &mBloomMipChainDs.at(i));
+
+        VkDescriptorSetLayout dsLayout = mSingleImageDsLayout;
+        VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = mRenderDevice.descriptorPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &dsLayout
+        };
+
+        VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mBloomMipChainDs.at(i));
+        vulkanCheck(result, "Failed to allocate descriptor set.");
+
+        setVulkanObjectDebugName(mRenderDevice,
+                                 VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                                 std::format("Renderer::mBloomMipChainDs.at({})", i),
+                                 mBloomMipChainDs.at(i));
+
+        VkDescriptorImageInfo imageInfo {
+            .sampler = mBloomMipChain.at(i).vulkanSampler.sampler,
+            .imageView = mBloomMipChain.at(i).imageView,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        };
+
+        VkWriteDescriptorSet writeDs {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mBloomMipChainDs.at(i),
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &imageInfo,
+        };
+
+        vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDs, 0, nullptr);
+    }
 }
 
 void Renderer::createSingleImageDs(VkDescriptorSet &ds, const VulkanTexture &texture, const char *name)
