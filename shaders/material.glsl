@@ -10,6 +10,8 @@ struct Material
     float metallicFactor;
     float roughnessFactor;
     float emissionFactor;
+    float alphaMask;
+    float alphaCutoff;
     vec4 baseColorFactor;
     vec4 emissionColor;
     vec2 tiling;

@@ -316,7 +316,7 @@ private:
 
     // Bloom
     static constexpr uint32_t BloomMipChainSize = 6;
-    float mBrightnessThreshold = 1.f;
+    float mBrightnessThreshold = 2.2f;
     float mFilterRadius = 0.005f;
     float mBloomStrength = 1.f;
     std::array<VulkanTexture, BloomMipChainSize> mBloomMipChain;

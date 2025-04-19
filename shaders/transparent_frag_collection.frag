@@ -66,6 +66,10 @@ void main()
         vec4 baseColorSample = texture(baseColorTex, vTexCoords * material.tiling);
 
         vec4 color = baseColorFactor * baseColorSample;
+
+        if (material.alphaMask == 1 && color.a < material.alphaCutoff)
+            discard;
+
         uint previousNodeIndex = imageAtomicExchange(nodeIndexStorageTex, ivec2(gl_FragCoord.xy), nodeIndex);
 
         nodes[nodeIndex] = TransparentNode(color, gl_FragCoord.z, previousNodeIndex);

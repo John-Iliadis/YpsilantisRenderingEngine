@@ -392,6 +392,8 @@ Material ModelLoader::loadMaterial(const aiMaterial &aiMaterial)
         .metallicFactor = getMetallicFactor(aiMaterial),
         .roughnessFactor = getRoughnessFactor(aiMaterial),
         .emissionFactor = 1.f,
+        .alphaMask = getAlphaMask(aiMaterial),
+        .alphaCutoff = getAlphaCutoff(aiMaterial),
         .baseColorFactor = getBaseColorFactor(aiMaterial),
         .emissionColor = getEmissionFactor(aiMaterial),
         .tiling = glm::vec4(1.f),
@@ -454,6 +456,26 @@ float ModelLoader::getRoughnessFactor(const aiMaterial &aiMaterial)
         return roughnessFactor;
 
     return defaultRoughnessFactor;
+}
+
+float ModelLoader::getAlphaMask(const aiMaterial &aiMaterial)
+{
+    aiString alphaMode;
+    if (aiMaterial.Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) == AI_SUCCESS)
+        if (!strcmp(alphaMode.C_Str(), "MASK"))
+            return 1.f;
+    return 0.f;
+}
+
+float ModelLoader::getAlphaCutoff(const aiMaterial &aiMaterial)
+{
+    static constexpr float defaultAlphaCutoff = 0.5f;
+
+    float alphaCutoff;
+    if (aiMaterial.Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaCutoff) == AI_SUCCESS)
+        return alphaCutoff;
+
+    return defaultAlphaCutoff;
 }
 
 bool ModelLoader::isOpaque(const aiMaterial &aiMaterial)
