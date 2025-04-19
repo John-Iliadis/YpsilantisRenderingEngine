@@ -1,66 +1,59 @@
 
 #define PI 3.14159265359
 
-float distributionGGX(vec3 normal, vec3 halfwayVec, float roughness)
+// Normal Distribution function --------------------------------------
+float D_GGX(float dotNH, float roughness)
 {
-    float a = roughness * roughness;
-    float a2 = a * a;
-
-    float NdotH2 = pow(max(dot(normal, halfwayVec), 0.0), 2.0);
-
-    float denom = PI * pow(NdotH2 * (a2 - 1.0) + 1.0, 2.0);
-
-    return a2 / denom;
+    float alpha = roughness * roughness;
+    float alpha2 = alpha * alpha;
+    float denom = dotNH * dotNH * (alpha2 - 1.0) + 1.0;
+    return (alpha2)/(PI * denom*denom);
 }
 
-float geometrySchlickGGX(float NdotV, float roughness)
+// Geometric Shadowing function --------------------------------------
+float G_SchlicksmithGGX(float dotNL, float dotNV, float roughness)
 {
-     float k_ibl = (roughness * roughness) / 2.0;
-
-    return NdotV / (NdotV * (1 - k_ibl) + k_ibl);
+    float r = (roughness + 1.0);
+    float k = (r*r) / 8.0;
+    float GL = dotNL / (dotNL * (1.0 - k) + k);
+    float GV = dotNV / (dotNV * (1.0 - k) + k);
+    return GL * GV;
 }
 
-float geometrySmith(vec3 normal, vec3 viewVec, vec3 lightVec, float roughness)
+// Fresnel function ----------------------------------------------------
+vec3 F_Schlick(float cosTheta, vec3 F0)
 {
-    float NdotV = max(dot(normal, viewVec), 0.0);
-    float NdotL = max(dot(normal, lightVec), 0.0);
-
-    return geometrySchlickGGX(NdotV, roughness) *
-           geometrySchlickGGX(NdotL, roughness);
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
-vec3 fresnelSchlick(vec3 viewVec, vec3 halfwayVec, vec3 F_0)
+vec3 F_SchlickR(float cosTheta, vec3 F0, float roughness)
 {
-    float VdotH = max(dot(viewVec, halfwayVec), 0.0);
-
-    return F_0 + (1.0 - F_0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
-vec3 fresnelSchlickRoughness(vec3 viewVec, vec3 halfwayVec, vec3 F_0, float roughness)
+// Rendering equation ---------------------------------------------------
+vec3 specularContribution(vec3 L, vec3 V, vec3 N,
+                          vec3 F0, vec3 lightRadiance,
+                          vec3 baseColor, float metallic, float roughness)
 {
-    float VdotH = max(dot(viewVec, halfwayVec), 0.0);
+    vec3 H = normalize (V + L);
+    float dotNH = clamp(dot(N, H), 0.0, 1.0);
+    float dotNV = clamp(dot(N, V), 0.0, 1.0);
+    float dotNL = clamp(dot(N, L), 0.0, 1.0);
 
-    return F_0 + (max(vec3(1.0 - roughness), F_0) - F_0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
-}
+    vec3 color = vec3(0.0);
+    if (dotNL > 0.0)
+    {
+        float D = D_GGX(dotNH, roughness);
+        float G = G_SchlicksmithGGX(dotNL, dotNV, roughness);
+        vec3 F = F_Schlick(dotNV, F0);
 
-vec3 renderingEquation(vec3 normal, vec3 lightVec, vec3 viewVec, vec3 halfwayVec,
-          vec3 lightRadiance, vec3 baseColor, vec3 F_0, float metallic, float roughness)
-{
-    float distribution = distributionGGX(normal, halfwayVec, roughness);
-    float geometry = geometrySmith(normal, viewVec, lightVec, roughness);
-    vec3 frensel = fresnelSchlick(viewVec, halfwayVec, F_0);
+        vec3 spec = D * F * G / (4.0 * dotNL * dotNV + 0.001);
+        vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+        color += (kD * baseColor / PI + spec) * lightRadiance * dotNL;
+    }
 
-    vec3 numerator = (distribution * geometry) * frensel;
-    float denominator = 4 * max(dot(viewVec, normal), 0.0) * max(dot(lightVec, normal), 0.0) + 1e-5;
-    vec3 specular = numerator / denominator;
-
-    vec3 kS = frensel;
-    vec3 kD = vec3(1.0) - kS;
-    kD *= 1.0 - metallic;
-
-    float NdotL = max(dot(normal, lightVec), 0.0);
-
-    return (kD * baseColor / PI + specular) * lightRadiance * NdotL;
+    return color;
 }
 
 float radicalInverseVDC(uint bits)
@@ -124,7 +117,7 @@ vec2 integrateBRDF(float NdotV, float roughness, uint sampleCount)
 
         if(NdotL > 0.0)
         {
-            float G = geometrySmith(N, V, L, roughness);
+            float G = G_SchlicksmithGGX(NdotL, NdotV, roughness);
             float G_Vis = (G * VdotH) / (NdotH * NdotV);
             float Fc = pow(1.0 - VdotH, 5.0);
 

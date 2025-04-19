@@ -36,9 +36,10 @@ void main()
 
         if(NdotL > 0.0)
         {
-            float D = distributionGGX(normal, H, roughness);
             float NdotH = max(dot(normal, H), 0.0);
             float HdotV = max(dot(H, V), 0.0);
+
+            float D = D_GGX(NdotH, roughness);
             float pdf = D * NdotH / (4.0 * HdotV) + 0.0001;
 
             float resolution = faceSize.x;

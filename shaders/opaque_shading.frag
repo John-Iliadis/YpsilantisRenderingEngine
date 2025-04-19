@@ -99,7 +99,7 @@ void main()
         vec3 halfwayVec = normalize(viewVec + lightVec);
         vec3 lightRadiance = dirLights[i].color.rgb * dirLights[i].intensity;
 
-        L_0 += renderingEquation(normal, lightVec, viewVec, halfwayVec, lightRadiance, baseColor, F_0, metallic, roughness);
+        L_0 += specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
     }
 
     uint clusterIndex = getClusterIndex(viewPos);
@@ -115,7 +115,7 @@ void main()
         vec3 lightRadiance = pointLight.color.rgb * (pointLight.intensity * attenuation);
         vec3 halfwayVec = normalize(viewVec + lightVec);
 
-        L_0 += renderingEquation(normal, lightVec, viewVec, halfwayVec, lightRadiance, baseColor, F_0, metallic, roughness);
+        L_0 += specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
     }
 
     for (uint i = 0; i < spotLightCount; ++i)
@@ -133,23 +133,29 @@ void main()
         vec3 lightRadiance = spotLights[i].color.rgb * (spotLights[i].intensity * intensity * attenuation);
         vec3 halfwayVec = normalize(lightVec + viewVec);
 
-        L_0 += renderingEquation(normal, lightVec, viewVec, halfwayVec, lightRadiance, baseColor, F_0, metallic, roughness);
+        L_0 += specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
     }
 
     vec3 ambient;
     if (enableIblLighting == 1)
     {
-        vec3 F = fresnelSchlickRoughness(normal, viewVec, F_0, roughness);
-        vec3 kS = F;
-        vec3 kD = 1.0 - kS;
-        kD *= 1.0 - metallic;
-
+        vec2 brdf = texture(brdfLut, vec2(max(dot(normal, viewVec), 0.0), roughness)).rg;
         vec3 irradiance = texture(irradianceMap, normal).rgb;
+
+        float lod = roughness * maxReflectionLod;
+        float lodf = floor(lod);
+        float lodc = ceil(lod);
+        vec3 a = textureLod(prefilterMap, R, lodf).rgb;
+        vec3 b = textureLod(prefilterMap, R, lodc).rgb;
+        vec3 reflection = mix(a, b, lod - lodf);
+
         vec3 diffuse = irradiance * baseColor;
 
-        vec3 prefilterColor = textureLod(prefilterMap, R, roughness * maxReflectionLod).rgb;
-        vec2 brdf = texture(brdfLut, vec2(max(dot(normal, viewVec), 0.0), roughness)).rg;
-        vec3 specular = prefilterColor * (F * brdf.x + brdf.y);
+        vec3 F = F_SchlickR(max(dot(normal, viewVec), 0.0), F_0, roughness);
+        vec3 specular = reflection * (F * brdf.x + brdf.y);
+
+        vec3 kD = 1.0 - F;
+        kD *= 1.0 - metallic;
 
         ambient = (kD * diffuse + specular) * ao;
     }
