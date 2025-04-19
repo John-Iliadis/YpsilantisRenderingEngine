@@ -19,18 +19,19 @@ void main()
     float angleDt = 0.025;
     float sampleCount = 0.0;
 
-    for (float phi = 0.0; phi < 2.0 * PI; phi += angleDt)
+    const float twoPi = 2.0 * PI;
+    const float halfPi = PI / 2.0;
+
+    for (float phi = 0.0; phi < twoPi; phi += angleDt)
     {
-        for (float theta = 0.0; theta < PI / 2.0; theta += angleDt)
+        for (float theta = 0.0; theta < halfPi; theta += angleDt)
         {
-            vec3 tangent = vec3(sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta));
-            vec3 sampleVec = tangent.x * right + tangent.y * up + tangent.z * normal;
-            irradiance += texture(envMap, sampleVec).rgb * cos(theta) * sin(theta);
+            vec3 tempVec = cos(phi) * right + sin(phi) * up;
+            vec3 sampleVector = cos(theta) * normal + sin(theta) * tempVec;
+            irradiance += texture(envMap, sampleVector).rgb * cos(theta) * sin(theta);
             ++sampleCount;
         }
     }
 
-    irradiance = PI * irradiance / sampleCount;
-
-    outFragColor = vec4(irradiance, 1.0);
+    outFragColor = vec4(PI * irradiance / sampleCount, 1.0);
 }
