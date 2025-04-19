@@ -304,6 +304,33 @@ void Editor::rendererPanel()
         ImGui::DragFloat("Bias##ssao", &mRenderer.mSsaoDepthBias, 0.0001f, 0.f, FLT_MAX, "%.4f", ImGuiSliderFlags_AlwaysClamp);
     }
 
+    if (ImGui::CollapsingHeader("Bloom", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("Enable##Bloom", &mRenderer.mBloomOn);
+        ImGui::Separator();
+
+        ImGui::DragFloat("Intensity##Bloom",
+                         &mRenderer.mBloomStrength,
+                         0.01f,
+                         0.f, FLT_MAX,
+                         "%.2f",
+                         ImGuiSliderFlags_AlwaysClamp);
+
+        ImGui::DragFloat("Brightness Threshold",
+                         &mRenderer.mBrightnessThreshold,
+                         0.001f,
+                         0.f, FLT_MAX,
+                         "%.3f",
+                         ImGuiSliderFlags_AlwaysClamp);
+
+        ImGui::DragFloat("Filter Radius",
+                         &mRenderer.mFilterRadius,
+                         0.0001f,
+                         0.f, FLT_MAX,
+                         "%.4f",
+                         ImGuiSliderFlags_AlwaysClamp);
+    }
+
     if (ImGui::CollapsingHeader("Order Independent Transparency", ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Checkbox("Enable##OIT", &mRenderer.mOitOn);

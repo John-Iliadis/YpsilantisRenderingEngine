@@ -106,6 +106,7 @@ private:
     void createFrustumClusterGenDsLayout();
     void createAssignLightsToClustersDsLayout();
     void createForwardShadingDsLayout();
+    void createPostProcessingDsLayout();
 
     void createPrepassRenderpass();
     void createPrepassFramebuffer();
@@ -213,6 +214,7 @@ private:
     void createSkyboxDs();
     void createForwardShadingDs();
     void updateForwardShadingDs();
+    void createPostProcessingDs();
 
 private:
     const VulkanRenderDevice& mRenderDevice;
@@ -316,6 +318,7 @@ private:
     static constexpr uint32_t BloomMipChainSize = 6;
     float mBrightnessThreshold = 1.f;
     float mFilterRadius = 0.005f;
+    float mBloomStrength = 0.1f;
     std::array<VulkanTexture, BloomMipChainSize> mBloomMipChain;
     VkRenderPass mCaptureBrightPixelsRenderpass{};
     VkFramebuffer mCaptureBrightPixelsFramebuffer{};
@@ -340,6 +343,7 @@ private:
     VulkanDsLayout mFrustumClusterGenDsLayout;
     VulkanDsLayout mAssignLightsToClustersDsLayout;
     VulkanDsLayout mForwardShadingDsLayout;
+    VulkanDsLayout mPostProcessingDsLayout;
 
     // descriptor sets
     VkDescriptorSet mCameraDs{};
@@ -355,6 +359,7 @@ private:
     VkDescriptorSet mFrustumClusterGenDs{};
     VkDescriptorSet mAssignLightsToClustersDs{};
     VkDescriptorSet mForwardShadingDs{};
+    VkDescriptorSet mPostProcessingDs{};
 
     // ssao
     std::uniform_real_distribution<float> mSsaoDistribution {0.f, 1.f};
@@ -419,6 +424,7 @@ private:
     bool mEnableIblLighting = true;
     bool mSsaoOn = true;
     bool mOitOn = true;
+    bool mBloomOn = true;
     bool mRenderGrid = true;
     bool mDebugNormals = false;
 

@@ -46,6 +46,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createFrustumClusterGenDsLayout();
     createAssignLightsToClustersDsLayout();
     createForwardShadingDsLayout();
+    createPostProcessingDsLayout();
 
     createPrepassRenderpass();
     createPrepassFramebuffer();
@@ -141,6 +142,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createAssignLightsToClustersDs();
     createForwardShadingDs();
     updateForwardShadingDs();
+    createPostProcessingDs();
 }
 
 Renderer::~Renderer()
@@ -289,6 +291,7 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createColor32FInputDs();
     updateForwardShadingDs();
     createBloomMipChainDs();
+    createPostProcessingDs();
 
     createOitBuffers();
     updateOitResourcesDs();
@@ -788,6 +791,8 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
 void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
 {
     // 1. capture bright pixels
+    VkClearValue clearValue = {.color = {0.f, 0.f, 0.f, 0.f}};
+
     VkRenderPassBeginInfo captureBrightPixelsRenderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = mCaptureBrightPixelsRenderpass,
@@ -799,8 +804,8 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
                 .height = mHeight
             }
         },
-        .clearValueCount = 0,
-        .pClearValues = nullptr
+        .clearValueCount = 1,
+        .pClearValues = &clearValue
     };
 
     beginDebugLabel(commandBuffer, "Capture Bright Pixels Pass");
@@ -816,7 +821,7 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
                        VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(float),
                        &mBrightnessThreshold);
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    if (mBloomOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
 
@@ -880,7 +885,7 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
                            VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(pushConstants),
                            pushConstants.data());
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        if (mBloomOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
         vkCmdEndRenderPass(commandBuffer);
     }
 
@@ -940,7 +945,7 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
                            VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(float),
                            &mFilterRadius);
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        if (mBloomOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
         vkCmdEndRenderPass(commandBuffer);
     }
 
@@ -972,17 +977,19 @@ void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
         float exposure;
         float maxWhite;
         uint32_t tonemap;
+        float bloomStrength;
     } pushConstants {
         static_cast<uint32_t>(mHDROn),
         mExposure,
         mMaxWhite,
-        static_cast<uint32_t>(mTonemap)
+        static_cast<uint32_t>(mTonemap),
+        mBloomStrength
     };
 
     vkCmdBindDescriptorSets(commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             mPostProcessingPipeline,
-                            0, 1, &mColor32FDs,
+                            0, 1, &mPostProcessingDs,
                             0, nullptr);
 
     vkCmdPushConstants(commandBuffer,
@@ -1587,6 +1594,19 @@ void Renderer::createForwardShadingDsLayout()
     };
 
     mForwardShadingDsLayout = {mRenderDevice, specification};
+}
+
+void Renderer::createPostProcessingDsLayout()
+{
+    DsLayoutSpecification specification {
+        .bindings = {
+            binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        .debugName = "Renderer::mPostProcessingDsLayout"
+    };
+
+    mPostProcessingDsLayout = {mRenderDevice, specification};
 }
 
 void Renderer::createPrepassRenderpass()
@@ -2904,13 +2924,11 @@ void Renderer::createPostProcessingPipeline()
             VK_DYNAMIC_STATE_SCISSOR
         },
         .pipelineLayout = {
-            .dsLayouts = {
-                mSingleImageDsLayout
-            },
+            .dsLayouts = {mPostProcessingDsLayout},
             .pushConstantRange = VkPushConstantRange {
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                 .offset = 0,
-                .size = sizeof(float) * 2 + sizeof(uint32_t) * 2
+                .size = sizeof(uint32_t) * 5
             }
         },
         .renderPass = mPostProcessingRenderpass,
@@ -4249,7 +4267,7 @@ void Renderer::createCaptureBrightPixelsRenderpass()
     VkAttachmentDescription attachment {
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
         .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
@@ -5082,6 +5100,59 @@ void Renderer::updateForwardShadingDs()
     dsWrites.at(5).descriptorCount = 1;
     dsWrites.at(5).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     dsWrites.at(5).pImageInfo = &brdfLutImageInfo;
+
+    vkUpdateDescriptorSets(mRenderDevice.device, dsWrites.size(), dsWrites.data(), 0, nullptr);
+}
+
+void Renderer::createPostProcessingDs()
+{
+    vkFreeDescriptorSets(mRenderDevice.device, mRenderDevice.descriptorPool, 1, &mPostProcessingDs);
+
+    VkDescriptorSetLayout dsLayout = mPostProcessingDsLayout;
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &dsLayout
+    };
+
+    VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &descriptorSetAllocateInfo, &mPostProcessingDs);
+    vulkanCheck(result, "Failed to allocate descriptor set.");
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                             "Renderer::mPostProcessingDs",
+                             mPostProcessingDs);
+
+    VkDescriptorImageInfo hdrImageInfo {
+        .sampler = mColorTexture32F.vulkanSampler.sampler,
+        .imageView = mColorTexture32F.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+
+    VkDescriptorImageInfo bloomImageInfo {
+        .sampler = mBloomMipChain.front().vulkanSampler.sampler,
+        .imageView = mBloomMipChain.front().imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+
+    std::array<VkWriteDescriptorSet, 2> dsWrites {};
+
+    dsWrites.at(0).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+    dsWrites.at(0).dstSet = mPostProcessingDs,
+    dsWrites.at(0).dstBinding = 0,
+    dsWrites.at(0).dstArrayElement = 0,
+    dsWrites.at(0).descriptorCount = 1,
+    dsWrites.at(0).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    dsWrites.at(0).pImageInfo = &hdrImageInfo;
+
+    dsWrites.at(1).sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+    dsWrites.at(1).dstSet = mPostProcessingDs,
+    dsWrites.at(1).dstBinding = 1,
+    dsWrites.at(1).dstArrayElement = 0,
+    dsWrites.at(1).descriptorCount = 1,
+    dsWrites.at(1).descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    dsWrites.at(1).pImageInfo = &bloomImageInfo;
 
     vkUpdateDescriptorSets(mRenderDevice.device, dsWrites.size(), dsWrites.data(), 0, nullptr);
 }
