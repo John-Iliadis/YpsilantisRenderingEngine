@@ -28,16 +28,16 @@ void main()
 
     for (uint i = 0; i < sampleCount; ++i)
     {
-        vec2 xi = hammersley(i, sampleCount);
-        vec3 H = importanceSampleGGX(xi, normal, roughness);
+        vec2 xi = hammersley2d(i, sampleCount);
+        vec3 H = importanceSample_GGX(xi, normal, roughness);
         vec3 L = normalize(2.0 * dot(V, H) * H - V);
 
-        float NdotL = dot(normal, L);
+        float NdotL = clamp(dot(normal, L), 0.0, 1.0);
 
         if(NdotL > 0.0)
         {
-            float NdotH = max(dot(normal, H), 0.0);
-            float HdotV = max(dot(H, V), 0.0);
+            float NdotH = clamp(dot(normal, H), 0.0, 1.0);
+            float HdotV = clamp(dot(H, V), 0.0, 1.0);
 
             float D = D_GGX(NdotH, roughness);
             float pdf = D * NdotH / (4.0 * HdotV) + 0.0001;
@@ -46,7 +46,7 @@ void main()
             float saTexel  = 4.0 * PI / (6.0 * resolution * resolution);
             float saSample = 1.0 / (float(sampleCount) * pdf + 0.0001);
 
-            float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
+            float mipLevel = roughness == 0.0 ? 0.0 : max(0.5 * log2(saSample / saTexel) + 1.0, 0.0);
 
             prefilteredColor += textureLod(envMap, L, mipLevel).rgb * NdotL;
             weight += NdotL;

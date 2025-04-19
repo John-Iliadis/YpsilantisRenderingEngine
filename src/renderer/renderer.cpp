@@ -3335,7 +3335,7 @@ void Renderer::createIrradianceMap()
 
 void Renderer::createPrefilterMap()
 {
-    uint32_t prefilterMapSize = 256;
+    uint32_t prefilterMapSize = 512;
 
     TextureSpecification specification {
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
