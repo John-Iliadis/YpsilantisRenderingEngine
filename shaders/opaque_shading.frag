@@ -84,7 +84,9 @@ void main()
     float occlusionFactor = texture(ssaoTexture, screenSpaceTexCoords).r;
     vec3 viewPos = texture(viewPosTexture, screenSpaceTexCoords).xyz;
 
-    vec3 normal = normalize(vTBN * normalSample);
+    float hasNormalMap = float(material.normalTexIndex != -1);
+    vec3 normal = vTBN[2] * (1.0 - hasNormalMap) + vTBN * normalSample * hasNormalMap;
+    normal = normalize(normal);
     vec3 viewVec = normalize(cameraPos.xyz - vFragWorldPos);
     vec3 R = reflect(-viewVec, normal);
 
