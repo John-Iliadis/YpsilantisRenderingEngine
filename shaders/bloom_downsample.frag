@@ -46,15 +46,14 @@ void main()
     vec4 L = texture(srcTexture, vTexCoords + srcTexelSize * offsets[11]);
     vec4 M = texture(srcTexture, vTexCoords + srcTexelSize * offsets[12]);
 
-
     // Apply weighted distribution:
     // 0.5 + 0.125 + 0.125 + 0.125 + 0.125 = 1
-    vec2 div = 0.25 * vec2(0.5, 0.125);
-    vec4 center = (D + E + I + J) * div.x;
-    vec4 topLeft = (A + B + F + G) * div.y;
-    vec4 topRight = (B + C + G + H) * div.y;
-    vec4 bottomLeft = (F + G + K + L) * div.y;
-    vec4 bottomRight = (G + H + L + M) * div.y;
+    vec4 center = (D + E + I + J) * 0.5;
+    vec4 topLeft = (A + B + F + G) * 0.125;
+    vec4 topRight = (B + C + G + H) * 0.125;
+    vec4 bottomLeft = (F + G + K + L) * 0.125;
+    vec4 bottomRight = (G + H + L + M) * 0.125;
 
-    outFragColor = center + topLeft + topRight + bottomLeft + bottomRight;
+    outFragColor = (center + topLeft + topRight + bottomLeft + bottomRight) * 0.25;
+    outFragColor = max(outFragColor, 0.0001f);
 }

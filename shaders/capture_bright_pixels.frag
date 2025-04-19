@@ -14,7 +14,7 @@ layout (set = 0, binding = 0) uniform sampler2D tex;
 void main()
 {
     vec4 sampleColor = texture(tex, vTexCoords);
-    float brightness = dot(sampleColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+    float brightness = max(sampleColor.r, max(sampleColor.g, sampleColor.b));
     outFragColor = sampleColor * float(brightness >= brightnessThreshold);
     outFragColor.a = 1.0;
 }
