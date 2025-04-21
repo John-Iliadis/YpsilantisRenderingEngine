@@ -10,7 +10,8 @@ static const std::vector<const char*> extensions {
     "VK_KHR_swapchain",
     "VK_EXT_extended_dynamic_state",
     "VK_EXT_host_query_reset",
-    "VK_KHR_push_descriptor"
+    "VK_KHR_push_descriptor",
+    "VK_EXT_descriptor_indexing"
 };
 
 static bool checkExtSupport(VkPhysicalDevice physicalDevice)
@@ -79,16 +80,29 @@ void VulkanRenderDevice::pickPhysicalDevice(const VulkanInstance &instance)
 
 void VulkanRenderDevice::createLogicalDevice()
 {
-    VkPhysicalDeviceHostQueryResetFeaturesEXT resetFeatures {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES,
+    VkPhysicalDeviceHostQueryResetFeaturesEXT hostQueryResetFeatures {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT,
         .pNext = nullptr,
         .hostQueryReset = VK_TRUE
     };
 
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
-        .pNext = &resetFeatures,
+        .pNext = &hostQueryResetFeatures,
         .extendedDynamicState = VK_TRUE
+    };
+
+    // still getting maxPerStageDescriptorSamplers limit exceeded error after using this
+    VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptorIndexingFeatures {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+        .pNext = &extendedDynamicStateFeatures,
+        .shaderSampledImageArrayNonUniformIndexing = VK_FALSE,
+        .descriptorBindingPartiallyBound = VK_TRUE,
+        // Used for specifying the actual size of a shader unsized descriptor array during runtime.
+        // The unsized ds array must be the last descriptor in the set
+        .descriptorBindingVariableDescriptorCount = VK_FALSE,
+        // allows declaring ds arrays in the shader without a fixed size
+        .runtimeDescriptorArray = VK_FALSE
     };
 
     float queuePriority = 1.f;
@@ -107,7 +121,7 @@ void VulkanRenderDevice::createLogicalDevice()
 
     VkDeviceCreateInfo deviceCreateInfo {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .pNext = &extendedDynamicStateFeatures,
+        .pNext = &descriptorIndexingFeatures,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queueCreateInfo,
         .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),

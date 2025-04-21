@@ -1,9 +1,13 @@
 #version 460 core
 
+
+
 #include "material.glsl"
 #include "lights.glsl"
 #include "rendering_equations.glsl"
 #include "cluster.glsl"
+
+#define MAX_SHADOW_MAPS_PER_TYPE 50
 
 layout (early_fragment_tests) in;
 
@@ -48,6 +52,13 @@ layout (set = 1, binding = 5) uniform sampler2D brdfLut;
 layout (set = 2, binding = 0) buffer readonly DirLightsSSBO { DirectionalLight dirLights[]; };
 layout (set = 2, binding = 1) buffer readonly PointLightsSSBO { PointLight pointLights[]; };
 layout (set = 2, binding = 2) buffer readonly SpotLightSSBO { SpotLight spotLights[]; };
+layout (std430, set = 2, binding = 3) buffer readonly DirShadowDataSSBO { SpotShadowData dirShadowData[]; }; // todo: change
+layout (std430, set = 2, binding = 4) buffer readonly PointShadowDataSSBO { SpotShadowData pointShadowData[]; }; // todo: change
+layout (std430, set = 2, binding = 5) buffer readonly SpotShadowDataSSBO { SpotShadowData spotShadowData[]; };
+layout (set = 2, binding = 6) uniform sampler shadowMapSampler;
+layout (set = 2, binding = 7) uniform texture2DArray dirShadowMaps[MAX_SHADOW_MAPS_PER_TYPE];
+layout (set = 2, binding = 8) uniform textureCube pointShadowMaps[MAX_SHADOW_MAPS_PER_TYPE];
+layout (set = 2, binding = 9) uniform texture2D spotShadowMaps[MAX_SHADOW_MAPS_PER_TYPE];
 
 layout (set = 3, binding = 0) uniform MaterialsUBO { Material material; };
 layout (set = 3, binding = 1) uniform sampler2D baseColorTex;
@@ -68,6 +79,44 @@ uint getClusterIndex(vec3 viewPos)
     return cluster.x +
            cluster.y * clusterGridX +
            cluster.z * clusterGridX * clusterGridY;
+}
+
+float shadowCalculation(uint index, vec3 normal, vec3 lightDir)
+{
+    // calculate the frag position in light space
+    vec4 fragPosLightSpace = spotShadowData[index].viewProj * vec4(vFragWorldPos, 1.0); // light space
+    fragPosLightSpace /= fragPosLightSpace.w; // NDC
+
+    vec2 sampleCoords = fragPosLightSpace.xy * 0.5 + 0.5; // to range [0, 1]
+    float currentDepth = fragPosLightSpace.z;
+    float bias = max(spotShadowData[index].biasSlope * (1.0 - dot(normal, lightDir)), spotShadowData[index].biasConstant);
+    float shadow = 0.0;
+
+    if (spotShadowData[index].shadowType == SoftShadow)
+    {
+        int pcfRange = spotShadowData[index].pcfRange;
+        float shadowMapResolution = spotShadowData[index].resolution;
+        vec2 texelSize = 1.0 / vec2(shadowMapResolution, shadowMapResolution);
+
+        for (int x = -pcfRange; x <= pcfRange; ++x)
+        {
+            for (int y = -pcfRange; y <= pcfRange; ++y)
+            {
+                vec2 uv = sampleCoords + vec2(x, y) * texelSize;
+                float pcfDepth = texture(sampler2D(spotShadowMaps[index], shadowMapSampler), uv).r;
+                shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
+            }
+        }
+
+        shadow /= float(pow(pcfRange * 2 + 1, 2.0));
+    }
+    else
+    {
+        float sampleDepth = texture(sampler2D(spotShadowMaps[index], shadowMapSampler), sampleCoords).r;
+        shadow = currentDepth - bias > sampleDepth? 1.0 : 0.0;
+    }
+
+    return shadow;
 }
 
 void main()
@@ -132,8 +181,15 @@ void main()
         float attenuation = calcAttenuation(dist, spotLights[i].range);
         vec3 lightRadiance = spotLights[i].color.rgb * (spotLights[i].intensity * intensity * attenuation);
         vec3 halfwayVec = normalize(lightVec + viewVec);
+        vec3 lightContribution = specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
 
-        L_0 += specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
+        if (spotShadowData[i].shadowType != NoShadow)
+        {
+            float shadow = shadowCalculation(i, normal, lightVec);
+            lightContribution *= 1 - (shadow * spotShadowData[i].strength);
+        }
+
+        L_0 += lightContribution;
     }
 
     vec3 ambient;

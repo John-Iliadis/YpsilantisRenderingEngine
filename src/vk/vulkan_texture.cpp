@@ -351,6 +351,7 @@ VulkanSampler createSampler(const VulkanRenderDevice& renderDevice,
         .compareOp = VK_COMPARE_OP_NEVER,
         .minLod = 0.f,
         .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
         .unnormalizedCoordinates = VK_FALSE
     };
 

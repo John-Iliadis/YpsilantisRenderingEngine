@@ -48,6 +48,11 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createForwardShadingDsLayout();
     createPostProcessingDsLayout();
 
+    createShadowMapBuffers();
+    createShadowMapSampler();
+    createSpotShadowRenderpass();
+    createSpotShadowPipeline();
+
     createPrepassRenderpass();
     createPrepassFramebuffer();
     createPrepassPipeline();
@@ -99,6 +104,8 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createLightIconFramebuffer();
     createLightIconPipeline();
 
+    createShadowMapBuffers();
+
     createGizmoIconResources();
 
     createIrradianceMap();
@@ -149,6 +156,8 @@ Renderer::~Renderer()
 {
     destroyDefaultMaterialTextures();
 
+    vkDestroySampler(mRenderDevice.device, mShadowMapSampler.sampler, nullptr);
+
     vkDestroyPipeline(mRenderDevice.device, mFrustumClusterGenPipeline, nullptr);
     vkDestroyPipeline(mRenderDevice.device, mAssignLightsToClustersPipeline, nullptr);
 
@@ -173,6 +182,12 @@ Renderer::~Renderer()
         vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
     for (auto fb : mBloomUpsampleFramebuffers)
         vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
+    for (auto& shadowMap : mDirShadowMaps)
+        vkDestroyFramebuffer(mRenderDevice.device, shadowMap.framebuffer, nullptr);
+    for (auto& shadowMap : mPointShadowMaps)
+        vkDestroyFramebuffer(mRenderDevice.device, shadowMap.framebuffer, nullptr);
+    for (auto& shadowMap : mSpotShadowMaps)
+        vkDestroyFramebuffer(mRenderDevice.device, shadowMap.framebuffer, nullptr);
 
     vkDestroyRenderPass(mRenderDevice.device, mPrepassRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSkyboxRenderpass, nullptr);
@@ -189,6 +204,7 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mCaptureBrightPixelsRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mBloomDownsampleRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mBloomUpsampleRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mSpotShadowRenderpass, nullptr);
 }
 
 void Renderer::update()
@@ -199,6 +215,7 @@ void Renderer::update()
 
 void Renderer::render(VkCommandBuffer commandBuffer)
 {
+    executeSpotShadowRenderpass(commandBuffer);
     setViewport(commandBuffer);
     executePrepass(commandBuffer);
     executeSkyboxRenderpass(commandBuffer);
@@ -323,6 +340,7 @@ void Renderer::addPointLight(uuid32_t id, const PointLight &light)
 void Renderer::addSpotLight(uuid32_t id, const SpotLight &light)
 {
     addLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id, light);
+    addSpotShadowMap();
 }
 
 DirectionalLight &Renderer::getDirLight(uuid32_t id)
@@ -345,14 +363,18 @@ void Renderer::updateDirLight(uuid32_t id)
     updateLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id);
 }
 
-void Renderer::updateSpotLight(uuid32_t id)
-{
-    updateLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
-}
-
 void Renderer::updatePointLight(uuid32_t id)
 {
     updateLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id);
+}
+
+void Renderer::updateSpotLight(uuid32_t id)
+{
+    updateLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
+
+    index_t i = mUuidToSpotLightIndex.at(id);
+    calcMatrices(mSpotShadowData.at(i), mSpotLights.at(i));
+    mSpotShadowDataSSBO.update(i * sizeof(SpotShadowData), sizeof(SpotShadowData), &mSpotShadowData.at(i));
 }
 
 void Renderer::deleteDirLight(uuid32_t id)
@@ -367,7 +389,85 @@ void Renderer::deletePointLight(uuid32_t id)
 
 void Renderer::deleteSpotLight(uuid32_t id)
 {
+    deleteShadowMap(id);
     deleteLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
+}
+
+void Renderer::executeSpotShadowRenderpass(VkCommandBuffer commandBuffer)
+{
+    beginDebugLabel(commandBuffer, "Generate Spot Shadow Maps");
+
+    constexpr VkClearValue depthClear {.depthStencil = {.depth = 1.f, .stencil = 0}};
+    for (uint32_t i = 0; i < mSpotLights.size(); ++i)
+    {
+        if (mSpotShadowData.at(i).shadowType == ShadowType::NoShadow)
+            continue;
+
+        uint32_t resolution = mSpotShadowData.at(i).resolution;
+
+        VkRenderPassBeginInfo renderPassBeginInfo {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = mSpotShadowRenderpass,
+            .framebuffer = mSpotShadowMaps.at(i).framebuffer,
+            .renderArea = {
+                .offset = {.x = 0, .y = 0},
+                .extent = {
+                    .width = resolution,
+                    .height = resolution
+                }
+            },
+            .clearValueCount = 1,
+            .pClearValues = &depthClear
+        };
+
+        VkViewport viewport {
+            .x = 0.f,
+            .y = 0.f,
+            .width = static_cast<float>(resolution),
+            .height = static_cast<float>(resolution),
+            .minDepth = 0.f,
+            .maxDepth = 1.f
+        };
+
+        VkRect2D scissor {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = resolution,
+                .height = resolution
+            }
+        };
+        
+        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSpotShadowPipeline);
+
+        vkCmdPushConstants(commandBuffer,
+                   mSpotShadowPipeline,
+                   VK_SHADER_STAGE_VERTEX_BIT,
+                   0, sizeof(glm::mat4),
+                   glm::value_ptr(mSpotShadowData.at(i).viewProj));
+
+        for (const auto& [id, model] : mModels)
+        {
+            // cull front face to prevent peter panning
+            pfnCmdSetCullModeEXT(commandBuffer, VK_CULL_MODE_FRONT_BIT);
+            pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+
+            for (const auto& mesh : model->meshes)
+            {
+                if (model->drawOpaque(mesh))
+                {
+                    uint32_t materialIndex = mesh.materialIndex;
+                    mesh.mesh.render(commandBuffer);
+                }
+            }
+        }
+
+        vkCmdEndRenderPass(commandBuffer);
+    }
+
+    endDebugLabel(commandBuffer);
 }
 
 void Renderer::executePrepass(VkCommandBuffer commandBuffer)
@@ -1541,11 +1641,30 @@ void Renderer::createSingleInputAttachmentDsLayout()
 
 void Renderer::createLightsDsLayout()
 {
+    std::array<VkDescriptorBindingFlags, 10> descriptorBindingFlags {};
+    descriptorBindingFlags.at(7) = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
+    descriptorBindingFlags.at(8) = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
+    descriptorBindingFlags.at(9) = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
+
+    VkDescriptorSetLayoutBindingFlagsCreateInfoEXT descriptorSetLayoutBindingFlagsCreateInfoExt {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT,
+        .bindingCount = static_cast<uint32_t>(descriptorBindingFlags.size()),
+        .pBindingFlags = descriptorBindingFlags.data()
+    };
+
     DsLayoutSpecification specification {
+        .pNext = &descriptorSetLayoutBindingFlagsCreateInfoExt,
         .bindings = {
             binding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
             binding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
             binding(2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(6, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(7, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MaxShadowMapsPerType, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(8, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MaxShadowMapsPerType, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(9, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MaxShadowMapsPerType, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         .debugName = "Renderer::mLightsDsLayout"
     };
@@ -1607,6 +1726,236 @@ void Renderer::createPostProcessingDsLayout()
     };
 
     mPostProcessingDsLayout = {mRenderDevice, specification};
+}
+
+void Renderer::addSpotShadowMap()
+{
+    // add resources
+    mSpotShadowData.emplace_back();
+    mSpotShadowMaps.emplace_back();
+    createSpotShadowMap(mSpotShadowMaps.back(), mSpotLights.size() - 1, mSpotShadowData.back().resolution);
+
+    // update buffer
+    mSpotShadowDataSSBO.update(0,
+                               sizeof(SpotShadowData) * mSpotShadowData.size(),
+                               mSpotShadowData.data());
+}
+
+void Renderer::updateSpotShadowMapOptions(uuid32_t id)
+{
+    index_t i = mUuidToSpotLightIndex.at(id);
+    mSpotShadowDataSSBO.update(sizeof(SpotShadowData) * i, sizeof(SpotShadowData), &mSpotShadowData.at(i));
+}
+
+void Renderer::updateSpotShadowMapImage(uuid32_t id)
+{
+    index_t i = mUuidToSpotLightIndex.at(id);
+    uint32_t resolution =  mSpotShadowData.at(i).resolution;
+
+    // create new image
+    createSpotShadowMap(mSpotShadowMaps.at(i), i, resolution);
+}
+
+void Renderer::createSpotShadowMap(ShadowMap& shadowMap, index_t index, uint32_t resolution)
+{
+    shadowMap.shadowMap = {
+        mRenderDevice,
+        VK_IMAGE_VIEW_TYPE_2D,
+        VK_FORMAT_D32_SFLOAT,
+        resolution,
+        resolution,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_ASPECT_DEPTH_BIT
+    };
+
+    vkDestroyFramebuffer(mRenderDevice.device, shadowMap.framebuffer, nullptr);
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mSpotShadowRenderpass,
+        .attachmentCount = 1,
+        .pAttachments = &shadowMap.shadowMap.imageView,
+        .width = resolution,
+        .height = resolution,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device,
+                                          &framebufferCreateInfo,
+                                          nullptr,
+                                          &shadowMap.framebuffer);
+    vulkanCheck(result, "Failed to create framebuffer");
+    setFramebufferDebugName(mRenderDevice,
+                            shadowMap.framebuffer,
+                            "ShadowMap::framebuffer");
+
+    // update ds
+    VkDescriptorImageInfo imageInfo {
+        .sampler = VK_NULL_HANDLE,
+        .imageView = shadowMap.shadowMap.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mLightsDs,
+        .dstBinding = 9,
+        .dstArrayElement = index,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .pImageInfo = &imageInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::deleteShadowMap(uuid32_t id)
+{
+    index_t removeIndex = mUuidToSpotLightIndex.at(id);
+    index_t lastIndex = mSpotLights.size() - 1;
+
+    if (removeIndex != lastIndex)
+    {
+        // move options + shadow resources
+        std::swap(mSpotShadowData.at(removeIndex), mSpotShadowData.at(lastIndex));
+        std::swap(mSpotShadowMaps.at(removeIndex), mSpotShadowMaps.at(lastIndex));
+    }
+
+    // delete last index
+    vkDestroyFramebuffer(mRenderDevice.device, mSpotShadowMaps.back().framebuffer, nullptr);
+    mSpotShadowData.pop_back();
+    mSpotShadowMaps.pop_back();
+
+    // update ssbo
+    if (mSpotShadowData.size())
+        mSpotShadowDataSSBO.update(0, sizeof(SpotShadowData) * mSpotShadowData.size(), mSpotShadowData.data());
+}
+
+SpotShadowData &Renderer::getShadowOptions(uuid32_t id)
+{
+    index_t i = mUuidToSpotLightIndex.at(id);
+    return mSpotShadowData.at(i);
+}
+
+ShadowMap &Renderer::getSpotShadowResources(uuid32_t id)
+{
+    index_t i = mUuidToSpotLightIndex.at(id);
+    return mSpotShadowMaps.at(i);
+}
+
+void Renderer::createShadowMapBuffers()
+{
+    mDirShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(SpotShadowData), BufferType::Storage, MemoryType::Device};
+    mPointShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(SpotShadowData), BufferType::Storage, MemoryType::Device};
+    mSpotShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(SpotShadowData), BufferType::Storage, MemoryType::Device};
+
+    mDirShadowDataSSBO.setDebugName("Renderer::mDirShadowDataSSBO");
+    mPointShadowDataSSBO.setDebugName("Renderer::mPointShadowDataSSBO");
+    mSpotShadowDataSSBO.setDebugName("Renderer::mSpotShadowDataSSBO");
+}
+
+void Renderer::createShadowMapSampler()
+{
+    mShadowMapSampler = createSampler(mRenderDevice,
+                                         TextureMagFilter::Nearest,
+                                         TextureMinFilter::Nearest,
+                                         TextureWrap::ClampToBorder,
+                                         TextureWrap::ClampToBorder,
+                                         TextureWrap::ClampToBorder);
+
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_SAMPLER,
+                             "Renderer::mShadowMapSampler",
+                             mShadowMapSampler.sampler);
+}
+
+void Renderer::createSpotShadowRenderpass()
+{
+    VkAttachmentDescription attachment {
+        .format = VK_FORMAT_D32_SFLOAT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .pDepthStencilAttachment = &attachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mSpotShadowRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mSpotShadowRenderpass, "Renderer::mSpotShadowRenderpass");
+}
+
+void Renderer::createSpotShadowPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/gen_spot_shadow_map.vert.spv",
+            .fragShaderPath = "shaders/gen_spot_shadow_map.frag.spv"
+        },
+        .vertexInput = {
+            .bindings = InstancedMesh::bindingDescriptions(),
+            .attributes = InstancedMesh::attributeDescriptions()
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .tesselation = {
+            .patchControlUnits = 0
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = VK_TRUE,
+            .enableDepthWrite = VK_TRUE,
+            .depthCompareOp = VK_COMPARE_OP_LESS
+        },
+        .blendStates = {
+            {.enable = false},
+            {.enable = false}
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_CULL_MODE_EXT,
+            VK_DYNAMIC_STATE_FRONT_FACE_EXT
+        },
+        .pipelineLayout = {
+            .pushConstantRange = VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                .offset = 0,
+                .size = sizeof(glm::mat4)
+            }
+        },
+        .renderPass = mSpotShadowRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mSpotShadowPipeline"
+    };
+
+    mSpotShadowPipeline = {mRenderDevice, specification};
 }
 
 void Renderer::createPrepassRenderpass()
@@ -2363,6 +2712,9 @@ void Renderer::createOitBuffers()
     mOitLinkedListInfoSSBO.update(0, sizeof(data), data);
 
     mOitLinkedListSSBO = {mRenderDevice, ssboMemSize, BufferType::Storage, MemoryType::Device};
+
+    mOitLinkedListInfoSSBO.setDebugName("Renderer::mOitLinkedListInfoSSBO");
+    mOitLinkedListSSBO.setDebugName("Renderer::mOitLinkedListSSBO");
 }
 
 void Renderer::createOitResourcesDs()
@@ -3083,6 +3435,10 @@ void Renderer::createLightBuffers()
     mDirLightSSBO = {mRenderDevice, MaxDirLights * sizeof(DirectionalLight), BufferType::Storage, MemoryType::Device};
     mSpotLightSSBO = {mRenderDevice, MaxSpotLights * sizeof(SpotLight), BufferType::Storage, MemoryType::Device};
     mPointLightSSBO = {mRenderDevice, MaxPointLights * sizeof(PointLight), BufferType::Storage, MemoryType::Device};
+
+    mDirLightSSBO.setDebugName("Renderer::mDirLightSSBO");
+    mSpotLightSSBO.setDebugName("Renderer::mSpotLightSSBO");
+    mPointLightSSBO.setDebugName("Renderer::mPointLightSSBO");
 }
 
 void Renderer::createLightIconTextures()
@@ -4805,7 +5161,6 @@ void Renderer::createColor32FInputDs()
 void Renderer::createLightsDs()
 {
     VkDescriptorSetLayout dsLayout = mLightsDsLayout;
-
     VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = mRenderDevice.descriptorPool,
@@ -4839,6 +5194,29 @@ void Renderer::createLightsDs()
         .range = VK_WHOLE_SIZE
     };
 
+    VkDescriptorBufferInfo dirShadowOptionsBufferInfo {
+        .buffer = mDirShadowDataSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorBufferInfo pointShadowOptionsBufferInfo {
+        .buffer = mPointShadowDataSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorBufferInfo spotShadowOptionsBufferInfo {
+        .buffer = mSpotShadowDataSSBO.getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE
+    };
+
+    VkDescriptorImageInfo shadowSamplerImageInfo {
+        .sampler = mShadowMapSampler.sampler,
+        .imageView = VK_NULL_HANDLE,
+    };
+
     VkWriteDescriptorSet prototype {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = mLightsDs,
@@ -4849,7 +5227,7 @@ void Renderer::createLightsDs()
 //        .pBufferInfo = x
     };
 
-    std::array<VkWriteDescriptorSet, 3> writeDs;
+    std::array<VkWriteDescriptorSet, 7> writeDs;
     writeDs.fill(prototype);
 
     writeDs.at(0).dstBinding = 0;
@@ -4860,6 +5238,19 @@ void Renderer::createLightsDs()
 
     writeDs.at(2).dstBinding = 2;
     writeDs.at(2).pBufferInfo = &spotLightBufferInfo;
+
+    writeDs.at(3).dstBinding = 3;
+    writeDs.at(3).pBufferInfo = &dirShadowOptionsBufferInfo;
+
+    writeDs.at(4).dstBinding = 4;
+    writeDs.at(4).pBufferInfo = &pointShadowOptionsBufferInfo;
+
+    writeDs.at(5).dstBinding = 5;
+    writeDs.at(5).pBufferInfo = &spotShadowOptionsBufferInfo;
+
+    writeDs.at(6).dstBinding = 6;
+    writeDs.at(6).descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    writeDs.at(6).pImageInfo = &shadowSamplerImageInfo;
 
     vkUpdateDescriptorSets(mRenderDevice.device, writeDs.size(), writeDs.data(), 0, nullptr);
 }

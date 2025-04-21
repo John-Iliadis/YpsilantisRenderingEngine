@@ -41,6 +41,54 @@ struct SpotLight
     alignas(4) float outerAngle;
 };
 
+enum class ShadowType : uint32_t
+{
+    NoShadow,
+    HardShadow,
+    SoftShadow
+};
+
+struct SpotShadowData
+{
+    glm::mat4 viewProj;
+    ShadowType shadowType = ShadowType::HardShadow;
+    uint32_t resolution = 1024;
+    float strength = 1;
+    float biasSlope = 0.f;
+    float biasConstant = 0.0002f;
+    int32_t pcfRange = 2;
+    uint32_t padding[2];
+};
+
+struct ShadowMap
+{
+    VulkanImage shadowMap;
+    VkFramebuffer framebuffer{};
+};
+
+inline const char* toStr(ShadowType shadowType)
+{
+    switch (shadowType)
+    {
+
+        case ShadowType::NoShadow: return "No Shadow";
+        case ShadowType::HardShadow: return "Hard Shadow";
+        case ShadowType::SoftShadow: return "Soft Shadow";
+        default: return "Unknown";
+    }
+}
+
+inline void calcMatrices(SpotShadowData& shadowData, const SpotLight& spotLight)
+{
+    glm::mat4 view = glm::lookAt(glm::vec3(spotLight.position),
+                           glm::vec3(spotLight.position + spotLight.direction),
+                           glm::vec3(0.f, 1.f, 0.f));
+    glm::mat4 proj = glm::perspective(glm::radians(spotLight.outerAngle), 1.f, 0.1f, spotLight.range);
+    proj[1][1] *= -1.f;
+
+    shadowData.viewProj = proj * view;
+}
+
 inline glm::vec3 calcLightDir(const glm::vec3& angles)
 {
     static constexpr glm::vec3 sInitialDir(0.f, 0.f, -1.f);

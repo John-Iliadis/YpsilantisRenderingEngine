@@ -18,9 +18,10 @@
 
 constexpr uint32_t InitialViewportWidth = 1000;
 constexpr uint32_t InitialViewportHeight = 700;
-constexpr uint32_t MaxDirLights = 1024;
-constexpr uint32_t MaxPointLights = 1024;
-constexpr uint32_t MaxSpotLights = 1024;
+constexpr uint32_t MaxDirLights = 128;
+constexpr uint32_t MaxPointLights = 128;
+constexpr uint32_t MaxSpotLights = 128;
+constexpr uint32_t MaxShadowMapsPerType = 50;
 constexpr uint32_t MaxSsaoKernelSamples = 128;
 constexpr uint32_t SsaoNoiseTextureSize = 4;
 constexpr uint32_t PerClusterCapacity = 32;
@@ -58,6 +59,7 @@ public:
     void deleteSpotLight(uuid32_t id);
 
 private:
+    void executeSpotShadowRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
     void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
@@ -107,6 +109,18 @@ private:
     void createAssignLightsToClustersDsLayout();
     void createForwardShadingDsLayout();
     void createPostProcessingDsLayout();
+
+    void addSpotShadowMap();
+    void updateSpotShadowMapOptions(uuid32_t id);
+    void updateSpotShadowMapImage(uuid32_t id);
+    void createSpotShadowMap(ShadowMap& shadowMap, index_t index, uint32_t resolution);
+    void deleteShadowMap(uuid32_t id);
+    SpotShadowData& getShadowOptions(uuid32_t id);
+    ShadowMap& getSpotShadowResources(uuid32_t id);
+    void createShadowMapBuffers();
+    void createShadowMapSampler();
+    void createSpotShadowRenderpass();
+    void createSpotShadowPipeline();
 
     void createPrepassRenderpass();
     void createPrepassFramebuffer();
@@ -278,6 +292,12 @@ private:
     VulkanGraphicsPipeline mPostProcessingPipeline;
     VulkanGraphicsPipeline mLightIconPipeline;
 
+    // Shadow mapping
+    VkRenderPass mSpotShadowRenderpass{};
+    VulkanGraphicsPipeline mSpotShadowPipeline;
+
+    VulkanSampler mShadowMapSampler{};
+
     // forward+ rendering
     glm::uvec3 mClusterGridSize = glm::vec3(16, 16, 24);
     VulkanBuffer mVolumeClustersSSBO;
@@ -400,6 +420,20 @@ private:
     VulkanBuffer mPointLightSSBO;
     VulkanBuffer mSpotLightSSBO;
 
+    // Shadow data
+    std::vector<SpotShadowData> mDirShadowData;
+    std::vector<SpotShadowData> mPointShadowData;
+    std::vector<SpotShadowData> mSpotShadowData;
+
+    std::vector<ShadowMap> mDirShadowMaps;
+    std::vector<ShadowMap> mPointShadowMaps;
+    std::vector<ShadowMap> mSpotShadowMaps;
+
+    VulkanBuffer mDirShadowDataSSBO;
+    VulkanBuffer mPointShadowDataSSBO;
+    VulkanBuffer mSpotShadowDataSSBO;
+
+    // Light icons
     VulkanTexture mDirLightIcon;
     VulkanTexture mPointLightIcon;
     VulkanTexture mSpotLightIcon;
@@ -420,11 +454,11 @@ private:
         alignas(16) glm::vec4 thickLineColor = glm::vec4(0.5f, 0.5f, 0.5f, 1.f);
     } mGridData;
 
-    bool mRenderSkybox = true;
-    bool mEnableIblLighting = true;
-    bool mSsaoOn = true;
+    bool mRenderSkybox = false;
+    bool mEnableIblLighting = false;
+    bool mSsaoOn = false;
     bool mOitOn = true;
-    bool mBloomOn = true;
+    bool mBloomOn = false;
     bool mRenderGrid = true;
     bool mDebugNormals = false;
 

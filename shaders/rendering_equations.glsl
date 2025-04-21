@@ -56,23 +56,13 @@ vec3 specularContribution(vec3 L, vec3 V, vec3 N,
     return color;
 }
 
-float radicalInverseVDC(uint bits)
-{
-    bits = (bits << 16u) | (bits >> 16u);
-    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
-    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
-    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
-    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
-    return float(bits) * 2.3283064365386963e-10;
-}
-
 float random(vec2 co)
 {
     float a = 12.9898;
     float b = 78.233;
     float c = 43758.5453;
-    float dt= dot(co.xy ,vec2(a,b));
-    float sn= mod(dt,3.14);
+    float dt = dot(co.xy ,vec2(a,b));
+    float sn = mod(dt,3.14);
     return fract(sin(sn) * c);
 }
 

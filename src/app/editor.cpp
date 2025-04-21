@@ -989,6 +989,78 @@ void Editor::spotLightInspector(GraphNode *node)
             modified = true;
     }
 
+    if (ImGui::CollapsingHeader("Shadows##spotLight", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        bool modifiedShadowOptions = false;
+        bool modifiedShadowMapResolution = false;
+
+        SpotShadowData& options = mRenderer.getShadowOptions(node->id());
+        ShadowMap& shadowMap = mRenderer.getSpotShadowResources(node->id());
+
+        const char* shadowTypePreview = toStr(options.shadowType);
+        if (ImGui::BeginCombo("Shadow Type##spotLight", shadowTypePreview))
+        {
+            if (ImGui::Selectable("No Shadow", options.shadowType == ShadowType::NoShadow))
+            {
+                options.shadowType = ShadowType::NoShadow;
+                modifiedShadowOptions = true;
+            }
+
+            if (ImGui::Selectable("Hard Shadow", options.shadowType == ShadowType::HardShadow))
+            {
+                options.shadowType = ShadowType::HardShadow;
+                modifiedShadowOptions = true;
+            }
+
+            if (ImGui::Selectable("Soft Shadow", options.shadowType == ShadowType::SoftShadow))
+            {
+                options.shadowType = ShadowType::SoftShadow;
+                modifiedShadowOptions = true;
+            }
+
+            ImGui::EndCombo();
+        }
+
+        if (options.shadowType != ShadowType::NoShadow)
+        {
+            std::string resolution = std::format("{}px", std::to_string(options.resolution));
+            if (ImGui::BeginCombo("Resolution##spotLight", resolution.data()))
+            {
+                for (uint32_t i = 256; i <= 4096; i *= 2)
+                {
+                    std::string res = std::format("{}px", std::to_string(i));
+                    if (ImGui::Selectable(res.data(), i == options.resolution) &&
+                        i != options.resolution)
+                    {
+                        options.resolution = i;
+                        modifiedShadowOptions = true;
+                        modifiedShadowMapResolution = true;
+                    }
+                }
+
+                ImGui::EndCombo();
+            }
+
+            if (ImGui::SliderFloat("Strength##spotLight", &options.strength, 0.f, 1.f))
+                modifiedShadowOptions = true;
+
+            if (ImGui::DragFloat("Bias Slope##spotLight", &options.biasSlope, 0.000001f, 0.f, FLT_MAX, "%.5f", ImGuiSliderFlags_AlwaysClamp))
+                modifiedShadowOptions = true;
+
+            if (ImGui::DragFloat("Bias Constant##spotLight", &options.biasConstant, 0.000001f, 0.f, FLT_MAX, "%.5f", ImGuiSliderFlags_AlwaysClamp))
+                modifiedShadowOptions = true;
+
+            if (options.shadowType == ShadowType::SoftShadow)
+            {
+                if (ImGui::SliderInt("PCF Range (Smoothing)##spotLight", &options.pcfRange, 1, 10))
+                    modifiedShadowOptions = true;
+            }
+        }
+        
+        if (modifiedShadowOptions) mRenderer.updateSpotShadowMapOptions(node->id());
+        if (modifiedShadowMapResolution) mRenderer.updateSpotShadowMapImage(node->id());
+    }
+
     if (modified) mRenderer.updateSpotLight(node->id());
 }
 
