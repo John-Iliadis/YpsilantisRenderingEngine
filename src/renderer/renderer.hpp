@@ -41,7 +41,7 @@ public:
     void render(VkCommandBuffer commandBuffer);
 
     void importModel(const ModelImportData& importData);
-    void importEnvMap(std::string path);
+    void importEnvMap(const std::string& path);
     void resize(uint32_t width, uint32_t height);
     void notify(const Message &message) override;
 
@@ -246,8 +246,8 @@ private:
     VulkanImage mTransparentNodeIndexStorageImage;
     VulkanBuffer mOitLinkedListInfoSSBO;
     VulkanBuffer mOitLinkedListSSBO;
-    VkDescriptorSet mOitResourcesDs;
-    VkDescriptorSet mTransparentTexInputAttachmentDs;
+    VkDescriptorSet mOitResourcesDs{};
+    VkDescriptorSet mTransparentTexInputAttachmentDs{};
 
     // render targets
     VulkanTexture mTransparencyTexture;

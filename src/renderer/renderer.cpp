@@ -25,7 +25,10 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
         mHeight = saveData["viewport"]["height"];
     }
 
-    mCamera = Camera(glm::vec3(0.f, 1.f, 0.f), 30.f, mWidth, mHeight);
+    mCamera = Camera(glm::vec3(0.f, 1.f, 0.f),
+                     30.f,
+                     static_cast<float>(mWidth),
+                     static_cast<float>(mHeight));
 
     createDefaultMaterialTextures(mRenderDevice);
 
@@ -248,7 +251,7 @@ void Renderer::importModel(const ModelImportData& importData)
                                            importData.flipUVs));
 }
 
-void Renderer::importEnvMap(std::string path)
+void Renderer::importEnvMap(const std::string& path)
 {
     createEquirectangularTexture(path);
     createEnvMap();
@@ -532,7 +535,7 @@ void Renderer::executeSkyboxRenderpass(VkCommandBuffer commandBuffer)
     if (mRenderSkybox)
     {
         glm::mat4 proj = glm::perspective(glm::radians(mSkyboxFov),
-                                          static_cast<float>(mWidth) / mHeight,
+                                          static_cast<float>(mWidth) / static_cast<float>(mHeight),
                                           *mCamera.nearPlane(),
                                           *mCamera.farPlane());
         proj[1][1] *= -1.f;
@@ -1819,6 +1822,25 @@ void Renderer::deleteShadowMap(uuid32_t id)
         // move options + shadow resources
         std::swap(mSpotShadowData.at(removeIndex), mSpotShadowData.at(lastIndex));
         std::swap(mSpotShadowMaps.at(removeIndex), mSpotShadowMaps.at(lastIndex));
+
+        // update ds
+        VkDescriptorImageInfo imageInfo {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = mSpotShadowMaps.at(removeIndex).shadowMap.imageView,
+            .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+        };
+
+        VkWriteDescriptorSet writeDs {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mLightsDs,
+            .dstBinding = 9,
+            .dstArrayElement = removeIndex,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .pImageInfo = &imageInfo
+        };
+
+        vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDs, 0, nullptr);
     }
 
     // delete last index
@@ -1827,7 +1849,7 @@ void Renderer::deleteShadowMap(uuid32_t id)
     mSpotShadowMaps.pop_back();
 
     // update ssbo
-    if (mSpotShadowData.size())
+    if (!mSpotShadowData.empty())
         mSpotShadowDataSSBO.update(0, sizeof(SpotShadowData) * mSpotShadowData.size(), mSpotShadowData.data());
 }
 
@@ -2732,7 +2754,7 @@ void Renderer::createOitResourcesDs()
         .pSetLayouts = dsLayouts.data()
     };
 
-    std::array<VkDescriptorSet, 2> descriptorSets;
+    std::array<VkDescriptorSet, 2> descriptorSets {};
     VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &dsAllocateInfo, descriptorSets.data());
     vulkanCheck(result, "Failed to allocate descriptor sets");
 
@@ -2925,7 +2947,7 @@ void Renderer::createForwardRenderpass()
         blendSubpass
     };
 
-    std::array<VkSubpassDependency, 3> dependencies;
+    std::array<VkSubpassDependency, 3> dependencies {};
 
     dependencies.at(0).srcSubpass = 0;
     dependencies.at(0).dstSubpass = 2;
@@ -5098,7 +5120,7 @@ void Renderer::createSsaoDs()
 //        .pBufferInfo = nullptr
     };
 
-    std::array<VkWriteDescriptorSet, 4> descriptorWrites;
+    std::array<VkWriteDescriptorSet, 4> descriptorWrites {};
     descriptorWrites.fill(writeDescriptorSetPrototype);
 
     descriptorWrites.at(0).dstBinding = 0;
@@ -5227,7 +5249,7 @@ void Renderer::createLightsDs()
 //        .pBufferInfo = x
     };
 
-    std::array<VkWriteDescriptorSet, 7> writeDs;
+    std::array<VkWriteDescriptorSet, 7> writeDs {};
     writeDs.fill(prototype);
 
     writeDs.at(0).dstBinding = 0;
@@ -5334,7 +5356,7 @@ void Renderer::createAssignLightsToClustersDs()
         .pBufferInfo = nullptr
     };
 
-    std::array<VkWriteDescriptorSet, 2> writeDs;
+    std::array<VkWriteDescriptorSet, 2> writeDs {};
     writeDs.fill(prototypeWriteDescriptorSet);
 
     writeDs.at(0).pBufferInfo = &clusterBufferInfo;
