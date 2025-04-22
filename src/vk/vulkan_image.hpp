@@ -24,6 +24,7 @@ public:
     VkFormat format;
     VkImageAspectFlags imageAspect;
 
+    std::vector<VkImageView> layerImageViews;
     std::vector<VkImageView> mipLevelImageViews;
 
 public:
@@ -60,6 +61,7 @@ public:
     void copyBuffer(VkCommandBuffer commandBuffer, const VulkanBuffer& buffer, uint32_t layerIndex = 0);
     void swap(VulkanImage& other) noexcept;
 
+    void createLayerImageViews(VkImageViewType viewType);
     void createMipLevelImageViews(VkImageViewType viewType);
 
     virtual void setDebugName(const std::string& debugName);

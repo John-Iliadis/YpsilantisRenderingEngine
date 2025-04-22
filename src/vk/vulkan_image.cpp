@@ -93,6 +93,8 @@ VulkanImage::~VulkanImage()
     if (mRenderDevice)
     {
         vkDestroyImageView(mRenderDevice->device, imageView, nullptr);
+        for (auto iv : layerImageViews)
+            vkDestroyImageView(mRenderDevice->device, iv, nullptr);
         for (auto iv : mipLevelImageViews)
             vkDestroyImageView(mRenderDevice->device, iv, nullptr);
 
@@ -135,6 +137,24 @@ void VulkanImage::swap(VulkanImage &other) noexcept
     std::swap(format, other.format);
     std::swap(imageAspect, other.imageAspect);
     std::swap(mipLevelImageViews, other.mipLevelImageViews);
+}
+
+void VulkanImage::createLayerImageViews(VkImageViewType viewType)
+{
+    assert(layerCount > 1);
+    assert(layerImageViews.size() == 0);
+
+    layerImageViews.resize(layerCount);
+    for (uint32_t i = 0; i < layerCount; ++i)
+    {
+        layerImageViews.at(i) = createImageView(*mRenderDevice,
+                                                image,
+                                                viewType,
+                                                format,
+                                                imageAspect,
+                                                0, mipLevels,
+                                                i, 1);
+    }
 }
 
 void VulkanImage::createMipLevelImageViews(VkImageViewType viewType)
