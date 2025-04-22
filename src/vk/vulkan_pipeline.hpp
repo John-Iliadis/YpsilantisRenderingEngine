@@ -70,7 +70,7 @@ struct PipelineSpecification
 
     struct PipelineLayout {
         std::vector<VkDescriptorSetLayout> dsLayouts;
-        std::optional<VkPushConstantRange> pushConstantRange;
+        std::vector<VkPushConstantRange> pushConstantRanges;
     } pipelineLayout;
 
     VkRenderPass renderPass;

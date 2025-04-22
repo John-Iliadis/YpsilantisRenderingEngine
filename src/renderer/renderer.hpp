@@ -114,13 +114,15 @@ private:
     void updateSpotShadowMapOptions(uuid32_t id);
     void updateSpotShadowMapImage(uuid32_t id);
     void createSpotShadowMap(ShadowMap& shadowMap, index_t index, uint32_t resolution);
-    void deleteShadowMap(uuid32_t id);
-    SpotShadowData& getShadowOptions(uuid32_t id);
-    ShadowMap& getSpotShadowResources(uuid32_t id);
+    void deleteSpotShadowMap(uuid32_t id);
+    SpotShadowData& getSpotShadowData(uuid32_t id);
+    ShadowMap& getSpotShadowMap(uuid32_t id);
     void createShadowMapBuffers();
     void createShadowMapSampler();
     void createSpotShadowRenderpass();
     void createSpotShadowPipeline();
+    void createPointShadowRenderpass();
+    void createPointShadowPipeline();
 
     void createPrepassRenderpass();
     void createPrepassFramebuffer();
@@ -172,7 +174,6 @@ private:
     void createLightIconRenderpass();
     void createLightIconFramebuffer();
     void createLightIconPipeline();
-
     void createGizmoIconResources();
 
     void createIrradianceMap();
@@ -193,13 +194,11 @@ private:
     void createIrradianceConvolutionFramebuffer();
     void createPrefilterFramebuffers();
     void createBrdfLutFramebuffer();
-
     void createEquirectangularTexture(const std::string& path);
     void createEnvMap();
     void createCubemapConvertFramebuffer();
     void createCubemapConvertDs();
     void createIrradianceConvolutionDs();
-
     void executeCubemapConvertRenderpass();
     void executeIrradianceConvolutionRenderpass();
     void executePrefilterRenderpasses();
@@ -293,9 +292,10 @@ private:
     VulkanGraphicsPipeline mLightIconPipeline;
 
     // Shadow mapping
+    VkRenderPass mPointShadowRenderpass{};
     VkRenderPass mSpotShadowRenderpass{};
+    VulkanGraphicsPipeline mPointShadowPipeline;
     VulkanGraphicsPipeline mSpotShadowPipeline;
-
     VulkanSampler mShadowMapSampler{};
 
     // forward+ rendering
@@ -422,7 +422,7 @@ private:
 
     // Shadow data
     std::vector<SpotShadowData> mDirShadowData;
-    std::vector<SpotShadowData> mPointShadowData;
+    std::vector<PointShadowData> mPointShadowData;
     std::vector<SpotShadowData> mSpotShadowData;
 
     std::vector<ShadowMap> mDirShadowMaps;

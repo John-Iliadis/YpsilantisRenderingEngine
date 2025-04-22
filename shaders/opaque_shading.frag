@@ -53,7 +53,7 @@ layout (set = 2, binding = 0) buffer readonly DirLightsSSBO { DirectionalLight d
 layout (set = 2, binding = 1) buffer readonly PointLightsSSBO { PointLight pointLights[]; };
 layout (set = 2, binding = 2) buffer readonly SpotLightSSBO { SpotLight spotLights[]; };
 layout (std430, set = 2, binding = 3) buffer readonly DirShadowDataSSBO { SpotShadowData dirShadowData[]; }; // todo: change
-layout (std430, set = 2, binding = 4) buffer readonly PointShadowDataSSBO { SpotShadowData pointShadowData[]; }; // todo: change
+layout (std430, set = 2, binding = 4) buffer readonly PointShadowDataSSBO { PointShadowData pointShadowData[]; };
 layout (std430, set = 2, binding = 5) buffer readonly SpotShadowDataSSBO { SpotShadowData spotShadowData[]; };
 layout (set = 2, binding = 6) uniform sampler shadowMapSampler;
 layout (set = 2, binding = 7) uniform texture2DArray dirShadowMaps[MAX_SHADOW_MAPS_PER_TYPE];

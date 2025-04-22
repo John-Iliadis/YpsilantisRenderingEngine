@@ -60,6 +60,18 @@ struct SpotShadowData
     uint32_t padding[2];
 };
 
+struct PointShadowData
+{
+    glm::mat4 viewProj[6];
+    ShadowType shadowType;
+    uint32_t resolution = 1024;
+    float strength = 1;
+    float biasSlope = 0.f;
+    float biasConstant = 0.0002f;
+    int32_t pcfRange = 2;
+    uint32_t padding[2];
+};
+
 struct ShadowMap
 {
     VulkanImage shadowMap;

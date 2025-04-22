@@ -994,8 +994,8 @@ void Editor::spotLightInspector(GraphNode *node)
         bool modifiedShadowOptions = false;
         bool modifiedShadowMapResolution = false;
 
-        SpotShadowData& options = mRenderer.getShadowOptions(node->id());
-        ShadowMap& shadowMap = mRenderer.getSpotShadowResources(node->id());
+        SpotShadowData& options = mRenderer.getSpotShadowData(node->id());
+        ShadowMap& shadowMap = mRenderer.getSpotShadowMap(node->id());
 
         const char* shadowTypePreview = toStr(options.shadowType);
         if (ImGui::BeginCombo("Shadow Type##spotLight", shadowTypePreview))

@@ -392,7 +392,7 @@ void Renderer::deletePointLight(uuid32_t id)
 
 void Renderer::deleteSpotLight(uuid32_t id)
 {
-    deleteShadowMap(id);
+    deleteSpotShadowMap(id);
     deleteLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
 }
 
@@ -1812,7 +1812,7 @@ void Renderer::createSpotShadowMap(ShadowMap& shadowMap, index_t index, uint32_t
     vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
 }
 
-void Renderer::deleteShadowMap(uuid32_t id)
+void Renderer::deleteSpotShadowMap(uuid32_t id)
 {
     index_t removeIndex = mUuidToSpotLightIndex.at(id);
     index_t lastIndex = mSpotLights.size() - 1;
@@ -1853,13 +1853,13 @@ void Renderer::deleteShadowMap(uuid32_t id)
         mSpotShadowDataSSBO.update(0, sizeof(SpotShadowData) * mSpotShadowData.size(), mSpotShadowData.data());
 }
 
-SpotShadowData &Renderer::getShadowOptions(uuid32_t id)
+SpotShadowData &Renderer::getSpotShadowData(uuid32_t id)
 {
     index_t i = mUuidToSpotLightIndex.at(id);
     return mSpotShadowData.at(i);
 }
 
-ShadowMap &Renderer::getSpotShadowResources(uuid32_t id)
+ShadowMap &Renderer::getSpotShadowMap(uuid32_t id)
 {
     index_t i = mUuidToSpotLightIndex.at(id);
     return mSpotShadowMaps.at(i);
@@ -1868,7 +1868,7 @@ ShadowMap &Renderer::getSpotShadowResources(uuid32_t id)
 void Renderer::createShadowMapBuffers()
 {
     mDirShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(SpotShadowData), BufferType::Storage, MemoryType::Device};
-    mPointShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(SpotShadowData), BufferType::Storage, MemoryType::Device};
+    mPointShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(PointShadowData), BufferType::Storage, MemoryType::Device};
     mSpotShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(SpotShadowData), BufferType::Storage, MemoryType::Device};
 
     mDirShadowDataSSBO.setDebugName("Renderer::mDirShadowDataSSBO");
@@ -1966,10 +1966,13 @@ void Renderer::createSpotShadowPipeline()
             VK_DYNAMIC_STATE_FRONT_FACE_EXT
         },
         .pipelineLayout = {
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-                .offset = 0,
-                .size = sizeof(glm::mat4)
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                    .offset = 0,
+                    .size = sizeof(glm::mat4)
+                }
+
             }
         },
         .renderPass = mSpotShadowRenderpass,
@@ -1978,6 +1981,102 @@ void Renderer::createSpotShadowPipeline()
     };
 
     mSpotShadowPipeline = {mRenderDevice, specification};
+}
+
+void Renderer::createPointShadowRenderpass()
+{
+    VkAttachmentDescription attachment {
+        .format = VK_FORMAT_D32_SFLOAT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .pDepthStencilAttachment = &attachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mPointShadowRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mPointShadowRenderpass, "Renderer::mPointShadowRenderpass");
+}
+
+void Renderer::createPointShadowPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/gen_point_shadow_map.vert.spv",
+            .fragShaderPath = "shaders/gen_point_shadow_map.frag.spv"
+        },
+        .vertexInput = {
+            .bindings = InstancedMesh::bindingDescriptions(),
+            .attributes = InstancedMesh::attributeDescriptions()
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .tesselation = {
+            .patchControlUnits = 0
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = VK_TRUE,
+            .enableDepthWrite = VK_TRUE,
+            .depthCompareOp = VK_COMPARE_OP_LESS
+        },
+        .blendStates = {
+            {.enable = false},
+            {.enable = false}
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_CULL_MODE_EXT,
+            VK_DYNAMIC_STATE_FRONT_FACE_EXT
+        },
+        .pipelineLayout = {
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                    .offset = 0,
+                    .size = sizeof(glm::mat4)
+                },
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = sizeof(glm::mat4),
+                    .size = sizeof(glm::vec4) + sizeof(float) * 2
+                }
+            }
+        },
+        .renderPass = mSpotShadowRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mPointShadowPipeline"
+    };
+
+    mPointShadowPipeline = {mRenderDevice, specification};
 }
 
 void Renderer::createPrepassRenderpass()
@@ -2390,10 +2489,12 @@ void Renderer::createSkyboxPipeline()
                 mCameraRenderDataDsLayout,
                 mSingleImageDsLayout
             },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-                .offset = 0,
-                .size = sizeof(glm::mat4)
+            .pushConstantRanges =  {
+                {
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                    .offset = 0,
+                    .size = sizeof(glm::mat4)
+                }
             }
         },
         .renderPass = mSkyboxRenderpass,
@@ -2619,10 +2720,12 @@ void Renderer::createSsaoPipeline()
                 mCameraRenderDataDsLayout,
                 mSSAODsLayout
             },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(float) * 7
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(float) * 7
+                }
             }
         },
         .renderPass = mSsaoRenderpass,
@@ -2670,10 +2773,12 @@ void Renderer::createSsaoBlurPipeline()
             .dsLayouts = {
                 mSingleImageDsLayout
             },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(glm::vec2)
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(glm::vec2)
+                }
             }
         },
         .renderPass = mSsaoBlurRenderpass,
@@ -3059,10 +3164,12 @@ void Renderer::createOpaqueForwardPassPipeline()
                 mLightsDsLayout,
                 mMaterialsDsLayout,
             },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(uint32_t) * 10
+            .pushConstantRanges =  {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(uint32_t) * 10
+                }
             }
         },
         .renderPass = mForwardRenderpass,
@@ -3111,10 +3218,12 @@ void Renderer::createOitTransparentCollectionPipeline()
                 mLightsDsLayout,
                 mMaterialsDsLayout
             },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(uint32_t) * 3
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(uint32_t) * 3
+                }
             }
         },
         .renderPass = mForwardRenderpass,
@@ -3299,10 +3408,12 @@ void Renderer::createPostProcessingPipeline()
         },
         .pipelineLayout = {
             .dsLayouts = {mPostProcessingDsLayout},
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(uint32_t) * 5
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(uint32_t) * 5
+                }
             }
         },
         .renderPass = mPostProcessingRenderpass,
@@ -3438,10 +3549,12 @@ void Renderer::createGridPipeline()
             .dsLayouts = {
                 mCameraRenderDataDsLayout,
             },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(GridData),
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(GridData)
+                }
             }
         },
         .renderPass = mGridRenderpass,
@@ -3616,10 +3729,12 @@ void Renderer::createLightIconPipeline()
                 mCameraRenderDataDsLayout,
                 mIconTextureDsLayout
             },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-                .offset = 0,
-                .size = sizeof(glm::vec3)
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                    .offset = 0,
+                    .size = sizeof(glm::vec3)
+                }
             }
         },
         .renderPass = mLightIconRenderpass,
@@ -4092,10 +4207,12 @@ void Renderer::createPrefilterPipeline()
             .dsLayouts = {
                 mIrradianceConvolutionDsLayout
             },
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(float)
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(float)
+                }
             }
         },
         .renderPass = mPrefilterRenderpass,
@@ -4725,10 +4842,12 @@ void Renderer::createCaptureBrightPixelsPipeline()
         },
         .pipelineLayout = {
             .dsLayouts = {mSingleImageDsLayout},
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(float)
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(float)
+                }
             }
         },
         .renderPass = mCaptureBrightPixelsRenderpass,
@@ -4830,10 +4949,12 @@ void Renderer::createBloomDownsamplePipeline()
         },
         .pipelineLayout = {
             .dsLayouts = {mSingleImageDsLayout},
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(uint32_t) * 3
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(uint32_t) * 3
+                }
             }
         },
         .renderPass = mBloomDownsampleRenderpass,
@@ -4935,10 +5056,12 @@ void Renderer::createBloomUpsamplePipeline()
         },
         .pipelineLayout = {
             .dsLayouts = {mSingleImageDsLayout},
-            .pushConstantRange = VkPushConstantRange {
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(float)
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(float)
+                }
             }
         },
         .renderPass = mBloomUpsampleRenderpass,

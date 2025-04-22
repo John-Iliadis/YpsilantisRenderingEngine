@@ -63,19 +63,15 @@ VulkanGraphicsPipeline::operator VkPipelineLayout() const
 void VulkanGraphicsPipeline::createPipelineLayout(const PipelineSpecification &specification)
 {
     const auto& dsLayouts = specification.pipelineLayout.dsLayouts;
-    const auto& pushConstantRange = specification.pipelineLayout.pushConstantRange;
+    const auto& pushConstantRanges = specification.pipelineLayout.pushConstantRanges;
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = static_cast<uint32_t>(dsLayouts.size()),
         .pSetLayouts = dsLayouts.data(),
+        .pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size()),
+        .pPushConstantRanges = pushConstantRanges.data()
     };
-
-    if (pushConstantRange.has_value())
-    {
-        pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-        pipelineLayoutCreateInfo.pPushConstantRanges = &*pushConstantRange;
-    }
 
     VkResult result = vkCreatePipelineLayout(mRenderDevice->device,
                                              &pipelineLayoutCreateInfo,
