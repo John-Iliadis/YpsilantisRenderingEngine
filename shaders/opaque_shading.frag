@@ -55,10 +55,12 @@ layout (set = 2, binding = 2) buffer readonly SpotLightSSBO { SpotLight spotLigh
 layout (std430, set = 2, binding = 3) buffer readonly DirShadowDataSSBO { SpotShadowData dirShadowData[]; }; // todo: change
 layout (std430, set = 2, binding = 4) buffer readonly PointShadowDataSSBO { PointShadowData pointShadowData[]; };
 layout (std430, set = 2, binding = 5) buffer readonly SpotShadowDataSSBO { SpotShadowData spotShadowData[]; };
-layout (set = 2, binding = 6) uniform sampler shadowMapSampler;
-layout (set = 2, binding = 7) uniform texture2DArray dirShadowMaps[MAX_SHADOW_MAPS_PER_TYPE];
-layout (set = 2, binding = 8) uniform textureCube pointShadowMaps[MAX_SHADOW_MAPS_PER_TYPE];
-layout (set = 2, binding = 9) uniform texture2D spotShadowMaps[MAX_SHADOW_MAPS_PER_TYPE];
+layout (set = 2, binding = 6) uniform sampler dirLightSampler;
+layout (set = 2, binding = 7) uniform sampler pointShadowSampler;
+layout (set = 2, binding = 8) uniform sampler spotShadowMapSampler;
+layout (set = 2, binding = 9) uniform texture2DArray dirShadowMaps[MAX_SHADOW_MAPS_PER_TYPE];
+layout (set = 2, binding = 10) uniform textureCube pointShadowMaps[MAX_SHADOW_MAPS_PER_TYPE];
+layout (set = 2, binding = 11) uniform texture2D spotShadowMaps[MAX_SHADOW_MAPS_PER_TYPE];
 
 layout (set = 3, binding = 0) uniform MaterialsUBO { Material material; };
 layout (set = 3, binding = 1) uniform sampler2D baseColorTex;
@@ -81,7 +83,39 @@ uint getClusterIndex(vec3 viewPos)
            cluster.z * clusterGridX * clusterGridY;
 }
 
-float shadowCalculation(uint index, vec3 normal, vec3 lightDir)
+float pointShadowCalculation(uint index, vec3 normal, vec3 lightDir)
+{
+    vec3 lightToFrag = vFragWorldPos - pointLights[index].position.xyz;
+    float currentDepth = length(lightToFrag);
+    float bias = max(pointShadowData[index].biasSlope * (1.0 - dot(normal, lightDir)), pointShadowData[index].biasConstant);
+    float shadow;
+
+    if (pointShadowData[index].shadowType == SoftShadow)
+    {
+        float pcfRadius = pointShadowData[index].pcfRadius;
+        float shadowMapResolution = pointShadowData[index].resolution;
+        float texelSize = 1.0 / shadowMapResolution;
+
+        for (uint i = 0; i < 20; ++i)
+        {
+            vec3 sampleDir = lightToFrag + sampleOffsets3D[i] * texelSize * pcfRadius;
+            float sampleDepth = texture(samplerCube(pointShadowMaps[index], pointShadowSampler), sampleDir).r;
+            shadow += currentDepth - bias > sampleDepth? 1.0 : 0.0;
+        }
+
+        shadow /= 20.0;
+    }
+    else
+    {
+        float sampleDepth = texture(samplerCube(pointShadowMaps[index], pointShadowSampler), lightToFrag).r;
+        sampleDepth *= pointLights[index].range;
+        shadow = currentDepth - bias > sampleDepth? 1.0 : 0.0;
+    }
+
+    return shadow;
+}
+
+float spotShadowCalculation(uint index, vec3 normal, vec3 lightDir)
 {
     // calculate the frag position in light space
     vec4 fragPosLightSpace = spotShadowData[index].viewProj * vec4(vFragWorldPos, 1.0); // light space
@@ -103,7 +137,7 @@ float shadowCalculation(uint index, vec3 normal, vec3 lightDir)
             for (int y = -pcfRange; y <= pcfRange; ++y)
             {
                 vec2 uv = sampleCoords + vec2(x, y) * texelSize;
-                float pcfDepth = texture(sampler2D(spotShadowMaps[index], shadowMapSampler), uv).r;
+                float pcfDepth = texture(sampler2D(spotShadowMaps[index], spotShadowMapSampler), uv).r;
                 shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
             }
         }
@@ -112,7 +146,7 @@ float shadowCalculation(uint index, vec3 normal, vec3 lightDir)
     }
     else
     {
-        float sampleDepth = texture(sampler2D(spotShadowMaps[index], shadowMapSampler), sampleCoords).r;
+        float sampleDepth = texture(sampler2D(spotShadowMaps[index], spotShadowMapSampler), sampleCoords).r;
         shadow = currentDepth - bias > sampleDepth? 1.0 : 0.0;
     }
 
@@ -163,8 +197,15 @@ void main()
         vec3 lightVec = normalize(lightToPosVec);
         vec3 lightRadiance = pointLight.color.rgb * (pointLight.intensity * attenuation);
         vec3 halfwayVec = normalize(viewVec + lightVec);
+        vec3 lightContribution = specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
 
-        L_0 += specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
+        if (pointShadowData[i].shadowType != NoShadow)
+        {
+            float shadow = pointShadowCalculation(i, normal, lightVec);
+            lightContribution *= 1 - (shadow * pointShadowData[i].strength);
+        }
+
+        L_0 += lightContribution;
     }
 
     for (uint i = 0; i < spotLightCount; ++i)
@@ -185,7 +226,7 @@ void main()
 
         if (spotShadowData[i].shadowType != NoShadow)
         {
-            float shadow = shadowCalculation(i, normal, lightVec);
+            float shadow = spotShadowCalculation(i, normal, lightVec);
             lightContribution *= 1 - (shadow * spotShadowData[i].strength);
         }
 

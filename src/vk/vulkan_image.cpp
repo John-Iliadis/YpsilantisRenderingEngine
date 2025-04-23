@@ -136,13 +136,14 @@ void VulkanImage::swap(VulkanImage &other) noexcept
     std::swap(layerCount, other.layerCount);
     std::swap(format, other.format);
     std::swap(imageAspect, other.imageAspect);
+    std::swap(layerImageViews, other.layerImageViews);
     std::swap(mipLevelImageViews, other.mipLevelImageViews);
 }
 
 void VulkanImage::createLayerImageViews(VkImageViewType viewType)
 {
     assert(layerCount > 1);
-    assert(layerImageViews.size() == 0);
+    assert(layerImageViews.empty());
 
     layerImageViews.resize(layerCount);
     for (uint32_t i = 0; i < layerCount; ++i)
@@ -160,7 +161,7 @@ void VulkanImage::createLayerImageViews(VkImageViewType viewType)
 void VulkanImage::createMipLevelImageViews(VkImageViewType viewType)
 {
     assert(mipLevels > 1);
-    assert(mipLevelImageViews.size() == 0);
+    assert(mipLevelImageViews.empty());
 
     mipLevelImageViews.resize(mipLevels);
     for (uint32_t i = 0; i < mipLevels; ++i)

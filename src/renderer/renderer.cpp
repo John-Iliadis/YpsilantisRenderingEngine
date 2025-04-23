@@ -52,9 +52,11 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createPostProcessingDsLayout();
 
     createShadowMapBuffers();
-    createShadowMapSampler();
+    createShadowMapSamplers();
     createSpotShadowRenderpass();
     createSpotShadowPipeline();
+    createPointShadowRenderpass();
+    createPointShadowPipeline();
 
     createPrepassRenderpass();
     createPrepassFramebuffer();
@@ -159,7 +161,9 @@ Renderer::~Renderer()
 {
     destroyDefaultMaterialTextures();
 
-    vkDestroySampler(mRenderDevice.device, mShadowMapSampler.sampler, nullptr);
+    vkDestroySampler(mRenderDevice.device, mDirShadowMapSampler.sampler, nullptr);
+    vkDestroySampler(mRenderDevice.device, mPointShadowMapSampler.sampler, nullptr);
+    vkDestroySampler(mRenderDevice.device, mSpotShadowMapSampler.sampler, nullptr);
 
     vkDestroyPipeline(mRenderDevice.device, mFrustumClusterGenPipeline, nullptr);
     vkDestroyPipeline(mRenderDevice.device, mAssignLightsToClustersPipeline, nullptr);
@@ -188,7 +192,8 @@ Renderer::~Renderer()
     for (auto& shadowMap : mDirShadowMaps)
         vkDestroyFramebuffer(mRenderDevice.device, shadowMap.framebuffer, nullptr);
     for (auto& shadowMap : mPointShadowMaps)
-        vkDestroyFramebuffer(mRenderDevice.device, shadowMap.framebuffer, nullptr);
+        for (auto & framebuffer : shadowMap.framebuffers)
+            vkDestroyFramebuffer(mRenderDevice.device, framebuffer, nullptr);
     for (auto& shadowMap : mSpotShadowMaps)
         vkDestroyFramebuffer(mRenderDevice.device, shadowMap.framebuffer, nullptr);
 
@@ -207,6 +212,7 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mCaptureBrightPixelsRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mBloomDownsampleRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mBloomUpsampleRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mPointShadowRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSpotShadowRenderpass, nullptr);
 }
 
@@ -218,6 +224,7 @@ void Renderer::update()
 
 void Renderer::render(VkCommandBuffer commandBuffer)
 {
+    executePointShadowRenderpass(commandBuffer);
     executeSpotShadowRenderpass(commandBuffer);
     setViewport(commandBuffer);
     executePrepass(commandBuffer);
@@ -338,6 +345,7 @@ void Renderer::addDirLight(uuid32_t id, const DirectionalLight &light)
 void Renderer::addPointLight(uuid32_t id, const PointLight &light)
 {
     addLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id, light);
+    addPointShadowMap();
 }
 
 void Renderer::addSpotLight(uuid32_t id, const SpotLight &light)
@@ -369,12 +377,18 @@ void Renderer::updateDirLight(uuid32_t id)
 void Renderer::updatePointLight(uuid32_t id)
 {
     updateLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id);
+
+    // update shadow map
+    index_t i = mUuidToPointLightIndex.at(id);
+    calcMatrices(mPointShadowData.at(i), mPointLights.at(i));
+    mPointShadowDataSSBO.update(i * sizeof(PointShadowData), sizeof(PointShadowData), &mPointShadowData.at(i));
 }
 
 void Renderer::updateSpotLight(uuid32_t id)
 {
     updateLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
 
+    // update shadow map
     index_t i = mUuidToSpotLightIndex.at(id);
     calcMatrices(mSpotShadowData.at(i), mSpotLights.at(i));
     mSpotShadowDataSSBO.update(i * sizeof(SpotShadowData), sizeof(SpotShadowData), &mSpotShadowData.at(i));
@@ -387,6 +401,7 @@ void Renderer::deleteDirLight(uuid32_t id)
 
 void Renderer::deletePointLight(uuid32_t id)
 {
+    deletePointShadowMap(id);
     deleteLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id);
 }
 
@@ -394,6 +409,107 @@ void Renderer::deleteSpotLight(uuid32_t id)
 {
     deleteSpotShadowMap(id);
     deleteLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
+}
+
+// todo: change culling
+void Renderer::executePointShadowRenderpass(VkCommandBuffer commandBuffer)
+{
+    beginDebugLabel(commandBuffer, "Gen Point Shadow Maps");
+
+    constexpr VkClearValue depthClear {.depthStencil = {.depth = 1.f, .stencil = 0}};
+    for (uint32_t i = 0; i < mPointLights.size(); ++i)
+    {
+        const PointShadowData& psd = mPointShadowData.at(i);
+        if (psd.shadowType == ShadowType::NoShadow)
+            continue;
+
+        uint32_t resolution = psd.resolution;
+        VkRenderPassBeginInfo renderPassBeginInfo {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = mPointShadowRenderpass,
+            .framebuffer = VK_NULL_HANDLE,
+            .renderArea = {
+                .offset = {.x = 0, .y = 0},
+                .extent = {
+                    .width = resolution,
+                    .height = resolution
+                }
+            },
+            .clearValueCount = 1,
+            .pClearValues = &depthClear
+        };
+
+        VkViewport viewport {
+            .x = 0.f,
+            .y = 0.f,
+            .width = static_cast<float>(resolution),
+            .height = static_cast<float>(resolution),
+            .minDepth = 0.f,
+            .maxDepth = 1.f
+        };
+
+        VkRect2D scissor {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = resolution,
+                .height = resolution
+            }
+        };
+
+        for (uint32_t ii = 0; ii < 6; ++ii)
+        {
+            renderPassBeginInfo.framebuffer = mPointShadowMaps.at(i).framebuffers[ii];
+
+            std::string debugLabel = std::format("Shadow map {}, face {}", i, ii);
+            insertDebugLabel(commandBuffer, debugLabel.data());
+            vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mPointShadowPipeline);
+
+            vkCmdPushConstants(commandBuffer,
+                               mPointShadowPipeline,
+                               VK_SHADER_STAGE_VERTEX_BIT,
+                               0, sizeof(glm::mat4),
+                               glm::value_ptr(psd.viewProj[ii]));
+
+            struct {
+                glm::vec4 lightPos;
+                float nearPlane;
+                float farPlane;
+            } fragPushConst {
+                mPointLights.at(i).position,
+                0.1f,
+                mPointLights.at(i).range
+            };
+
+            vkCmdPushConstants(commandBuffer,
+                               mPointShadowPipeline,
+                               VK_SHADER_STAGE_FRAGMENT_BIT,
+                               sizeof(glm::mat4), sizeof(fragPushConst),
+                               &fragPushConst);
+
+            for (const auto& [id, model] : mModels)
+            {
+                // cull front face to prevent peter panning
+                pfnCmdSetCullModeEXT(commandBuffer, VK_CULL_MODE_FRONT_BIT);
+                pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+
+                for (const auto& mesh : model->meshes)
+                {
+                    if (model->drawOpaque(mesh))
+                    {
+                        uint32_t materialIndex = mesh.materialIndex;
+                        mesh.mesh.render(commandBuffer);
+                    }
+                }
+            }
+
+            vkCmdEndRenderPass(commandBuffer);
+        }
+    }
+
+    endDebugLabel(commandBuffer);
 }
 
 void Renderer::executeSpotShadowRenderpass(VkCommandBuffer commandBuffer)
@@ -1644,10 +1760,10 @@ void Renderer::createSingleInputAttachmentDsLayout()
 
 void Renderer::createLightsDsLayout()
 {
-    std::array<VkDescriptorBindingFlags, 10> descriptorBindingFlags {};
-    descriptorBindingFlags.at(7) = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
-    descriptorBindingFlags.at(8) = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
+    std::array<VkDescriptorBindingFlags, 12> descriptorBindingFlags {};
     descriptorBindingFlags.at(9) = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
+    descriptorBindingFlags.at(10) = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
+    descriptorBindingFlags.at(11) = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT;
 
     VkDescriptorSetLayoutBindingFlagsCreateInfoEXT descriptorSetLayoutBindingFlagsCreateInfoExt {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT,
@@ -1665,9 +1781,11 @@ void Renderer::createLightsDsLayout()
             binding(4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
             binding(5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
             binding(6, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
-            binding(7, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MaxShadowMapsPerType, VK_SHADER_STAGE_FRAGMENT_BIT),
-            binding(8, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MaxShadowMapsPerType, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(7, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(8, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
             binding(9, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MaxShadowMapsPerType, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(10, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MaxShadowMapsPerType, VK_SHADER_STAGE_FRAGMENT_BIT),
+            binding(11, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MaxShadowMapsPerType, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         .debugName = "Renderer::mLightsDsLayout"
     };
@@ -1731,6 +1849,152 @@ void Renderer::createPostProcessingDsLayout()
     mPostProcessingDsLayout = {mRenderDevice, specification};
 }
 
+void Renderer::addPointShadowMap()
+{
+    // add resources
+    mPointShadowData.emplace_back();
+    mPointShadowMaps.emplace_back();
+    createPointShadowMap(mPointShadowMaps.back(), mPointLights.size() - 1, mPointShadowData.back().resolution);
+
+    // update buffer
+    mPointShadowDataSSBO.update(0,
+                               sizeof(PointShadowData) * mPointShadowData.size(),
+                               mPointShadowData.data());
+}
+
+void Renderer::updatePointShadowMapData(uuid32_t id)
+{
+    index_t i = mUuidToPointLightIndex.at(id);
+    mPointShadowDataSSBO.update(sizeof(PointShadowData) * i, sizeof(PointShadowData), &mPointShadowData.at(i));
+}
+
+void Renderer::updatePointShadowMapImage(uuid32_t id)
+{
+    index_t i = mUuidToPointLightIndex.at(id);
+    uint32_t resolution =  mPointShadowData.at(i).resolution;
+
+    // create new image
+    createPointShadowMap(mPointShadowMaps.at(i), i, resolution);
+}
+
+void Renderer::createPointShadowMap(PointShadowMap &shadowMap, index_t index, uint32_t resolution)
+{
+    shadowMap.shadowMap = {
+        mRenderDevice,
+        VK_IMAGE_VIEW_TYPE_CUBE,
+        VK_FORMAT_D32_SFLOAT,
+        resolution,
+        resolution,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_ASPECT_DEPTH_BIT,
+        1, VK_SAMPLE_COUNT_1_BIT, 6,
+        VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
+    };
+
+    shadowMap.shadowMap.createLayerImageViews(VK_IMAGE_VIEW_TYPE_2D);
+
+    // create framebuffers
+    for (uint32_t i = 0; i < 6; ++i)
+    {
+        vkDestroyFramebuffer(mRenderDevice.device, shadowMap.framebuffers[i], nullptr);
+        VkFramebufferCreateInfo framebufferCreateInfo {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = mPointShadowRenderpass,
+            .attachmentCount = 1,
+            .pAttachments = &shadowMap.shadowMap.layerImageViews.at(i),
+            .width = resolution,
+            .height = resolution,
+            .layers = 1
+        };
+
+        VkResult result = vkCreateFramebuffer(mRenderDevice.device,
+                                              &framebufferCreateInfo,
+                                              nullptr,
+                                              &shadowMap.framebuffers[i]);
+        vulkanCheck(result, "Failed to create framebuffer");
+        setFramebufferDebugName(mRenderDevice,
+                                shadowMap.framebuffers[i],
+                                std::format("PointShadowMap::framebuffers[{}]", i));
+    }
+
+    // update ds
+    VkDescriptorImageInfo imageInfo {
+        .sampler = VK_NULL_HANDLE,
+        .imageView = shadowMap.shadowMap.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mLightsDs,
+        .dstBinding = 10,
+        .dstArrayElement = index,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .pImageInfo = &imageInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::deletePointShadowMap(uuid32_t id)
+{
+    index_t removeIndex = mUuidToPointLightIndex.at(id);
+    index_t lastIndex = mPointLights.size() - 1;
+
+    if (removeIndex != lastIndex)
+    {
+        // move options + shadow resources
+        std::swap(mPointShadowData.at(removeIndex), mPointShadowData.at(lastIndex));
+        std::swap(mPointShadowMaps.at(removeIndex), mPointShadowMaps.at(lastIndex));
+
+        // update ds
+        VkDescriptorImageInfo imageInfo {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = mPointShadowMaps.at(removeIndex).shadowMap.imageView,
+            .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+        };
+
+        VkWriteDescriptorSet writeDs {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mLightsDs,
+            .dstBinding = 10,
+            .dstArrayElement = removeIndex,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .pImageInfo = &imageInfo
+        };
+
+        vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDs, 0, nullptr);
+    }
+
+    // delete last index
+    for (auto & framebuffer : mPointShadowMaps.back().framebuffers)
+    {
+        vkDestroyFramebuffer(mRenderDevice.device, framebuffer, nullptr);
+    }
+
+    mPointShadowData.pop_back();
+    mPointShadowMaps.pop_back();
+
+    // update ssbo
+    if (!mPointShadowData.empty())
+        mPointShadowDataSSBO.update(0, sizeof(PointShadowData) * mPointShadowData.size(), mPointShadowData.data());
+}
+
+PointShadowData &Renderer::getPointShadowData(uuid32_t id)
+{
+    index_t i = mUuidToPointLightIndex.at(id);
+    return mPointShadowData.at(i);
+}
+
+PointShadowMap &Renderer::getPointShadowMap(uuid32_t id)
+{
+    index_t i = mUuidToPointLightIndex.at(id);
+    return mPointShadowMaps.at(i);
+}
+
 void Renderer::addSpotShadowMap()
 {
     // add resources
@@ -1744,7 +2008,7 @@ void Renderer::addSpotShadowMap()
                                mSpotShadowData.data());
 }
 
-void Renderer::updateSpotShadowMapOptions(uuid32_t id)
+void Renderer::updateSpotShadowMapData(uuid32_t id)
 {
     index_t i = mUuidToSpotLightIndex.at(id);
     mSpotShadowDataSSBO.update(sizeof(SpotShadowData) * i, sizeof(SpotShadowData), &mSpotShadowData.at(i));
@@ -1759,7 +2023,7 @@ void Renderer::updateSpotShadowMapImage(uuid32_t id)
     createSpotShadowMap(mSpotShadowMaps.at(i), i, resolution);
 }
 
-void Renderer::createSpotShadowMap(ShadowMap& shadowMap, index_t index, uint32_t resolution)
+void Renderer::createSpotShadowMap(SpotShadowMap& shadowMap, index_t index, uint32_t resolution)
 {
     shadowMap.shadowMap = {
         mRenderDevice,
@@ -1790,7 +2054,7 @@ void Renderer::createSpotShadowMap(ShadowMap& shadowMap, index_t index, uint32_t
     vulkanCheck(result, "Failed to create framebuffer");
     setFramebufferDebugName(mRenderDevice,
                             shadowMap.framebuffer,
-                            "ShadowMap::framebuffer");
+                            "SpotShadowMap::framebuffer");
 
     // update ds
     VkDescriptorImageInfo imageInfo {
@@ -1802,7 +2066,7 @@ void Renderer::createSpotShadowMap(ShadowMap& shadowMap, index_t index, uint32_t
     VkWriteDescriptorSet writeDescriptorSet {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = mLightsDs,
-        .dstBinding = 9,
+        .dstBinding = 11,
         .dstArrayElement = index,
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
@@ -1833,7 +2097,7 @@ void Renderer::deleteSpotShadowMap(uuid32_t id)
         VkWriteDescriptorSet writeDs {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet = mLightsDs,
-            .dstBinding = 9,
+            .dstBinding = 11,
             .dstArrayElement = removeIndex,
             .descriptorCount = 1,
             .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
@@ -1859,7 +2123,7 @@ SpotShadowData &Renderer::getSpotShadowData(uuid32_t id)
     return mSpotShadowData.at(i);
 }
 
-ShadowMap &Renderer::getSpotShadowMap(uuid32_t id)
+SpotShadowMap &Renderer::getSpotShadowMap(uuid32_t id)
 {
     index_t i = mUuidToSpotLightIndex.at(id);
     return mSpotShadowMaps.at(i);
@@ -1876,19 +2140,40 @@ void Renderer::createShadowMapBuffers()
     mSpotShadowDataSSBO.setDebugName("Renderer::mSpotShadowDataSSBO");
 }
 
-void Renderer::createShadowMapSampler()
+void Renderer::createShadowMapSamplers()
 {
-    mShadowMapSampler = createSampler(mRenderDevice,
-                                         TextureMagFilter::Nearest,
-                                         TextureMinFilter::Nearest,
-                                         TextureWrap::ClampToBorder,
-                                         TextureWrap::ClampToBorder,
-                                         TextureWrap::ClampToBorder);
-
+    mDirShadowMapSampler = createSampler(mRenderDevice,
+                                          TextureMagFilter::Nearest,
+                                          TextureMinFilter::Nearest,
+                                          TextureWrap::ClampToBorder,
+                                          TextureWrap::ClampToBorder,
+                                          TextureWrap::ClampToBorder);
     setVulkanObjectDebugName(mRenderDevice,
                              VK_OBJECT_TYPE_SAMPLER,
-                             "Renderer::mShadowMapSampler",
-                             mShadowMapSampler.sampler);
+                             "Renderer::mDirShadowMapSampler",
+                             mDirShadowMapSampler.sampler);
+
+    mPointShadowMapSampler = createSampler(mRenderDevice,
+                                           TextureMagFilter::Nearest,
+                                           TextureMinFilter::Nearest,
+                                           TextureWrap::ClampToEdge,
+                                           TextureWrap::ClampToEdge,
+                                           TextureWrap::ClampToEdge);
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_SAMPLER,
+                             "Renderer::mPointShadowMapSampler",
+                             mPointShadowMapSampler.sampler);
+
+    mSpotShadowMapSampler = createSampler(mRenderDevice,
+                                          TextureMagFilter::Nearest,
+                                          TextureMinFilter::Nearest,
+                                          TextureWrap::ClampToBorder,
+                                          TextureWrap::ClampToBorder,
+                                          TextureWrap::ClampToBorder);
+    setVulkanObjectDebugName(mRenderDevice,
+                             VK_OBJECT_TYPE_SAMPLER,
+                             "Renderer::mSpotShadowMapSampler",
+                             mSpotShadowMapSampler.sampler);
 }
 
 void Renderer::createSpotShadowRenderpass()
@@ -2521,7 +2806,7 @@ void Renderer::createSsaoKernel(uint32_t sampleCount)
         mSsaoKernel.at(i) = glm::normalize(mSsaoKernel.at(i));
         mSsaoKernel.at(i) *= mSsaoDistribution(mSsaoRandomEngine);
 
-        float scale = static_cast<float>(i) / count;
+        float scale = static_cast<float>(i) / static_cast<float>(count);
         scale = glm::lerp(0.1f, 1.f, glm::pow(scale, 2.f));
         mSsaoKernel.at(i) *= scale;
     }
@@ -5357,8 +5642,18 @@ void Renderer::createLightsDs()
         .range = VK_WHOLE_SIZE
     };
 
-    VkDescriptorImageInfo shadowSamplerImageInfo {
-        .sampler = mShadowMapSampler.sampler,
+    VkDescriptorImageInfo dirShadowSamplerImageInfo {
+        .sampler = mDirShadowMapSampler.sampler,
+        .imageView = VK_NULL_HANDLE,
+    };
+
+    VkDescriptorImageInfo pointShadowSamplerImageInfo {
+        .sampler = mPointShadowMapSampler.sampler,
+        .imageView = VK_NULL_HANDLE,
+    };
+
+    VkDescriptorImageInfo spotShadowSamplerImageInfo {
+        .sampler = mSpotShadowMapSampler.sampler,
         .imageView = VK_NULL_HANDLE,
     };
 
@@ -5372,7 +5667,7 @@ void Renderer::createLightsDs()
 //        .pBufferInfo = x
     };
 
-    std::array<VkWriteDescriptorSet, 7> writeDs {};
+    std::array<VkWriteDescriptorSet, 9> writeDs {};
     writeDs.fill(prototype);
 
     writeDs.at(0).dstBinding = 0;
@@ -5395,7 +5690,15 @@ void Renderer::createLightsDs()
 
     writeDs.at(6).dstBinding = 6;
     writeDs.at(6).descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-    writeDs.at(6).pImageInfo = &shadowSamplerImageInfo;
+    writeDs.at(6).pImageInfo = &dirShadowSamplerImageInfo;
+
+    writeDs.at(7).dstBinding = 7;
+    writeDs.at(7).descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    writeDs.at(7).pImageInfo = &pointShadowSamplerImageInfo;
+
+    writeDs.at(8).dstBinding = 8;
+    writeDs.at(8).descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    writeDs.at(8).pImageInfo = &spotShadowSamplerImageInfo;
 
     vkUpdateDescriptorSets(mRenderDevice.device, writeDs.size(), writeDs.data(), 0, nullptr);
 }

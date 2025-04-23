@@ -956,6 +956,78 @@ void Editor::pointLightInspector(GraphNode *node)
             modified = true;
     }
 
+    if (ImGui::CollapsingHeader("Shadows##pointLight", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        bool modifiedShadowData = false;
+        bool modifiedShadowMapResolution = false;
+
+        PointShadowData& options = mRenderer.getPointShadowData(node->id());
+        PointShadowMap& shadowMap = mRenderer.getPointShadowMap(node->id());
+
+        const char* shadowTypePreview = toStr(options.shadowType);
+        if (ImGui::BeginCombo("Shadow Type##pointLight", shadowTypePreview))
+        {
+            if (ImGui::Selectable("No Shadow", options.shadowType == ShadowType::NoShadow))
+            {
+                options.shadowType = ShadowType::NoShadow;
+                modifiedShadowData = true;
+            }
+
+            if (ImGui::Selectable("Hard Shadow", options.shadowType == ShadowType::HardShadow))
+            {
+                options.shadowType = ShadowType::HardShadow;
+                modifiedShadowData = true;
+            }
+
+            if (ImGui::Selectable("Soft Shadow", options.shadowType == ShadowType::SoftShadow))
+            {
+                options.shadowType = ShadowType::SoftShadow;
+                modifiedShadowData = true;
+            }
+
+            ImGui::EndCombo();
+        }
+
+        if (options.shadowType != ShadowType::NoShadow)
+        {
+            std::string resolution = std::format("{}px", std::to_string(options.resolution));
+            if (ImGui::BeginCombo("Resolution##pointLight", resolution.data()))
+            {
+                for (uint32_t i = 256; i <= 4096; i *= 2)
+                {
+                    std::string res = std::format("{}px", std::to_string(i));
+                    if (ImGui::Selectable(res.data(), i == options.resolution) &&
+                        i != options.resolution)
+                    {
+                        options.resolution = i;
+                        modifiedShadowData = true;
+                        modifiedShadowMapResolution = true;
+                    }
+                }
+
+                ImGui::EndCombo();
+            }
+
+            if (ImGui::SliderFloat("Strength##pointLight", &options.strength, 0.f, 1.f))
+                modifiedShadowData = true;
+
+            if (ImGui::DragFloat("Bias Slope##pointLight", &options.biasSlope, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp))
+                modifiedShadowData = true;
+
+            if (ImGui::DragFloat("Bias Constant##pointLight", &options.biasConstant, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp))
+                modifiedShadowData = true;
+
+            if (options.shadowType == ShadowType::SoftShadow)
+            {
+                if (ImGui::DragFloat("PCF Radius##pointLight", &options.pcfRadius, 0.0001f, 0.f, FLT_MAX, "%.4f", ImGuiSliderFlags_AlwaysClamp))
+                    modifiedShadowData = true;
+            }
+        }
+
+        if (modifiedShadowData) mRenderer.updatePointShadowMapData(node->id());
+        if (modifiedShadowMapResolution) mRenderer.updatePointShadowMapImage(node->id());
+    }
+
     if (modified) mRenderer.updatePointLight(node->id());
 }
 
@@ -991,11 +1063,11 @@ void Editor::spotLightInspector(GraphNode *node)
 
     if (ImGui::CollapsingHeader("Shadows##spotLight", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        bool modifiedShadowOptions = false;
+        bool modifiedShadowData = false;
         bool modifiedShadowMapResolution = false;
 
         SpotShadowData& options = mRenderer.getSpotShadowData(node->id());
-        ShadowMap& shadowMap = mRenderer.getSpotShadowMap(node->id());
+        SpotShadowMap& shadowMap = mRenderer.getSpotShadowMap(node->id());
 
         const char* shadowTypePreview = toStr(options.shadowType);
         if (ImGui::BeginCombo("Shadow Type##spotLight", shadowTypePreview))
@@ -1003,19 +1075,19 @@ void Editor::spotLightInspector(GraphNode *node)
             if (ImGui::Selectable("No Shadow", options.shadowType == ShadowType::NoShadow))
             {
                 options.shadowType = ShadowType::NoShadow;
-                modifiedShadowOptions = true;
+                modifiedShadowData = true;
             }
 
             if (ImGui::Selectable("Hard Shadow", options.shadowType == ShadowType::HardShadow))
             {
                 options.shadowType = ShadowType::HardShadow;
-                modifiedShadowOptions = true;
+                modifiedShadowData = true;
             }
 
             if (ImGui::Selectable("Soft Shadow", options.shadowType == ShadowType::SoftShadow))
             {
                 options.shadowType = ShadowType::SoftShadow;
-                modifiedShadowOptions = true;
+                modifiedShadowData = true;
             }
 
             ImGui::EndCombo();
@@ -1033,7 +1105,7 @@ void Editor::spotLightInspector(GraphNode *node)
                         i != options.resolution)
                     {
                         options.resolution = i;
-                        modifiedShadowOptions = true;
+                        modifiedShadowData = true;
                         modifiedShadowMapResolution = true;
                     }
                 }
@@ -1042,22 +1114,22 @@ void Editor::spotLightInspector(GraphNode *node)
             }
 
             if (ImGui::SliderFloat("Strength##spotLight", &options.strength, 0.f, 1.f))
-                modifiedShadowOptions = true;
+                modifiedShadowData = true;
 
-            if (ImGui::DragFloat("Bias Slope##spotLight", &options.biasSlope, 0.000001f, 0.f, FLT_MAX, "%.5f", ImGuiSliderFlags_AlwaysClamp))
-                modifiedShadowOptions = true;
+            if (ImGui::DragFloat("Bias Slope##spotLight", &options.biasSlope, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp))
+                modifiedShadowData = true;
 
-            if (ImGui::DragFloat("Bias Constant##spotLight", &options.biasConstant, 0.000001f, 0.f, FLT_MAX, "%.5f", ImGuiSliderFlags_AlwaysClamp))
-                modifiedShadowOptions = true;
+            if (ImGui::DragFloat("Bias Constant##spotLight", &options.biasConstant, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp))
+                modifiedShadowData = true;
 
             if (options.shadowType == ShadowType::SoftShadow)
             {
                 if (ImGui::SliderInt("PCF Range (Smoothing)##spotLight", &options.pcfRange, 1, 10))
-                    modifiedShadowOptions = true;
+                    modifiedShadowData = true;
             }
         }
         
-        if (modifiedShadowOptions) mRenderer.updateSpotShadowMapOptions(node->id());
+        if (modifiedShadowData) mRenderer.updateSpotShadowMapData(node->id());
         if (modifiedShadowMapResolution) mRenderer.updateSpotShadowMapImage(node->id());
     }
 

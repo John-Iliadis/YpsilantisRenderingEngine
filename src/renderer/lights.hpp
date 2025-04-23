@@ -48,31 +48,37 @@ enum class ShadowType : uint32_t
     SoftShadow
 };
 
+struct PointShadowData
+{
+    glm::mat4 viewProj[6] {};
+    ShadowType shadowType = ShadowType::HardShadow;
+    uint32_t resolution = 1024;
+    float strength = 1;
+    float biasSlope = 0.2f;
+    float biasConstant = 0.01f;
+    float pcfRadius = 1;
+    uint32_t padding[2] {};
+};
+
+struct PointShadowMap
+{
+    VulkanImage shadowMap;
+    VkFramebuffer framebuffers[6];
+};
+
 struct SpotShadowData
 {
-    glm::mat4 viewProj;
+    glm::mat4 viewProj {};
     ShadowType shadowType = ShadowType::HardShadow;
     uint32_t resolution = 1024;
     float strength = 1;
     float biasSlope = 0.f;
     float biasConstant = 0.0002f;
     int32_t pcfRange = 2;
-    uint32_t padding[2];
+    uint32_t padding[2] {};
 };
 
-struct PointShadowData
-{
-    glm::mat4 viewProj[6];
-    ShadowType shadowType;
-    uint32_t resolution = 1024;
-    float strength = 1;
-    float biasSlope = 0.f;
-    float biasConstant = 0.0002f;
-    int32_t pcfRange = 2;
-    uint32_t padding[2];
-};
-
-struct ShadowMap
+struct SpotShadowMap
 {
     VulkanImage shadowMap;
     VkFramebuffer framebuffer{};
@@ -88,6 +94,19 @@ inline const char* toStr(ShadowType shadowType)
         case ShadowType::SoftShadow: return "Soft Shadow";
         default: return "Unknown";
     }
+}
+
+inline void calcMatrices(PointShadowData& shadowData, const PointLight& pointLight)
+{
+    glm::mat4 proj = glm::perspective(glm::half_pi<float>(), 1.f, 0.1f, pointLight.range);
+    glm::vec3 lightPos(pointLight.position);
+
+    shadowData.viewProj[0] = proj * glm::lookAt(lightPos, lightPos + glm::vec3( 1, 0, 0), glm::vec3(0, -1, 0)); // +X
+    shadowData.viewProj[1] = proj * glm::lookAt(lightPos, lightPos + glm::vec3(-1, 0, 0), glm::vec3(0, -1, 0)); // -X
+    shadowData.viewProj[2] = proj * glm::lookAt(lightPos, lightPos + glm::vec3(0, 1, 0), glm::vec3(0, 0, 1));   // +Y
+    shadowData.viewProj[3] = proj * glm::lookAt(lightPos, lightPos + glm::vec3(0, -1, 0), glm::vec3(0, 0,-1));   // -Y
+    shadowData.viewProj[4] = proj * glm::lookAt(lightPos, lightPos + glm::vec3(0, 0, 1), glm::vec3(0, -1, 0));  // +Z
+    shadowData.viewProj[5] = proj * glm::lookAt(lightPos, lightPos + glm::vec3(0, 0,-1), glm::vec3(0, -1, 0));  // -Z
 }
 
 inline void calcMatrices(SpotShadowData& shadowData, const SpotLight& spotLight)

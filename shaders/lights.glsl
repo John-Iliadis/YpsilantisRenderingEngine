@@ -29,21 +29,21 @@ const uint NoShadow = 0;
 const uint HardShadow = 1;
 const uint SoftShadow = 2;
 
-struct SpotShadowData
+struct PointShadowData
 {
-    mat4 viewProj;
+    mat4 viewProj[6];
     uint shadowType;
     uint resolution;
     float strength;
     float biasSlope;
     float biasConstant;
-    int pcfRange;
+    float pcfRadius;
     uint padding[2];
 };
 
-struct PointShadowData
+struct SpotShadowData
 {
-    mat4 viewProj[6];
+    mat4 viewProj;
     uint shadowType;
     uint resolution;
     float strength;
@@ -57,3 +57,12 @@ float calcAttenuation(float distance, float lightRange)
 {
     return pow(1 - distance / lightRange, 2.0) * float(distance < lightRange);
 }
+
+const vec3 sampleOffsets3D[20] = vec3[20]
+(
+    vec3( 1,  1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1,  1,  1),
+    vec3( 1,  1, -1), vec3( 1, -1, -1), vec3(-1, -1, -1), vec3(-1,  1, -1),
+    vec3( 1,  1,  0), vec3( 1, -1,  0), vec3(-1, -1,  0), vec3(-1,  1,  0),
+    vec3( 1,  0,  1), vec3(-1,  0,  1), vec3( 1,  0, -1), vec3(-1,  0, -1),
+    vec3( 0,  1,  1), vec3( 0, -1,  1), vec3( 0, -1, -1), vec3( 0,  1, -1)
+);
