@@ -33,28 +33,13 @@ void Editor::update(float dt)
     keyboardShortcuts();
 
     imguiEvents();
-    mainMenuBar();
-
-    if (mShowAssetPanel)
-        assetPanel();
-
-    if (mShowViewport)
-        viewPort();
-
-    if (mShowSceneGraph)
-        sceneGraphPanel();
-
-    if (mShowCameraPanel)
-        cameraPanel();
-
-    if (mShowInspectorPanel)
-        inspectorPanel();
-
-    if (mShowRendererPanel)
-        rendererPanel();
-
-    if (mShowDebugPanel)
-        debugPanel();
+    assetPanel();
+    viewPort();
+    sceneGraphPanel();
+    cameraPanel();
+    inspectorPanel();
+    rendererPanel();
+    debugPanel();
 
     if (mShowSSAOOutputTexture)
         ssaoTextureDebugWin();
@@ -68,43 +53,9 @@ void Editor::imguiEvents()
         deleteSelectedObject();
 }
 
-void Editor::mainMenuBar()
-{
-    if (ImGui::BeginMainMenuBar())
-    {
-        if (ImGui::BeginMenu("File"))
-        {
-            if (ImGui::MenuItem("Import Model"))
-                mModelImportPopup = true;
-
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("Settings"))
-        {
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("View"))
-        {
-            ImGui::MenuItem("Viewport", nullptr, &mShowViewport);
-            ImGui::MenuItem("Asset Panel", nullptr, &mShowAssetPanel);
-            ImGui::MenuItem("Scene Graph", nullptr, &mShowSceneGraph);
-            ImGui::MenuItem("Camera Panel", nullptr, &mShowCameraPanel);
-            ImGui::MenuItem("Inspector", nullptr, &mShowInspectorPanel);
-            ImGui::MenuItem("Renderer", nullptr, &mShowRendererPanel);
-            ImGui::MenuItem("Debug", nullptr, &mShowDebugPanel);
-
-            ImGui::EndMenu();
-        }
-
-        ImGui::EndMainMenuBar();
-    }
-}
-
 void Editor::cameraPanel()
 {
-    ImGui::Begin("Camera", &mShowCameraPanel);
+    ImGui::Begin("Camera", nullptr);
 
     ImGui::SeparatorText("Settings");
     ImGui::SliderFloat("Field of View##Cam", mRenderer.mCamera.fov(), 1.f, 145.f, "%0.f");
@@ -168,7 +119,7 @@ void Editor::cameraPanel()
 
 void Editor::assetPanel()
 {
-    ImGui::Begin("Assets", &mShowAssetPanel);
+    ImGui::Begin("Assets", nullptr);
 
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
         ImGui::OpenPopup("assetPanelPopup");
@@ -190,7 +141,7 @@ void Editor::assetPanel()
 
 void Editor::sceneGraphPanel()
 {
-    ImGui::Begin("Scene Graph", &mShowSceneGraph);
+    ImGui::Begin("Scene Graph", nullptr);
 
     if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
         ImGui::OpenPopup("sceneGraphPopup");
@@ -215,7 +166,7 @@ void Editor::rendererPanel()
     static constexpr ImGuiColorEditFlags colorEditFlags = ImGuiColorEditFlags_DisplayRGB |
                                                           ImGuiColorEditFlags_AlphaBar;
 
-    ImGui::Begin("Renderer", &mShowRendererPanel);
+    ImGui::Begin("Renderer", nullptr);
 
     if (ImGui::CollapsingHeader("General", ImGuiTreeNodeFlags_DefaultOpen))
     {
@@ -369,7 +320,7 @@ void Editor::rendererPanel()
 
 void Editor::inspectorPanel()
 {
-    ImGui::Begin("Inspector", &mShowInspectorPanel);
+    ImGui::Begin("Inspector", nullptr);
 
     if (auto objectType = UUIDRegistry::getObjectType(mSelectedObjectID))
     {
@@ -399,7 +350,7 @@ void Editor::viewPort()
     ImGui::SetNextWindowSize(sInitialViewportSize, ImGuiCond_FirstUseEver);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-    ImGui::Begin("Scene", &mShowViewport, sWindowFlags);
+    ImGui::Begin("Scene", nullptr, sWindowFlags);
     ImGui::PopStyleVar(2);
 
     modelDragDropTargetWholeWindow();
@@ -433,7 +384,7 @@ void Editor::viewPort()
 
 void Editor::debugPanel()
 {
-    ImGui::Begin("Debug", &mShowDebugPanel);
+    ImGui::Begin("Debug", nullptr);
 
     ImGui::Text("GPU: %s", mRenderer.mRenderDevice.getDeviceProperties().deviceName);
     ImGui::Separator();

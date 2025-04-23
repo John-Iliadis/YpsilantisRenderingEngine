@@ -92,7 +92,7 @@ void VulkanRenderDevice::createLogicalDevice()
         .extendedDynamicState = VK_TRUE
     };
 
-    // still getting maxPerStageDescriptorSamplers limit exceeded error after using this
+    // note: can still get maxPerStageDescriptorSamplers limit exceeded error when using this
     VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptorIndexingFeatures {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
         .pNext = &extendedDynamicStateFeatures,

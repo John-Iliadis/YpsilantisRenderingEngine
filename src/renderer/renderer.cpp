@@ -411,7 +411,6 @@ void Renderer::deleteSpotLight(uuid32_t id)
     deleteLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
 }
 
-// todo: change culling
 void Renderer::executePointShadowRenderpass(VkCommandBuffer commandBuffer)
 {
     beginDebugLabel(commandBuffer, "Gen Point Shadow Maps");

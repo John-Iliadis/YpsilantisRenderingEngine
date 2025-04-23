@@ -31,7 +31,6 @@ public:
 
 private:
     void imguiEvents();
-    void mainMenuBar();
     void cameraPanel();
     void assetPanel();
     void sceneGraphPanel();
@@ -113,13 +112,6 @@ private:
     SaveData& mSaveData;
     std::shared_ptr<SceneGraph> mSceneGraph;
 
-    bool mShowViewport = true;
-    bool mShowAssetPanel = true;
-    bool mShowSceneGraph = true;
-    bool mShowCameraPanel = true;
-    bool mShowInspectorPanel = true;
-    bool mShowRendererPanel = true;
-    bool mShowDebugPanel = true;
     bool mShowSSAOOutputTexture = false;
     bool mModelImportPopup = false;
     bool mViewGizmoControls = true;
