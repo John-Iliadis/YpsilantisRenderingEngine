@@ -92,18 +92,20 @@ float pointShadowCalculation(uint index, vec3 normal, vec3 lightDir)
 
     if (pointShadowData[index].shadowType == SoftShadow)
     {
-        float pcfRadius = pointShadowData[index].pcfRadius;
-        float shadowMapResolution = pointShadowData[index].resolution;
-        float texelSize = 1.0 / shadowMapResolution;
+        int range = 2;
+        float texelSize = 1.0 / pointShadowData[index].resolution;
 
-        for (uint i = 0; i < 20; ++i)
+        for (int x = -range; x <= range; ++x)
+        for (int y = -range; y <= range; ++y)
+        for (int z = -range; z <= range; ++z)
         {
-            vec3 sampleDir = lightToFrag + sampleOffsets3D[i] * texelSize * pcfRadius;
+            vec3 sampleDir = lightToFrag + vec3(x, y, z) * (texelSize * pointShadowData[index].pcfRadius);
             float sampleDepth = texture(samplerCube(pointShadowMaps[index], pointShadowSampler), sampleDir).r;
+            sampleDepth *= pointLights[index].range;
             shadow += currentDepth - bias > sampleDepth? 1.0 : 0.0;
         }
 
-        shadow /= 20.0;
+        shadow /= pow(range * 2 + 1, 3.0);
     }
     else
     {

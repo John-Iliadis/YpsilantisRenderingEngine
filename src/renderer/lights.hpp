@@ -56,7 +56,7 @@ struct PointShadowData
     float strength = 1;
     float biasSlope = 0.2f;
     float biasConstant = 0.01f;
-    float pcfRadius = 1;
+    float pcfRadius = 10.f;
     uint32_t padding[2] {};
 };
 

@@ -2154,8 +2154,8 @@ void Renderer::createShadowMapSamplers()
                              mDirShadowMapSampler.sampler);
 
     mPointShadowMapSampler = createSampler(mRenderDevice,
-                                           TextureMagFilter::Nearest,
-                                           TextureMinFilter::Nearest,
+                                           TextureMagFilter::Linear,
+                                           TextureMinFilter::Linear,
                                            TextureWrap::ClampToEdge,
                                            TextureWrap::ClampToEdge,
                                            TextureWrap::ClampToEdge);
