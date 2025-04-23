@@ -55,7 +55,8 @@ struct SpotShadowData
 
 float calcAttenuation(float distance, float lightRange)
 {
-    return pow(1 - distance / lightRange, 2.0) * float(distance < lightRange);
+    float t = clamp(distance / lightRange, 0.0, 1.0);
+    return 1.0 - smoothstep(0.0, 1.0, t);
 }
 
 const vec3 sampleOffsets3D[20] = vec3[20]
