@@ -59,7 +59,7 @@ struct alignas(16) DirShadowData
     float biasSlope = 0.f;
     float biasConstant = 0.01f;
     int32_t pcfRange = 3.f;
-    uint32_t cascadeCount = 5;
+    uint32_t cascadeCount = 4;
     float zScalar = 10.f;
 };
 
@@ -147,7 +147,7 @@ inline glm::mat4 calcMatrices(float fovY, float aspect, float nearPlane, float f
                               const glm::mat4& camView, glm::vec3 lightDir,
                               float zScalar)
 {
-    glm::mat4 proj = glm::perspective(fovY,
+    glm::mat4 proj = glm::perspective(glm::radians(fovY),
                                       aspect,
                                       nearPlane,
                                       farPlane);
@@ -195,7 +195,7 @@ inline glm::mat4 calcMatrices(float fovY, float aspect, float nearPlane, float f
 
 inline std::vector<glm::vec2> calcCascadePlanes(float nearPlane, float farPlane, int cascadeCount)
 {
-    constexpr float CascadeSplitLambda = 0.8f;
+    constexpr float CascadeSplitLambda = 0.5f;
 
     std::vector<glm::vec2> cascadePlanes;
     cascadePlanes.resize(cascadeCount);

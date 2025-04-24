@@ -940,7 +940,7 @@ void Editor::dirLightInspector(GraphNode *node)
             ImGui::SliderFloat("Strength##dirLight", &options.strength, 0.f, 1.f);
             ImGui::DragFloat("Bias Slope##dirLight", &options.biasSlope, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::DragFloat("Bias Constant##dirLight", &options.biasConstant, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui::DragFloat("Depth Scalar##dirLight", &options.zScalar, 0.1f, 0.f, FLT_MAX, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat("Depth Scalar##dirLight", &options.zScalar, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
             if (options.shadowType == ShadowType::SoftShadow)
             {
