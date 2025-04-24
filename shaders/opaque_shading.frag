@@ -52,9 +52,9 @@ layout (set = 1, binding = 5) uniform sampler2D brdfLut;
 layout (set = 2, binding = 0) buffer readonly DirLightsSSBO { DirectionalLight dirLights[]; };
 layout (set = 2, binding = 1) buffer readonly PointLightsSSBO { PointLight pointLights[]; };
 layout (set = 2, binding = 2) buffer readonly SpotLightSSBO { SpotLight spotLights[]; };
-layout (std430, set = 2, binding = 3) buffer readonly DirShadowDataSSBO { SpotShadowData dirShadowData[]; }; // todo: change
-layout (std430, set = 2, binding = 4) buffer readonly PointShadowDataSSBO { PointShadowData pointShadowData[]; };
-layout (std430, set = 2, binding = 5) buffer readonly SpotShadowDataSSBO { SpotShadowData spotShadowData[]; };
+layout (set = 2, binding = 3) buffer readonly DirShadowDataSSBO { DirShadowData dirShadowData[]; };
+layout (set = 2, binding = 4) buffer readonly PointShadowDataSSBO { PointShadowData pointShadowData[]; };
+layout (set = 2, binding = 5) buffer readonly SpotShadowDataSSBO { SpotShadowData spotShadowData[]; };
 layout (set = 2, binding = 6) uniform sampler dirLightSampler;
 layout (set = 2, binding = 7) uniform sampler pointShadowSampler;
 layout (set = 2, binding = 8) uniform sampler spotShadowMapSampler;
@@ -81,6 +81,59 @@ uint getClusterIndex(vec3 viewPos)
     return cluster.x +
            cluster.y * clusterGridX +
            cluster.z * clusterGridX * clusterGridY;
+}
+
+float dirShadowCalculation(uint index, vec3 viewPos, vec3 normal, vec3 lightDir)
+{
+    float depth = abs(viewPos.z);
+
+    uint layer = dirShadowData[index].cascadeCount - 1;
+    for (uint i = 0; i < dirShadowData[index].cascadeCount; ++i)
+    {
+        if (depth < dirShadowData[index].cascadeDist[i])
+        {
+            layer = i;
+            break;
+        }
+    }
+
+    vec4 fragPosLightSpace = dirShadowData[index].viewProj[layer] * vec4(vFragWorldPos, 1.0); // light space
+    fragPosLightSpace /= fragPosLightSpace.w; // NDC
+
+    float currentDepth = fragPosLightSpace.z;
+    vec2 sampleCoords = fragPosLightSpace.xy * 0.5 + 0.5; // to range [0, 1]
+
+    if (currentDepth > 1.0)
+        return 0.0;
+
+    float bias = max(dirShadowData[index].biasSlope * (1.0 - dot(normal, lightDir)), dirShadowData[index].biasConstant);
+    bias *= 1.0 / (dirShadowData[index].cascadeDist[layer] * 0.5);
+
+    float shadow = 0.0;
+    if (dirShadowData[index].shadowType == SoftShadow)
+    {
+        int pcfRange = dirShadowData[index].pcfRange;
+        float texelSize = 1.0 / dirShadowData[index].resolution;
+
+        for (int x = -pcfRange; x <= pcfRange; ++x)
+        {
+            for (int y = -pcfRange; y <= pcfRange; ++y)
+            {
+                vec2 uv = sampleCoords + vec2(x, y) * texelSize;
+                float pcfDepth = texture(sampler2DArray(dirShadowMaps[index], dirLightSampler), vec3(uv, layer)).r;
+                shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
+            }
+        }
+
+        shadow /= float(pow(pcfRange * 2 + 1, 2.0));
+    }
+    else
+    {
+        float sampleDepth = texture(sampler2DArray(dirShadowMaps[index], dirLightSampler), vec3(sampleCoords, layer)).r;
+        shadow = currentDepth - bias > sampleDepth? 1.0 : 0.0;
+    }
+
+    return shadow;
 }
 
 float pointShadowCalculation(uint index, vec3 normal, vec3 lightDir)
@@ -131,8 +184,7 @@ float spotShadowCalculation(uint index, vec3 normal, vec3 lightDir)
     if (spotShadowData[index].shadowType == SoftShadow)
     {
         int pcfRange = spotShadowData[index].pcfRange;
-        float shadowMapResolution = spotShadowData[index].resolution;
-        vec2 texelSize = 1.0 / vec2(shadowMapResolution, shadowMapResolution);
+        float texelSize = 1.0 / spotShadowData[index].resolution;
 
         for (int x = -pcfRange; x <= pcfRange; ++x)
         {
@@ -183,8 +235,15 @@ void main()
         vec3 lightVec = -normalize(dirLights[i].direction.xyz);
         vec3 halfwayVec = normalize(viewVec + lightVec);
         vec3 lightRadiance = dirLights[i].color.rgb * dirLights[i].intensity;
+        vec3 lightContribution = specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
 
-        L_0 += specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
+        if (dirShadowData[i].shadowType != NoShadow)
+        {
+            float shadow = dirShadowCalculation(i, viewPos, normal, lightVec);
+            lightContribution *= 1 - (shadow * dirShadowData[i].strength);
+        }
+
+        L_0 += lightContribution;
     }
 
     uint clusterIndex = getClusterIndex(viewPos);

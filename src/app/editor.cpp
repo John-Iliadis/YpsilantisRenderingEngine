@@ -494,9 +494,8 @@ GraphNode *Editor::createMeshNode(Model &model, const SceneNode &sceneNode, Grap
 {
     std::vector<uuid32_t> meshIDs;
 
-    for (uint32_t i = 0; i < sceneNode.meshIndices.size(); ++i)
+    for (unsigned int meshIndex : sceneNode.meshIndices)
     {
-        uint32_t meshIndex = sceneNode.meshIndices.at(i);
         const Mesh& mesh = model.meshes.at(meshIndex);
         meshIDs.push_back(mesh.meshID);
     }
@@ -877,6 +876,79 @@ void Editor::dirLightInspector(GraphNode *node)
 
         if (ImGui::DragFloat("Intensity##dirLight", &dirLight.intensity, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp))
             modified = true;
+    }
+
+    if (ImGui::CollapsingHeader("Shadows##dirLight", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        bool modifiedShadowMapResolution = false;
+
+        DirShadowData& options = mRenderer.getDirShadowData(node->id());
+        DirShadowMap& shadowMap = mRenderer.getDirShadowMap(node->id());
+
+        std::string prevCascade = std::format("{}x", options.cascadeCount);
+        if (ImGui::BeginCombo("Cascade Count", prevCascade.data()))
+        {
+            for (uint32_t i = 3; i <= 9; ++i)
+            {
+                std::string selectablePrev = std::format("{}x", i);
+                if (ImGui::Selectable(selectablePrev.data(), i == options.cascadeCount) &&
+                    options.cascadeCount != i)
+                {
+                    options.cascadeCount = i;
+                    modifiedShadowMapResolution = true;
+                }
+            }
+
+            ImGui::EndCombo();
+        }
+
+        const char* shadowTypePreview = toStr(options.shadowType);
+        if (ImGui::BeginCombo("Shadow Type##dirLight", shadowTypePreview))
+        {
+            if (ImGui::Selectable("No Shadow", options.shadowType == ShadowType::NoShadow))
+                options.shadowType = ShadowType::NoShadow;
+
+            if (ImGui::Selectable("Hard Shadow", options.shadowType == ShadowType::HardShadow))
+                options.shadowType = ShadowType::HardShadow;
+
+
+            if (ImGui::Selectable("Soft Shadow", options.shadowType == ShadowType::SoftShadow))
+                options.shadowType = ShadowType::SoftShadow;
+
+            ImGui::EndCombo();
+        }
+
+        if (options.shadowType != ShadowType::NoShadow)
+        {
+            std::string resolution = std::format("{}px", std::to_string(options.resolution));
+            if (ImGui::BeginCombo("Resolution##dirLight", resolution.data()))
+            {
+                for (uint32_t i = 256; i <= 4096; i *= 2)
+                {
+                    std::string res = std::format("{}px", std::to_string(i));
+                    if (ImGui::Selectable(res.data(), i == options.resolution) &&
+                        i != options.resolution)
+                    {
+                        options.resolution = i;
+                        modifiedShadowMapResolution = true;
+                    }
+                }
+
+                ImGui::EndCombo();
+            }
+
+            ImGui::SliderFloat("Strength##dirLight", &options.strength, 0.f, 1.f);
+            ImGui::DragFloat("Bias Slope##dirLight", &options.biasSlope, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat("Bias Constant##dirLight", &options.biasConstant, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat("Depth Scalar##dirLight", &options.zScalar, 0.1f, 0.f, FLT_MAX, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+
+            if (options.shadowType == ShadowType::SoftShadow)
+            {
+                ImGui::SliderInt("PCF Range (Smoothing)##dirLight", &options.pcfRange, 1, 10);
+            }
+        }
+
+        if (modifiedShadowMapResolution) mRenderer.updateDirShadowMapImage(node->id());
     }
 
     if (modified) mRenderer.updateDirLight(node->id());

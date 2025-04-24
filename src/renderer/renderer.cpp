@@ -55,6 +55,8 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createShadowMapSamplers();
     createSpotShadowRenderpass();
     createSpotShadowPipeline();
+    createDirShadowRenderpass();
+    createDirShadowPipeline();
     createPointShadowRenderpass();
     createPointShadowPipeline();
 
@@ -190,7 +192,8 @@ Renderer::~Renderer()
     for (auto fb : mBloomUpsampleFramebuffers)
         vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
     for (auto& shadowMap : mDirShadowMaps)
-        vkDestroyFramebuffer(mRenderDevice.device, shadowMap.framebuffer, nullptr);
+        for (auto& fb : shadowMap.framebuffers)
+            vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
     for (auto& shadowMap : mPointShadowMaps)
         for (auto & framebuffer : shadowMap.framebuffers)
             vkDestroyFramebuffer(mRenderDevice.device, framebuffer, nullptr);
@@ -212,6 +215,7 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mCaptureBrightPixelsRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mBloomDownsampleRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mBloomUpsampleRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mDirShadowRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPointShadowRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSpotShadowRenderpass, nullptr);
 }
@@ -220,10 +224,12 @@ void Renderer::update()
 {
     updateCameraUBO();
     updateSceneGraph();
+    updateDirShadowsMaps();
 }
 
 void Renderer::render(VkCommandBuffer commandBuffer)
 {
+    executeDirShadowRenderpass(commandBuffer);
     executePointShadowRenderpass(commandBuffer);
     executeSpotShadowRenderpass(commandBuffer);
     setViewport(commandBuffer);
@@ -339,7 +345,8 @@ void Renderer::notify(const Message &message)
 
 void Renderer::addDirLight(uuid32_t id, const DirectionalLight &light)
 {
-    addLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id, light);
+    addLight(mUuidToDirLightIndex, mDirLights, mDirLightSSBO, id, light);
+    addDirShadowMap();
 }
 
 void Renderer::addPointLight(uuid32_t id, const PointLight &light)
@@ -356,7 +363,7 @@ void Renderer::addSpotLight(uuid32_t id, const SpotLight &light)
 
 DirectionalLight &Renderer::getDirLight(uuid32_t id)
 {
-    return getLight(mUuidToDirLightIndex, mDirectionalLights, id);
+    return getLight(mUuidToDirLightIndex, mDirLights, id);
 }
 
 PointLight &Renderer::getPointLight(uuid32_t id)
@@ -371,7 +378,7 @@ SpotLight &Renderer::getSpotLight(uuid32_t id)
 
 void Renderer::updateDirLight(uuid32_t id)
 {
-    updateLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id);
+    updateLight(mUuidToDirLightIndex, mDirLights, mDirLightSSBO, id);
 }
 
 void Renderer::updatePointLight(uuid32_t id)
@@ -396,7 +403,8 @@ void Renderer::updateSpotLight(uuid32_t id)
 
 void Renderer::deleteDirLight(uuid32_t id)
 {
-    deleteLight(mUuidToDirLightIndex, mDirectionalLights, mDirLightSSBO, id);
+    deleteDirShadowMap(id);
+    deleteLight(mUuidToDirLightIndex, mDirLights, mDirLightSSBO, id);
 }
 
 void Renderer::deletePointLight(uuid32_t id)
@@ -409,6 +417,90 @@ void Renderer::deleteSpotLight(uuid32_t id)
 {
     deleteSpotShadowMap(id);
     deleteLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id);
+}
+
+void Renderer::executeDirShadowRenderpass(VkCommandBuffer commandBuffer)
+{
+    beginDebugLabel(commandBuffer, "Gen Dir Shadows Maps");
+
+    constexpr VkClearValue depthClear {.depthStencil = {.depth = 1.f, .stencil = 0}};
+    for (uint32_t i = 0; i < mDirLights.size(); ++i)
+    {
+        const DirShadowData& dsd = mDirShadowData.at(i);
+        if (dsd.shadowType == ShadowType::NoShadow)
+            continue;
+
+        uint32_t resolution = dsd.resolution;
+        VkRenderPassBeginInfo renderPassBeginInfo {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = mDirShadowRenderpass,
+            .framebuffer = VK_NULL_HANDLE,
+            .renderArea = {
+                .offset = {.x = 0, .y = 0},
+                .extent = {
+                    .width = resolution,
+                    .height = resolution
+                }
+            },
+            .clearValueCount = 1,
+            .pClearValues = &depthClear
+        };
+
+        VkViewport viewport {
+            .x = 0.f,
+            .y = 0.f,
+            .width = static_cast<float>(resolution),
+            .height = static_cast<float>(resolution),
+            .minDepth = 0.f,
+            .maxDepth = 1.f
+        };
+
+        VkRect2D scissor {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = resolution,
+                .height = resolution
+            }
+        };
+
+        for (uint32_t ii = 0; ii < dsd.cascadeCount; ++ii)
+        {
+            renderPassBeginInfo.framebuffer = mDirShadowMaps.at(i).framebuffers.at(ii);
+
+            std::string debugLabel = std::format("Shadow map {}, cascade {}", i, ii);
+            insertDebugLabel(commandBuffer, debugLabel.data());
+            vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mDirShadowPipeline);
+
+            vkCmdPushConstants(commandBuffer,
+                               mDirShadowPipeline,
+                               VK_SHADER_STAGE_VERTEX_BIT,
+                               0, sizeof(glm::mat4),
+                               glm::value_ptr(dsd.viewProj[ii]));
+
+            for (const auto& [id, model] : mModels)
+            {
+                // cull front face to prevent peter panning
+                pfnCmdSetCullModeEXT(commandBuffer, VK_CULL_MODE_FRONT_BIT);
+                pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+
+                for (const auto& mesh : model->meshes)
+                {
+                    if (model->drawOpaque(mesh))
+                    {
+                        uint32_t materialIndex = mesh.materialIndex;
+                        mesh.mesh.render(commandBuffer);
+                    }
+                }
+            }
+
+            vkCmdEndRenderPass(commandBuffer);
+        }
+    }
+
+    endDebugLabel(commandBuffer);
 }
 
 void Renderer::executePointShadowRenderpass(VkCommandBuffer commandBuffer)
@@ -929,7 +1021,7 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 0, nullptr);
 
         std::array<uint32_t, 10> pushConstants {
-            static_cast<uint32_t>(mDirectionalLights.size()),
+            static_cast<uint32_t>(mDirLights.size()),
             static_cast<uint32_t>(mPointLights.size()),
             static_cast<uint32_t>(mSpotLights.size()),
             static_cast<uint32_t>(mDebugNormals),
@@ -963,7 +1055,7 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 0, nullptr);
 
         std::array<uint32_t, 3> pushConstants {
-            static_cast<uint32_t>(mDirectionalLights.size()),
+            static_cast<uint32_t>(mDirLights.size()),
             static_cast<uint32_t>(mPointLights.size()),
             static_cast<uint32_t>(mSpotLights.size()),
         };
@@ -1477,7 +1569,7 @@ void Renderer::updateDirLightNode(GraphNode *node)
     if (node->updateGlobalTransform())
     {
         index_t lightIndex = mUuidToDirLightIndex.at(node->id());
-        DirectionalLight& light = mDirectionalLights.at(lightIndex);
+        DirectionalLight& light = mDirLights.at(lightIndex);
 
         glm::vec3 dummy;
         glm::vec3 orientation;
@@ -1848,6 +1940,175 @@ void Renderer::createPostProcessingDsLayout()
     mPostProcessingDsLayout = {mRenderDevice, specification};
 }
 
+void Renderer::addDirShadowMap()
+{
+    // add resources
+    mDirShadowData.emplace_back();
+    mDirShadowMaps.emplace_back();
+    createDirShadowMap(mDirShadowMaps.back(), mDirLights.size() - 1);
+
+    // update buffer
+    mDirShadowDataSSBO.update(0,
+                              sizeof(DirShadowData) * mDirShadowData.size(),
+                              mDirShadowData.data());
+}
+
+void Renderer::updateDirShadowsMaps()
+{
+    for (auto [id, index] : mUuidToDirLightIndex)
+    {
+        DirShadowData& dsd = mDirShadowData.at(index);
+        DirectionalLight& light = mDirLights.at(index);
+
+        std::vector<glm::vec2> cascadePlanes = calcCascadePlanes(*mCamera.nearPlane(), *mCamera.farPlane(), dsd.cascadeCount);
+
+        for (uint32_t i = 0; i < dsd.cascadeCount; ++i)
+        {
+            dsd.viewProj[i] = calcMatrices(*mCamera.fov(),
+                                           static_cast<float>(mWidth) / static_cast<float>(mHeight),
+                                           cascadePlanes.at(i)[0],
+                                           cascadePlanes.at(i)[1],
+                                           mCamera.view(),
+                                           light.direction,
+                                           dsd.zScalar);
+            dsd.cascadeDist[i] = cascadePlanes.at(i)[1];
+        }
+    }
+
+    if (!mDirLights.empty())
+        mDirShadowDataSSBO.update(0, sizeof(DirShadowData) * mDirLights.size(), mDirShadowData.data());
+}
+
+void Renderer::updateDirShadowMapImage(uuid32_t id)
+{
+    index_t i = mUuidToDirLightIndex.at(id);
+    createDirShadowMap(mDirShadowMaps.at(i), i);
+}
+
+void Renderer::createDirShadowMap(DirShadowMap &shadowMap, index_t index)
+{
+    const DirShadowData& dsd = mDirShadowData.at(index);
+
+    uint32_t resolution = dsd.resolution;
+    uint32_t cascadeCount = dsd.cascadeCount;
+
+    shadowMap.shadowMap = {
+        mRenderDevice,
+        VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+        VK_FORMAT_D32_SFLOAT,
+        resolution,
+        resolution,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_ASPECT_DEPTH_BIT,
+        1, VK_SAMPLE_COUNT_1_BIT, cascadeCount
+    };
+
+    shadowMap.shadowMap.createLayerImageViews(VK_IMAGE_VIEW_TYPE_2D);
+
+    // delete prev framebuffers
+    for (auto fb : shadowMap.framebuffers)
+        vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
+
+    // create framebuffers
+    shadowMap.framebuffers.resize(cascadeCount);
+    for (uint32_t i = 0; i < cascadeCount; ++i)
+    {
+        VkFramebufferCreateInfo framebufferCreateInfo {
+            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            .renderPass = mDirShadowRenderpass,
+            .attachmentCount = 1,
+            .pAttachments = &shadowMap.shadowMap.layerImageViews.at(i),
+            .width = resolution,
+            .height = resolution,
+            .layers = 1
+        };
+
+        VkResult result = vkCreateFramebuffer(mRenderDevice.device,
+                                              &framebufferCreateInfo,
+                                              nullptr,
+                                              &shadowMap.framebuffers.at(i));
+        vulkanCheck(result, "Failed to create framebuffer");
+        setFramebufferDebugName(mRenderDevice,
+                                shadowMap.framebuffers.at(i),
+                                std::format("DirShadowMap::framebuffers.at({})", i));
+    }
+
+    // update ds
+    VkDescriptorImageInfo imageInfo {
+        .sampler = VK_NULL_HANDLE,
+        .imageView = shadowMap.shadowMap.imageView,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet writeDescriptorSet {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = mLightsDs,
+        .dstBinding = 9,
+        .dstArrayElement = index,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .pImageInfo = &imageInfo
+    };
+
+    vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void Renderer::deleteDirShadowMap(uuid32_t id)
+{
+    index_t removeIndex = mUuidToDirLightIndex.at(id);
+    index_t lastIndex = mDirLights.size() - 1;
+
+    if (removeIndex != lastIndex)
+    {
+        // move options + shadow resources
+        std::swap(mDirShadowData.at(removeIndex), mDirShadowData.at(lastIndex));
+        std::swap(mDirShadowMaps.at(removeIndex), mDirShadowMaps.at(lastIndex));
+
+        // update ds
+        VkDescriptorImageInfo imageInfo {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = mDirShadowMaps.at(removeIndex).shadowMap.imageView,
+            .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+        };
+
+        VkWriteDescriptorSet writeDs {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = mLightsDs,
+            .dstBinding = 9,
+            .dstArrayElement = removeIndex,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .pImageInfo = &imageInfo
+        };
+
+        vkUpdateDescriptorSets(mRenderDevice.device, 1, &writeDs, 0, nullptr);
+    }
+
+    // delete last index
+    for (auto& framebuffer : mDirShadowMaps.back().framebuffers)
+        vkDestroyFramebuffer(mRenderDevice.device, framebuffer, nullptr);
+
+    mDirShadowData.pop_back();
+    mDirShadowMaps.pop_back();
+
+    // update ssbo
+    if (!mDirShadowData.empty())
+        mDirShadowDataSSBO.update(0, sizeof(DirShadowData) * mDirShadowData.size(), mDirShadowData.data());
+}
+
+DirShadowData &Renderer::getDirShadowData(uuid32_t id)
+{
+    index_t i = mUuidToDirLightIndex.at(id);
+    return mDirShadowData.at(i);
+}
+
+DirShadowMap &Renderer::getDirShadowMap(uuid32_t id)
+{
+    index_t i = mUuidToDirLightIndex.at(id);
+    return mDirShadowMaps.at(i);
+}
+
 void Renderer::addPointShadowMap()
 {
     // add resources
@@ -1970,9 +2231,7 @@ void Renderer::deletePointShadowMap(uuid32_t id)
 
     // delete last index
     for (auto & framebuffer : mPointShadowMaps.back().framebuffers)
-    {
         vkDestroyFramebuffer(mRenderDevice.device, framebuffer, nullptr);
-    }
 
     mPointShadowData.pop_back();
     mPointShadowMaps.pop_back();
@@ -2130,7 +2389,7 @@ SpotShadowMap &Renderer::getSpotShadowMap(uuid32_t id)
 
 void Renderer::createShadowMapBuffers()
 {
-    mDirShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(SpotShadowData), BufferType::Storage, MemoryType::Device};
+    mDirShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(DirShadowData), BufferType::Storage, MemoryType::Device};
     mPointShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(PointShadowData), BufferType::Storage, MemoryType::Device};
     mSpotShadowDataSSBO = {mRenderDevice, MaxDirLights * sizeof(SpotShadowData), BufferType::Storage, MemoryType::Device};
 
@@ -2173,6 +2432,97 @@ void Renderer::createShadowMapSamplers()
                              VK_OBJECT_TYPE_SAMPLER,
                              "Renderer::mSpotShadowMapSampler",
                              mSpotShadowMapSampler.sampler);
+}
+
+void Renderer::createDirShadowRenderpass()
+{
+    VkAttachmentDescription attachment {
+        .format = VK_FORMAT_D32_SFLOAT,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentReference attachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .pDepthStencilAttachment = &attachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mDirShadowRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mDirShadowRenderpass, "Renderer::mDirShadowRenderpass");
+}
+
+void Renderer::createDirShadowPipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/gen_dir_shadow_map.vert.spv",
+            .fragShaderPath = "shaders/gen_dir_shadow_map.frag.spv"
+        },
+        .vertexInput = {
+            .bindings = InstancedMesh::bindingDescriptions(),
+            .attributes = InstancedMesh::attributeDescriptions()
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .tesselation = {
+            .patchControlUnits = 0
+        },
+        .rasterization = {
+            .rasterizerDiscardPrimitives = false,
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = VK_TRUE,
+            .enableDepthWrite = VK_TRUE,
+            .depthCompareOp = VK_COMPARE_OP_LESS
+        },
+        .blendStates = {
+            {.enable = false},
+            {.enable = false}
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_CULL_MODE_EXT,
+            VK_DYNAMIC_STATE_FRONT_FACE_EXT
+        },
+        .pipelineLayout = {
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                    .offset = 0,
+                    .size = sizeof(glm::mat4)
+                }
+            }
+        },
+        .renderPass = mDirShadowRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mDirShadowPipeline"
+    };
+
+    mDirShadowPipeline = {mRenderDevice, specification};
 }
 
 void Renderer::createSpotShadowRenderpass()

@@ -59,6 +59,7 @@ public:
     void deleteSpotLight(uuid32_t id);
 
 private:
+    void executeDirShadowRenderpass(VkCommandBuffer commandBuffer);
     void executePointShadowRenderpass(VkCommandBuffer commandBuffer);
     void executeSpotShadowRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
@@ -111,14 +112,21 @@ private:
     void createForwardShadingDsLayout();
     void createPostProcessingDsLayout();
 
-    void addPointShadowMap();
+    void addDirShadowMap(); // Dir shadows
+    void updateDirShadowsMaps();
+    void updateDirShadowMapImage(uuid32_t id);
+    void createDirShadowMap(DirShadowMap& shadowMap, index_t index);
+    void deleteDirShadowMap(uuid32_t id);
+    DirShadowData& getDirShadowData(uuid32_t id);
+    DirShadowMap& getDirShadowMap(uuid32_t id);
+    void addPointShadowMap(); // point shadows
     void updatePointShadowMapData(uuid32_t id);
     void updatePointShadowMapImage(uuid32_t id);
     void createPointShadowMap(PointShadowMap& shadowMap, index_t index, uint32_t resolution);
     void deletePointShadowMap(uuid32_t id);
     PointShadowData& getPointShadowData(uuid32_t id);
     PointShadowMap& getPointShadowMap(uuid32_t id);
-    void addSpotShadowMap();
+    void addSpotShadowMap(); // spot shadows
     void updateSpotShadowMapData(uuid32_t id);
     void updateSpotShadowMapImage(uuid32_t id);
     void createSpotShadowMap(SpotShadowMap& shadowMap, index_t index, uint32_t resolution);
@@ -127,6 +135,8 @@ private:
     SpotShadowMap& getSpotShadowMap(uuid32_t id);
     void createShadowMapBuffers();
     void createShadowMapSamplers();
+    void createDirShadowRenderpass();
+    void createDirShadowPipeline();
     void createSpotShadowRenderpass();
     void createSpotShadowPipeline();
     void createPointShadowRenderpass();
@@ -300,8 +310,10 @@ private:
     VulkanGraphicsPipeline mLightIconPipeline;
 
     // Shadow mapping
+    VkRenderPass mDirShadowRenderpass{};
     VkRenderPass mPointShadowRenderpass{};
     VkRenderPass mSpotShadowRenderpass{};
+    VulkanGraphicsPipeline mDirShadowPipeline;
     VulkanGraphicsPipeline mPointShadowPipeline;
     VulkanGraphicsPipeline mSpotShadowPipeline;
     VulkanSampler mDirShadowMapSampler{};
@@ -418,7 +430,7 @@ private:
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
 
     // lights
-    std::vector<DirectionalLight> mDirectionalLights;
+    std::vector<DirectionalLight> mDirLights;
     std::vector<PointLight> mPointLights;
     std::vector<SpotLight> mSpotLights;
 
@@ -431,11 +443,11 @@ private:
     VulkanBuffer mSpotLightSSBO;
 
     // Shadow data
-    std::vector<SpotShadowData> mDirShadowData;
+    std::vector<DirShadowData> mDirShadowData;
     std::vector<PointShadowData> mPointShadowData;
     std::vector<SpotShadowData> mSpotShadowData;
 
-    std::vector<SpotShadowMap> mDirShadowMaps;
+    std::vector<DirShadowMap> mDirShadowMaps;
     std::vector<PointShadowMap> mPointShadowMaps;
     std::vector<SpotShadowMap> mSpotShadowMaps;
 

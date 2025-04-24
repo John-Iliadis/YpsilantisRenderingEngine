@@ -29,6 +29,21 @@ const uint NoShadow = 0;
 const uint HardShadow = 1;
 const uint SoftShadow = 2;
 
+const uint MaxCascades = 9;
+struct DirShadowData
+{
+    mat4 viewProj[MaxCascades];
+    float cascadeDist[MaxCascades];
+    uint shadowType;
+    uint resolution;
+    float strength;
+    float biasSlope;
+    float biasConstant;
+    int pcfRange;
+    uint cascadeCount;
+    float zScalar;
+};
+
 struct PointShadowData
 {
     mat4 viewProj[6];
@@ -58,12 +73,3 @@ float calcAttenuation(float distance, float lightRange)
     float t = clamp(distance / lightRange, 0.0, 1.0);
     return 1.0 - smoothstep(0.0, 1.0, t);
 }
-
-const vec3 sampleOffsets3D[20] = vec3[20]
-(
-    vec3( 1,  1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1,  1,  1),
-    vec3( 1,  1, -1), vec3( 1, -1, -1), vec3(-1, -1, -1), vec3(-1,  1, -1),
-    vec3( 1,  1,  0), vec3( 1, -1,  0), vec3(-1, -1,  0), vec3(-1,  1,  0),
-    vec3( 1,  0,  1), vec3(-1,  0,  1), vec3( 1,  0, -1), vec3(-1,  0, -1),
-    vec3( 0,  1,  1), vec3( 0, -1,  1), vec3( 0, -1, -1), vec3( 0,  1, -1)
-);
