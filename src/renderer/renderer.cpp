@@ -26,7 +26,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     }
 
     mCamera = Camera(glm::vec3(0.f, 1.f, 0.f),
-                     30.f,
+                     40.f,
                      static_cast<float>(mWidth),
                      static_cast<float>(mHeight));
 

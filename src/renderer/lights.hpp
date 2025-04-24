@@ -165,12 +165,9 @@ inline glm::mat4 calcMatrices(float fovY, float aspect, float nearPlane, float f
 
     glm::mat4 view = glm::lookAt(center - lightDir, center, up);
 
-    float minX = FLT_MAX;
-    float maxX = -FLT_MAX;
-    float minY = FLT_MAX;
-    float maxY = -FLT_MAX;
-    float minZ = FLT_MAX;
-    float maxZ = -FLT_MAX;
+    float minX = FLT_MAX, maxX = -FLT_MAX;
+    float minY = FLT_MAX, maxY = -FLT_MAX;
+    float minZ = FLT_MAX, maxZ = -FLT_MAX;
 
     for (const glm::vec4& point : frustumCorners)
     {
@@ -195,20 +192,15 @@ inline glm::mat4 calcMatrices(float fovY, float aspect, float nearPlane, float f
 
 inline std::vector<glm::vec2> calcCascadePlanes(float nearPlane, float farPlane, int cascadeCount)
 {
-    constexpr float CascadeSplitLambda = 0.5f;
-
     std::vector<glm::vec2> cascadePlanes;
     cascadePlanes.resize(cascadeCount);
 
     for (int i = 0; i < cascadeCount; ++i)
     {
         float p = static_cast<float>(i + 1) / static_cast<float>(cascadeCount);
-        float logSplit = nearPlane * glm::pow(farPlane / nearPlane, p);
-        float linearSplit = nearPlane + (farPlane - nearPlane) * p;
-        float split = CascadeSplitLambda * (logSplit - linearSplit) + linearSplit;
 
         float cascadeNear = (i == 0) ? nearPlane : cascadePlanes[i - 1][1];
-        float cascadeFar = split;
+        float cascadeFar = nearPlane + (farPlane - nearPlane) * p;
 
         cascadePlanes.at(i) = glm::vec2(cascadeNear, cascadeFar);
     }
