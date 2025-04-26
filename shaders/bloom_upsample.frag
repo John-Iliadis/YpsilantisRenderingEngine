@@ -6,6 +6,7 @@ layout (location = 0) out vec4 outFragColor;
 
 layout (push_constant) uniform PushConstants
 {
+    float filterRadius;
     float width;
     float height;
 };
@@ -20,21 +21,19 @@ const vec2 offsets[9] = vec2[9] (
 
 void main()
 {
-    vec2 srcTexelSize = 1.0 / vec2(width, height);
-
     // Take 9 samples around current texel:
     // A - B - C
     // D - E - F
     // G - H - I
-    vec4 A = texture(srcTexture, vTexCoords + srcTexelSize * offsets[0]);
-    vec4 B = texture(srcTexture, vTexCoords + srcTexelSize * offsets[1]);
-    vec4 C = texture(srcTexture, vTexCoords + srcTexelSize * offsets[2]);
-    vec4 D = texture(srcTexture, vTexCoords + srcTexelSize * offsets[3]);
-    vec4 E = texture(srcTexture, vTexCoords + srcTexelSize * offsets[4]);
-    vec4 F = texture(srcTexture, vTexCoords + srcTexelSize * offsets[5]);
-    vec4 G = texture(srcTexture, vTexCoords + srcTexelSize * offsets[6]);
-    vec4 H = texture(srcTexture, vTexCoords + srcTexelSize * offsets[7]);
-    vec4 I = texture(srcTexture, vTexCoords + srcTexelSize * offsets[8]);
+    vec4 A = texture(srcTexture, vTexCoords + filterRadius * offsets[0]);
+    vec4 B = texture(srcTexture, vTexCoords + filterRadius * offsets[1]);
+    vec4 C = texture(srcTexture, vTexCoords + filterRadius * offsets[2]);
+    vec4 D = texture(srcTexture, vTexCoords + filterRadius * offsets[3]);
+    vec4 E = texture(srcTexture, vTexCoords + filterRadius * offsets[4]);
+    vec4 F = texture(srcTexture, vTexCoords + filterRadius * offsets[5]);
+    vec4 G = texture(srcTexture, vTexCoords + filterRadius * offsets[6]);
+    vec4 H = texture(srcTexture, vTexCoords + filterRadius * offsets[7]);
+    vec4 I = texture(srcTexture, vTexCoords + filterRadius * offsets[8]);
 
     outFragColor = E * 4.0;
     outFragColor += (B + D + F + H) * 2.0;

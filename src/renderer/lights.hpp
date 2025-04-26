@@ -53,7 +53,7 @@ struct alignas(16) DirShadowData
 {
     glm::mat4 viewProj[MaxCascades] {};
     float cascadeDist[MaxCascades] {};
-    ShadowType shadowType = ShadowType::HardShadow;
+    ShadowType shadowType = ShadowType::NoShadow;
     uint32_t resolution = 1024;
     float strength = 1;
     float biasSlope = 0.f;
@@ -72,7 +72,7 @@ struct DirShadowMap
 struct PointShadowData
 {
     glm::mat4 viewProj[6] {};
-    ShadowType shadowType = ShadowType::HardShadow;
+    ShadowType shadowType = ShadowType::NoShadow;
     uint32_t resolution = 1024;
     float strength = 1;
     float biasSlope = 0.2f;
@@ -90,7 +90,7 @@ struct PointShadowMap
 struct SpotShadowData
 {
     glm::mat4 viewProj {};
-    ShadowType shadowType = ShadowType::HardShadow;
+    ShadowType shadowType = ShadowType::NoShadow;
     uint32_t resolution = 1024;
     float strength = 1;
     float biasSlope = 0.f;

@@ -1260,7 +1260,8 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
             }
         };
 
-        float pushConstants[2] {
+        float pushConstants[3] {
+            mFilterRadius,
             static_cast<float>(mWidth),
             static_cast<float>(mHeight)
         };
@@ -5646,12 +5647,24 @@ void Renderer::createBloomUpsampleRenderpass()
         .pColorAttachments = &attachmentRef,
     };
 
+    VkSubpassDependency dependency {
+        .srcSubpass = 0,
+        .dstSubpass = VK_SUBPASS_EXTERNAL,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT
+    };
+
     VkRenderPassCreateInfo renderPassCreateInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = 1,
         .pAttachments = &attachment,
         .subpassCount = 1,
-        .pSubpasses = &subpass
+        .pSubpasses = &subpass,
+        .dependencyCount = 1,
+        .pDependencies = &dependency
     };
 
     VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mBloomUpsampleRenderpass);
@@ -5727,7 +5740,7 @@ void Renderer::createBloomUpsamplePipeline()
                 {
                     .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                     .offset = 0,
-                    .size = sizeof(float) * 2
+                    .size = sizeof(float) * 3
                 }
             }
         },
