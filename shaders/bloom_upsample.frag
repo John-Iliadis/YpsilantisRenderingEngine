@@ -6,32 +6,39 @@ layout (location = 0) out vec4 outFragColor;
 
 layout (push_constant) uniform PushConstants
 {
-    float filterRadius;
+    float width;
+    float height;
 };
 
 layout (set = 0, binding = 0) uniform sampler2D srcTexture;
 
-const float tentFilter[9] = float[9] (
-    1.0/16, 2.0/16, 1.0/16,
-    2.0/16, 4.0/16, 2.0/16,
-    1.0/16, 2.0/16, 1.0/16
+const vec2 offsets[9] = vec2[9] (
+    vec2(-1.0,  1.0), vec2(0.0, 1.0), vec2(1.0, 1.0),
+    vec2(-1.0,  0.0), vec2(0.0, 0.0), vec2(1.0, 0.0),
+    vec2(-1.0,  -1.0), vec2(0.0, -1.0), vec2(1.0, -1.0)
 );
 
 void main()
 {
+    vec2 srcTexelSize = 1.0 / vec2(width, height);
+
     // Take 9 samples around current texel:
     // A - B - C
     // D - E - F
     // G - H - I
-    vec2 offsets[9] = vec2[9] (
-       vec2(-filterRadius, filterRadius), vec2(0.0, filterRadius), vec2(filterRadius, filterRadius),
-       vec2(-filterRadius, 0.0), vec2(0.0, 0.0), vec2(filterRadius, 0.0),
-       vec2(-filterRadius, -filterRadius), vec2(0.0, -filterRadius), vec2(filterRadius, -filterRadius)
-    );
+    vec4 A = texture(srcTexture, vTexCoords + srcTexelSize * offsets[0]);
+    vec4 B = texture(srcTexture, vTexCoords + srcTexelSize * offsets[1]);
+    vec4 C = texture(srcTexture, vTexCoords + srcTexelSize * offsets[2]);
+    vec4 D = texture(srcTexture, vTexCoords + srcTexelSize * offsets[3]);
+    vec4 E = texture(srcTexture, vTexCoords + srcTexelSize * offsets[4]);
+    vec4 F = texture(srcTexture, vTexCoords + srcTexelSize * offsets[5]);
+    vec4 G = texture(srcTexture, vTexCoords + srcTexelSize * offsets[6]);
+    vec4 H = texture(srcTexture, vTexCoords + srcTexelSize * offsets[7]);
+    vec4 I = texture(srcTexture, vTexCoords + srcTexelSize * offsets[8]);
 
-    outFragColor = vec4(0.0);
-    for (int i = 0; i < 9; ++i)
-    {
-        outFragColor += texture(srcTexture, vTexCoords + offsets[i]) * tentFilter[i];
-    }
+    outFragColor = E * 4.0;
+    outFragColor += (B + D + F + H) * 2.0;
+    outFragColor += (A + C + G + I);
+    outFragColor *= 1.0 / 16.0;
+    outFragColor.a = 1.0;
 }

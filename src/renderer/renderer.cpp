@@ -1110,16 +1110,35 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
         .renderArea = {
             .offset = {.x = 0, .y = 0},
             .extent = {
-                .width = mWidth,
-                .height = mHeight
+                .width = mBloomMipChain.at(0).width,
+                .height = mBloomMipChain.at(0).height
             }
         },
         .clearValueCount = 1,
         .pClearValues = &clearValue
     };
 
+    VkViewport viewport {
+        .x = 0.f,
+        .y = 0.f,
+        .width = static_cast<float>(mBloomMipChain.at(0).width),
+        .height = static_cast<float>(mBloomMipChain.at(0).height),
+        .minDepth = 0.f,
+        .maxDepth = 1.f
+    };
+
+    VkRect2D scissor {
+        .offset = {.x = 0, .y = 0},
+        .extent = {
+            .width = mBloomMipChain.at(0).width,
+            .height = mBloomMipChain.at(0).height
+        }
+    };
+
     beginDebugLabel(commandBuffer, "Capture Bright Pixels Pass");
     vkCmdBeginRenderPass(commandBuffer, &captureBrightPixelsRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mCaptureBrightPixelsPipeline);
     vkCmdBindDescriptorSets(commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1241,6 +1260,11 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
             }
         };
 
+        float pushConstants[2] {
+            static_cast<float>(mWidth),
+            static_cast<float>(mHeight)
+        };
+
         vkCmdBeginRenderPass(commandBuffer, &mipChainUpsampleRenderpassInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
@@ -1253,13 +1277,14 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
         vkCmdPushConstants(commandBuffer,
                            mBloomUpsamplePipeline,
                            VK_SHADER_STAGE_FRAGMENT_BIT,
-                           0, sizeof(float),
-                           &mFilterRadius);
+                           0, sizeof(pushConstants),
+                           pushConstants);
         if (mBloomOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
         vkCmdEndRenderPass(commandBuffer);
     }
 
     endDebugLabel(commandBuffer);
+    setViewport(commandBuffer);
 }
 
 void Renderer::executePostProcessingRenderpass(VkCommandBuffer commandBuffer)
@@ -5435,8 +5460,8 @@ void Renderer::createCaptureBrightPixelsFramebuffer()
         .renderPass = mCaptureBrightPixelsRenderpass,
         .attachmentCount = 1,
         .pAttachments = &mBloomMipChain.at(0).imageView,
-        .width = mWidth,
-        .height = mHeight,
+        .width = mBloomMipChain.at(0).width,
+        .height = mBloomMipChain.at(0).height,
         .layers = 1
     };
 
@@ -5682,7 +5707,15 @@ void Renderer::createBloomUpsamplePipeline()
             .enableDepthWrite = false
         },
         .blendStates = {
-            {.enable = false}
+            {
+                .enable = true,
+                .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+                .dstColorBlendFactor = VK_BLEND_FACTOR_ONE,
+                .colorBlendOp = VK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+                .alphaBlendOp = VK_BLEND_OP_ADD
+            }
         },
         .dynamicStates = {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -5694,7 +5727,7 @@ void Renderer::createBloomUpsamplePipeline()
                 {
                     .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                     .offset = 0,
-                    .size = sizeof(float)
+                    .size = sizeof(float) * 2
                 }
             }
         },
