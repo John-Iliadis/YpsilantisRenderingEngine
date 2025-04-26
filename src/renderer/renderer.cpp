@@ -96,6 +96,10 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createOpaqueForwardPassPipeline();
     createForwardPassBlendPipeline();
 
+    createWireframeRenderpass();
+    createWireframeFramebuffer();
+    createWireframePipeline();
+
     createGridRenderpass();
     createGridFramebuffer();
     createGridPipeline();
@@ -185,6 +189,7 @@ Renderer::~Renderer()
     vkDestroyFramebuffer(mRenderDevice.device, mIrradianceConvolutionFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mBrdfLutFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mCaptureBrightPixelsFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mWireframeFramebuffer, nullptr);
     for (auto fb : mPrefilterFramebuffers)
         vkDestroyFramebuffer(mRenderDevice.device, fb, nullptr);
     for (auto fb : mBloomDownsampleFramebuffers)
@@ -218,6 +223,7 @@ Renderer::~Renderer()
     vkDestroyRenderPass(mRenderDevice.device, mDirShadowRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mPointShadowRenderpass, nullptr);
     vkDestroyRenderPass(mRenderDevice.device, mSpotShadowRenderpass, nullptr);
+    vkDestroyRenderPass(mRenderDevice.device, mWireframeRenderpass, nullptr);
 }
 
 void Renderer::update()
@@ -240,6 +246,7 @@ void Renderer::render(VkCommandBuffer commandBuffer)
     executeGenFrustumClustersRenderpass(commandBuffer);
     executeAssignLightsToClustersRenderpass(commandBuffer);
     executeForwardRenderpass(commandBuffer);
+    executeWireframeRenderpass(commandBuffer);
     executeBloomRenderpass(commandBuffer);
     executePostProcessingRenderpass(commandBuffer);
     executeGridRenderpass(commandBuffer);
@@ -318,6 +325,7 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createCaptureBrightPixelsFramebuffer();
     createBloomDownsampleFramebuffers();
     createBloomUpsampleFramebuffers();
+    createWireframeFramebuffer();
 
     createSingleImageDescriptorSets();
     createSsaoDs();
@@ -487,13 +495,8 @@ void Renderer::executeDirShadowRenderpass(VkCommandBuffer commandBuffer)
                 pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
 
                 for (const auto& mesh : model->meshes)
-                {
                     if (model->drawOpaque(mesh))
-                    {
-                        uint32_t materialIndex = mesh.materialIndex;
                         mesh.mesh.render(commandBuffer);
-                    }
-                }
             }
 
             vkCmdEndRenderPass(commandBuffer);
@@ -587,13 +590,8 @@ void Renderer::executePointShadowRenderpass(VkCommandBuffer commandBuffer)
                 pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
 
                 for (const auto& mesh : model->meshes)
-                {
                     if (model->drawOpaque(mesh))
-                    {
-                        uint32_t materialIndex = mesh.materialIndex;
                         mesh.mesh.render(commandBuffer);
-                    }
-                }
             }
 
             vkCmdEndRenderPass(commandBuffer);
@@ -665,13 +663,8 @@ void Renderer::executeSpotShadowRenderpass(VkCommandBuffer commandBuffer)
             pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
 
             for (const auto& mesh : model->meshes)
-            {
                 if (model->drawOpaque(mesh))
-                {
-                    uint32_t materialIndex = mesh.materialIndex;
                     mesh.mesh.render(commandBuffer);
-                }
-            }
         }
 
         vkCmdEndRenderPass(commandBuffer);
@@ -1092,6 +1085,75 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                 0, 1, &mTransparentTexInputAttachmentDs,
                                 0, nullptr);
         vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    }
+
+    vkCmdEndRenderPass(commandBuffer);
+    endDebugLabel(commandBuffer);
+}
+
+void Renderer::executeWireframeRenderpass(VkCommandBuffer commandBuffer)
+{
+    if (!mWireframeOn)
+        return;
+
+    VkRenderPassBeginInfo renderPassBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = mWireframeRenderpass,
+        .framebuffer = mWireframeFramebuffer,
+        .renderArea = {
+            .offset = {.x = 0, .y = 0},
+            .extent = {
+                .width = mWidth,
+                .height = mHeight
+            }
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr
+    };
+
+    glm::mat4 viewportMat = glm::identity<glm::mat4>();
+    viewportMat[0][0] = static_cast<float>(mWidth) / 2.f;
+    viewportMat[1][1] = static_cast<float>(mHeight) / 2.f;
+    viewportMat[3][0] = viewportMat[0][0];
+    viewportMat[3][1] = viewportMat[1][1];
+
+    float pushConstants[5] {
+        mWireframeColor[0],
+        mWireframeColor[1],
+        mWireframeColor[2],
+        mWireframeColor[3],
+        mWireframeWidth
+    };
+
+    beginDebugLabel(commandBuffer, "Wireframe");
+    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mWireframePipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mWireframePipeline,
+                            0, 1, &mCameraDs,
+                            0, nullptr);
+
+    vkCmdPushConstants(commandBuffer,
+                       mWireframePipeline,
+                       VK_SHADER_STAGE_GEOMETRY_BIT,
+                       0, sizeof(glm::mat4),
+                       glm::value_ptr(viewportMat));
+
+    vkCmdPushConstants(commandBuffer,
+                       mWireframePipeline,
+                       VK_SHADER_STAGE_FRAGMENT_BIT,
+                       sizeof(glm::mat4), sizeof(pushConstants),
+                       pushConstants);
+
+    for (const auto& [id, model] : mModels)
+    {
+        pfnCmdSetCullModeEXT(commandBuffer, model->cullMode);
+        pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+
+        for (const auto& mesh : model->meshes)
+            if (model->drawOpaque(mesh))
+                mesh.mesh.render(commandBuffer);
     }
 
     vkCmdEndRenderPass(commandBuffer);
@@ -3977,6 +4039,152 @@ void Renderer::createForwardPassBlendPipeline()
     };
 
     mForwardPassBlendPipeline = {mRenderDevice, specification};
+}
+
+void Renderer::createWireframeRenderpass()
+{
+    VkAttachmentDescription colorAttachment {
+        .format = mColorTexture32F.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkAttachmentDescription depthAttachment {
+        .format = mDepthTexture.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    std::array<VkAttachmentDescription, 2> attachments {
+        colorAttachment,
+        depthAttachment
+    };
+
+    VkAttachmentReference colorAttachmentRef {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    VkAttachmentReference depthAttachmentRef {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+
+    VkSubpassDescription subpass {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentRef,
+        .pDepthStencilAttachment = &depthAttachmentRef
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+    };
+
+    VkResult result = vkCreateRenderPass(mRenderDevice.device, &renderPassCreateInfo, nullptr, &mWireframeRenderpass);
+    vulkanCheck(result, "Failed to create renderpass.");
+    setRenderpassDebugName(mRenderDevice, mWireframeRenderpass, "Renderer::mWireframeRenderpass");
+}
+
+void Renderer::createWireframeFramebuffer()
+{
+    vkDestroyFramebuffer(mRenderDevice.device, mWireframeFramebuffer, nullptr);
+
+    std::array<VkImageView, 2> attachments {
+        mColorTexture32F.imageView,
+        mDepthTexture.imageView
+    };
+
+    VkFramebufferCreateInfo framebufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = mWireframeRenderpass,
+        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .pAttachments = attachments.data(),
+        .width = mWidth,
+        .height = mHeight,
+        .layers = 1
+    };
+
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mWireframeFramebuffer);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mWireframeFramebuffer, "Renderer::mWireframeFramebuffer");
+}
+
+void Renderer::createWireframePipeline()
+{
+    PipelineSpecification specification {
+        .shaderStages = {
+            .vertShaderPath = "shaders/wireframe.vert.spv",
+            .geomShaderPath = "shaders/wireframe.geom.spv",
+            .fragShaderPath = "shaders/wireframe.frag.spv"
+        },
+        .vertexInput {
+            .bindings = InstancedMesh::bindingDescriptions(),
+            .attributes = InstancedMesh::attributeDescriptions()
+        },
+        .inputAssembly = {
+            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+        },
+        .rasterization = {
+            .polygonMode = VK_POLYGON_MODE_FILL,
+            .lineWidth = 1.f
+        },
+        .multisampling = {
+            .samples = VK_SAMPLE_COUNT_1_BIT
+        },
+        .depthStencil = {
+            .enableDepthTest = true,
+            .enableDepthWrite = false,
+            .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL
+        },
+        .blendStates = {
+            {
+                .enable = true,
+                .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+                .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                .colorBlendOp = VK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+                .alphaBlendOp = VK_BLEND_OP_ADD
+            }
+        },
+        .dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+            VK_DYNAMIC_STATE_CULL_MODE_EXT,
+            VK_DYNAMIC_STATE_FRONT_FACE_EXT
+        },
+        .pipelineLayout = {
+            .dsLayouts = {mCameraRenderDataDsLayout},
+            .pushConstantRanges = {
+                {
+                    .stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT,
+                    .offset = 0,
+                    .size = sizeof(glm::mat4)
+                },
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = sizeof(glm::mat4),
+                    .size = sizeof(float) * 5
+                }
+            }
+        },
+        .renderPass = mWireframeRenderpass,
+        .subpassIndex = 0,
+        .debugName = "Renderer::mWireframePipeline"
+    };
+
+    mWireframePipeline = {mRenderDevice, specification};
 }
 
 void Renderer::createPostProcessingRenderpass()

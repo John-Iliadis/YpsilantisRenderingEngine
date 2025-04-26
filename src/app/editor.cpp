@@ -313,6 +313,15 @@ void Editor::rendererPanel()
         helpMarker(mem.data());
     }
 
+    if (ImGui::CollapsingHeader("Wireframe", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::Checkbox("Wireframe On", &mRenderer.mWireframeOn);
+        ImGui::Separator();
+
+        ImGui::ColorEdit3("Wireframe Color", glm::value_ptr(mRenderer.mWireframeColor));
+        ImGui::SliderFloat("Wireframe Width", &mRenderer.mWireframeWidth, 0.f, 10.f);
+    }
+
 //    skyboxImportPopup();
 
     ImGui::End();

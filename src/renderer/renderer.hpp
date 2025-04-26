@@ -69,6 +69,7 @@ private:
     void executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer);
     void executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBuffer);
     void executeForwardRenderpass(VkCommandBuffer commandBuffer);
+    void executeWireframeRenderpass(VkCommandBuffer commandBuffer);
     void executeBloomRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
     void executeGridRenderpass(VkCommandBuffer commandBuffer);
@@ -177,6 +178,10 @@ private:
     void createOitTransparentCollectionPipeline();
     void createOitTransparencyResolutionPipeline();
     void createForwardPassBlendPipeline();
+
+    void createWireframeRenderpass();
+    void createWireframeFramebuffer();
+    void createWireframePipeline();
 
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
@@ -356,9 +361,16 @@ private:
     float mSkyboxFov = 45.f;
     const uint32_t mMaxPrefilterMipLevels = 6;
 
+    // Wireframe
+    glm::vec4 mWireframeColor {0.f, 1.f, 0.f, 1.f};
+    float mWireframeWidth = 2.f;
+    VkRenderPass mWireframeRenderpass{};
+    VkFramebuffer mWireframeFramebuffer{};
+    VulkanGraphicsPipeline mWireframePipeline;
+
     // Bloom
     static constexpr uint32_t BloomMipChainSize = 6;
-    float mBrightnessThreshold = 1.f;
+    float mBrightnessThreshold = 1.2f;
     float mFilterRadius = 0.005f;
     float mBloomStrength = 1.f;
     std::array<VulkanTexture, BloomMipChainSize> mBloomMipChain;
@@ -483,6 +495,7 @@ private:
     bool mBloomOn = false;
     bool mRenderGrid = true;
     bool mDebugNormals = false;
+    bool mWireframeOn = false;
 
 private:
     friend class Editor;
