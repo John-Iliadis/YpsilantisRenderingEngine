@@ -13,7 +13,7 @@ layout (push_constant) uniform PushConstants
 
 layout (set = 0, binding = 1) uniform samplerCube envMap;
 
-const uint sampleCount = 1024;
+const uint sampleCount = 500;
 
 void main()
 {

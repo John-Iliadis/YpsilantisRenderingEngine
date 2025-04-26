@@ -59,9 +59,9 @@ public:
     void deleteSpotLight(uuid32_t id);
 
 private:
-    void executeDirShadowRenderpass(VkCommandBuffer commandBuffer);
-    void executePointShadowRenderpass(VkCommandBuffer commandBuffer);
-    void executeSpotShadowRenderpass(VkCommandBuffer commandBuffer);
+    void executeDirShadowRenderpass(VkCommandBuffer commandBuffer); // check
+    void executePointShadowRenderpass(VkCommandBuffer commandBuffer); // check
+    void executeSpotShadowRenderpass(VkCommandBuffer commandBuffer); // check
     void executePrepass(VkCommandBuffer commandBuffer);
     void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
@@ -69,9 +69,9 @@ private:
     void executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer);
     void executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBuffer);
     void executeForwardRenderpass(VkCommandBuffer commandBuffer);
-    void executeWireframeRenderpass(VkCommandBuffer commandBuffer);
     void executeBloomRenderpass(VkCommandBuffer commandBuffer);
     void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
+    void executeWireframeRenderpass(VkCommandBuffer commandBuffer);
     void executeGridRenderpass(VkCommandBuffer commandBuffer);
     void executeLightIconRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
@@ -179,13 +179,13 @@ private:
     void createOitTransparencyResolutionPipeline();
     void createForwardPassBlendPipeline();
 
-    void createWireframeRenderpass();
-    void createWireframeFramebuffer();
-    void createWireframePipeline();
-
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
     void createPostProcessingPipeline();
+
+    void createWireframeRenderpass();
+    void createWireframeFramebuffer();
+    void createWireframePipeline();
 
     void createGridRenderpass();
     void createGridFramebuffer();
