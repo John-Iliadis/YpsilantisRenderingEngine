@@ -423,7 +423,7 @@ void Editor::ssaoTextureDebugWin()
     ImGui::Begin("SSAO Output Texture", &mShowSSAOOutputTexture, ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleVar(2);
 
-    ImTextureID textureId = static_cast<ImTextureID>(mRenderer.mSsaoBlurTextureDs);
+    ImTextureID textureId = static_cast<ImTextureID>(mRenderer.mSsaoBlurTexture2Ds);
     ImGui::Image(textureId, mViewportSize);
 
     ImGui::End();

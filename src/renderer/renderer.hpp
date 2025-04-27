@@ -61,19 +61,19 @@ public:
 private:
     void executeDirShadowRenderpass(VkCommandBuffer commandBuffer); // check
     void executePointShadowRenderpass(VkCommandBuffer commandBuffer); // check
-    void executeSpotShadowRenderpass(VkCommandBuffer commandBuffer); // check
+    void executeSpotShadowRenderpass(VkCommandBuffer commandBuffer); // check --
     void executePrepass(VkCommandBuffer commandBuffer);
-    void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
+    void executeSkyboxRenderpass(VkCommandBuffer commandBuffer); // check
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
-    void executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer);
-    void executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer);
-    void executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBuffer);
-    void executeForwardRenderpass(VkCommandBuffer commandBuffer);
-    void executeBloomRenderpass(VkCommandBuffer commandBuffer);
-    void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
-    void executeWireframeRenderpass(VkCommandBuffer commandBuffer);
-    void executeGridRenderpass(VkCommandBuffer commandBuffer);
-    void executeLightIconRenderpass(VkCommandBuffer commandBuffer);
+    void executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer); // check
+    void executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer); // check
+    void executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBuffer); // check
+    void executeForwardRenderpass(VkCommandBuffer commandBuffer); // --
+    void executeBloomRenderpass(VkCommandBuffer commandBuffer); // check
+    void executePostProcessingRenderpass(VkCommandBuffer commandBuffer); // check
+    void executeWireframeRenderpass(VkCommandBuffer commandBuffer); // check
+    void executeGridRenderpass(VkCommandBuffer commandBuffer); // check
+    void executeLightIconRenderpass(VkCommandBuffer commandBuffer); // check
     void setViewport(VkCommandBuffer commandBuffer);
     void renderOpaque(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
     void renderTransparent(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
@@ -164,7 +164,7 @@ private:
     void createSsaoRenderpass();
     void createSsaoFramebuffer();
     void createSsaoBlurRenderpass();
-    void createSsaoBlurFramebuffer();
+    void createSsaoBlurFramebuffers();
     void createSsaoPipeline();
     void createSsaoBlurPipeline();
 
@@ -279,7 +279,8 @@ private:
     VulkanTexture mPosTexture;
     VulkanTexture mNormalTexture;
     VulkanTexture mSsaoTexture;
-    VulkanTexture mSsaoBlurTexture;
+    VulkanTexture mSsaoBlurTexture1;
+    VulkanTexture mSsaoBlurTexture2;
 
     // render passes
     VkRenderPass mPrepassRenderpass{};
@@ -296,7 +297,8 @@ private:
     VkFramebuffer mSkyboxFramebuffer{};
     VkFramebuffer mForwardPassFramebuffer{};
     VkFramebuffer mSsaoFramebuffer{};
-    VkFramebuffer mSsaoBlurFramebuffer{};
+    VkFramebuffer mSsaoBlurFramebuffer1{};
+    VkFramebuffer mSsaoBlurFramebuffer2{};
     VkFramebuffer mGridFramebuffer{};
     VkFramebuffer mPostProcessingFramebuffer{};
     VkFramebuffer mLightIconFramebuffer{};
@@ -324,6 +326,16 @@ private:
     VulkanSampler mDirShadowMapSampler{};
     VulkanSampler mPointShadowMapSampler{};
     VulkanSampler mSpotShadowMapSampler{};
+
+    // ssao
+    std::uniform_real_distribution<float> mSsaoDistribution {0.f, 1.f};
+    std::default_random_engine mSsaoRandomEngine;
+    float mSsaoRadius = 0.5f;
+    float mSsaoIntensity = 1.f;
+    float mSsaoDepthBias = 0.025f;
+    std::vector<glm::vec4> mSsaoKernel;
+    VulkanBuffer mSsaoKernelSSBO;
+    VulkanTexture mSsaoNoiseTexture;
 
     // forward+ rendering
     glm::uvec3 mClusterGridSize = glm::vec3(16, 16, 24);
@@ -403,7 +415,8 @@ private:
     VkDescriptorSet mCameraDs{};
     VkDescriptorSet mSsaoDs{};
     VkDescriptorSet mSsaoTextureDs{};
-    VkDescriptorSet mSsaoBlurTextureDs{};
+    VkDescriptorSet mSsaoBlurTexture1Ds{};
+    VkDescriptorSet mSsaoBlurTexture2Ds{};
     VkDescriptorSet mDepthDs{};
     VkDescriptorSet mSkyboxDs{};
     VkDescriptorSet mColor32FDs{};
@@ -414,16 +427,6 @@ private:
     VkDescriptorSet mAssignLightsToClustersDs{};
     VkDescriptorSet mForwardShadingDs{};
     VkDescriptorSet mPostProcessingDs{};
-
-    // ssao
-    std::uniform_real_distribution<float> mSsaoDistribution {0.f, 1.f};
-    std::default_random_engine mSsaoRandomEngine;
-    float mSsaoRadius = 0.5f;
-    float mSsaoIntensity = 1.f;
-    float mSsaoDepthBias = 0.025f;
-    std::vector<glm::vec4> mSsaoKernel;
-    VulkanBuffer mSsaoKernelSSBO;
-    VulkanTexture mSsaoNoiseTexture;
 
     // gizmo icons
     VulkanTexture mTranslateIcon;

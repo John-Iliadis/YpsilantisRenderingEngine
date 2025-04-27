@@ -81,7 +81,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createSsaoRenderpass();
     createSsaoFramebuffer();
     createSsaoBlurRenderpass();
-    createSsaoBlurFramebuffer();
+    createSsaoBlurFramebuffers();
     createSsaoPipeline();
     createSsaoBlurPipeline();
 
@@ -181,7 +181,8 @@ Renderer::~Renderer()
     vkDestroyFramebuffer(mRenderDevice.device, mSkyboxFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mForwardPassFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mSsaoFramebuffer, nullptr);
-    vkDestroyFramebuffer(mRenderDevice.device, mSsaoBlurFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mSsaoBlurFramebuffer1, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mSsaoBlurFramebuffer2, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mGridFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mPostProcessingFramebuffer, nullptr);
     vkDestroyFramebuffer(mRenderDevice.device, mLightIconFramebuffer, nullptr);
@@ -296,7 +297,8 @@ void Renderer::resize(uint32_t width, uint32_t height)
     std::vector<VkDescriptorSet> freeDs {
         mSsaoDs,
         mSsaoTextureDs,
-        mSsaoBlurTextureDs,
+        mSsaoBlurTexture1Ds,
+        mSsaoBlurTexture2Ds,
         mDepthDs,
         mColor32FDs,
         mColor8UDs,
@@ -317,7 +319,7 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createPrepassFramebuffer();
     createSkyboxFramebuffer();
     createSsaoFramebuffer();
-    createSsaoBlurFramebuffer();
+    createSsaoBlurFramebuffers();
     createForwardFramebuffer();
     createGridFramebuffer();
     createPostProcessingFramebuffer();
@@ -818,40 +820,80 @@ void Renderer::executeSsaoRenderpass(VkCommandBuffer commandBuffer)
 
 void Renderer::executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer)
 {
-    VkClearValue ssaoClear {.color = {1.f}};
+    beginDebugLabel(commandBuffer, "SSAO Blur Renderpass");
 
+    VkClearValue ssaoClear {.color = {1.f}};
     VkRenderPassBeginInfo renderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = mSsaoBlurRenderpass,
-        .framebuffer = mSsaoBlurFramebuffer,
+        .framebuffer = mSsaoBlurFramebuffer1,
         .renderArea = {
             .offset = {.x = 0, .y = 0},
-            .extent = {.width = mWidth, .height = mHeight}
+            .extent = {
+                .width = mWidth,
+                .height = mHeight
+            }
         },
         .clearValueCount = 1,
         .pClearValues = &ssaoClear
     };
 
-    beginDebugLabel(commandBuffer, "SSAO Blur Renderpass");
-    vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSsaoBlurPipeline);
-
-    vkCmdBindDescriptorSets(commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mSsaoBlurPipeline,
-                            0, 1, &mSsaoTextureDs,
-                            0, nullptr);
-
     glm::vec2 texelSize = 1.f / glm::vec2(mWidth, mHeight);
-    vkCmdPushConstants(commandBuffer,
-                       mSsaoBlurPipeline,
-                       VK_SHADER_STAGE_FRAGMENT_BIT,
-                       0, sizeof(glm::vec2),
-                       &texelSize);
 
-    if (mSsaoOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    { // blur horizontal
+        glm::vec2 pushConstants[2] {
+            texelSize,
+            glm::vec2(1.f, 0.f)
+        };
 
-    vkCmdEndRenderPass(commandBuffer);
+        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSsaoBlurPipeline);
+
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mSsaoBlurPipeline,
+                                0, 1, &mSsaoTextureDs,
+                                0, nullptr);
+
+        vkCmdPushConstants(commandBuffer,
+                           mSsaoBlurPipeline,
+                           VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(pushConstants),
+                           pushConstants);
+
+        if (mSsaoOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+        vkCmdEndRenderPass(commandBuffer);
+    }
+
+    { // blur vertical
+        renderPassBeginInfo.framebuffer = mSsaoBlurFramebuffer2;
+
+        glm::vec2 pushConstants[2] {
+            texelSize,
+            glm::vec2(0.f, 1.f)
+        };
+
+        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mSsaoBlurPipeline);
+
+        vkCmdBindDescriptorSets(commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                mSsaoBlurPipeline,
+                                0, 1, &mSsaoBlurTexture1Ds,
+                                0, nullptr);
+
+        vkCmdPushConstants(commandBuffer,
+                           mSsaoBlurPipeline,
+                           VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(pushConstants),
+                           pushConstants);
+
+        if (mSsaoOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+        vkCmdEndRenderPass(commandBuffer);
+    }
+
     endDebugLabel(commandBuffer);
 }
 
@@ -1849,8 +1891,13 @@ void Renderer::createSsaoTextures()
     mSsaoTexture = VulkanTexture(mRenderDevice, specification);
     mSsaoTexture.setDebugName("Renderer::mSsaoTexture");
 
-    mSsaoBlurTexture = VulkanTexture(mRenderDevice, specification);
-    mSsaoBlurTexture.setDebugName("Renderer::mSsaoBlurTexture");
+    mSsaoBlurTexture1 = VulkanTexture(mRenderDevice, specification);
+    mSsaoBlurTexture1.setDebugName("Renderer::mSsaoBlurTexture1");
+
+    specification.magFilter = TextureMagFilter::Linear;
+    specification.minFilter = TextureMinFilter::LinearMipmapNearest;
+    mSsaoBlurTexture2 = VulkanTexture(mRenderDevice, specification);
+    mSsaoBlurTexture2.setDebugName("Renderer::mSsaoBlurTexture2");
 }
 
 void Renderer::createSingleImageDsLayout()
@@ -3353,7 +3400,7 @@ void Renderer::createSsaoFramebuffer()
 void Renderer::createSsaoBlurRenderpass()
 {
     VkAttachmentDescription ssaoBlurAttachment {
-        .format = mSsaoBlurTexture.format,
+        .format = mSsaoBlurTexture1.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -3385,23 +3432,29 @@ void Renderer::createSsaoBlurRenderpass()
     setRenderpassDebugName(mRenderDevice, mSsaoBlurRenderpass, "Renderer::mSsaoBlurRenderpass");
 }
 
-void Renderer::createSsaoBlurFramebuffer()
+void Renderer::createSsaoBlurFramebuffers()
 {
-    vkDestroyFramebuffer(mRenderDevice.device, mSsaoBlurFramebuffer, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mSsaoBlurFramebuffer1, nullptr);
+    vkDestroyFramebuffer(mRenderDevice.device, mSsaoBlurFramebuffer2, nullptr);
 
     VkFramebufferCreateInfo framebufferCreateInfo {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = mSsaoBlurRenderpass,
         .attachmentCount = 1,
-        .pAttachments = &mSsaoBlurTexture.imageView,
+        .pAttachments = &mSsaoBlurTexture1.imageView,
         .width = mWidth,
         .height = mHeight,
         .layers = 1
     };
 
-    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mSsaoBlurFramebuffer);
+    VkResult result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mSsaoBlurFramebuffer1);
     vulkanCheck(result, "Failed to create framebuffer.");
-    setFramebufferDebugName(mRenderDevice, mSsaoBlurFramebuffer, "Renderer::mSsaoBlurFramebuffer");
+    setFramebufferDebugName(mRenderDevice, mSsaoBlurFramebuffer1, "Renderer::mSsaoBlurFramebuffer1");
+
+    framebufferCreateInfo.pAttachments = &mSsaoBlurTexture2.imageView;
+    result = vkCreateFramebuffer(mRenderDevice.device, &framebufferCreateInfo, nullptr, &mSsaoBlurFramebuffer2);
+    vulkanCheck(result, "Failed to create framebuffer.");
+    setFramebufferDebugName(mRenderDevice, mSsaoBlurFramebuffer2, "Renderer::mSsaoBlurFramebuffer2");
 }
 
 void Renderer::createSsaoPipeline()
@@ -3463,7 +3516,7 @@ void Renderer::createSsaoBlurPipeline()
     PipelineSpecification specification {
         .shaderStages = {
             .vertShaderPath = "shaders/fullscreen_render.vert.spv",
-            .fragShaderPath = "shaders/blur_ssao.frag.spv"
+            .fragShaderPath = "shaders/ssao_blur.frag.spv"
         },
         .inputAssembly = {
             .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
@@ -3492,14 +3545,12 @@ void Renderer::createSsaoBlurPipeline()
             VK_DYNAMIC_STATE_SCISSOR
         },
         .pipelineLayout = {
-            .dsLayouts = {
-                mSingleImageDsLayout
-            },
+            .dsLayouts = {mSingleImageDsLayout},
             .pushConstantRanges = {
                 {
                     .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                     .offset = 0,
-                    .size = sizeof(glm::vec2)
+                    .size = sizeof(glm::vec2) * 2
                 }
             }
         },
@@ -6075,7 +6126,8 @@ void Renderer::createCameraDs()
 void Renderer::createSingleImageDescriptorSets()
 {
     createSingleImageDs(mSsaoTextureDs, mSsaoTexture, "Renderer::mSsaoTextureDs");
-    createSingleImageDs(mSsaoBlurTextureDs, mSsaoBlurTexture, "Renderer::mSsaoBlurTextureDs");
+    createSingleImageDs(mSsaoBlurTexture1Ds, mSsaoBlurTexture1, "Renderer::mSsaoBlurTexture1Ds");
+    createSingleImageDs(mSsaoBlurTexture2Ds, mSsaoBlurTexture2, "Renderer::mSsaoBlurTexture2Ds");
     createSingleImageDs(mDepthDs, mDepthTexture, "Renderer::mDepthDs");
     createSingleImageDs(mColor32FDs, mColorTexture32F, "Renderer::mColor32FDs");
     createSingleImageDs(mColor8UDs, mColorTexture8U, "Renderer::mColorTexture8U");
@@ -6458,8 +6510,8 @@ void Renderer::createForwardShadingDs()
 void Renderer::updateForwardShadingDs()
 {
     VkDescriptorImageInfo ssaoImageInfo {
-        .sampler = mSsaoBlurTexture.vulkanSampler.sampler,
-        .imageView = mSsaoBlurTexture.imageView,
+        .sampler = mSsaoBlurTexture2.vulkanSampler.sampler,
+        .imageView = mSsaoBlurTexture2.imageView,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     };
 
