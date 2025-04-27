@@ -282,37 +282,6 @@ void Editor::rendererPanel()
                          ImGuiSliderFlags_AlwaysClamp);
     }
 
-    if (ImGui::CollapsingHeader("Order Independent Transparency", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::Checkbox("Enable##OIT", &mRenderer.mOitOn);
-        ImGui::Separator();
-
-        std::string val = std::to_string(mRenderer.mOitLinkedListLength) + "x";
-        if (ImGui::BeginCombo("Memory Multiplier", val.data(), ImGuiComboFlags_WidthFitPreview))
-        {
-            for (uint32_t i = 1; i <= 64; i <<= 1)
-            {
-                std::string preview = std::to_string(i) + "x";
-                if (ImGui::Selectable(preview.data(), mRenderer.mOitLinkedListLength == i))
-                {
-                    if (i == mRenderer.mOitLinkedListLength)
-                        continue;
-
-                    mRenderer.mOitLinkedListLength = i;
-                    mRenderer.createOitBuffers();
-                    mRenderer.updateOitResourcesDs();
-                }
-            }
-
-            ImGui::EndCombo();
-        }
-
-        ImGui::SameLine();
-        uint32_t memUsage = mRenderer.mWidth * mRenderer.mHeight * sizeof(TransparentNode) * mRenderer.mOitLinkedListLength / 1000000;
-        std::string mem = std::format("Higher memory = more transparent fragments\nMemory usage: {} MB", memUsage);
-        helpMarker(mem.data());
-    }
-
     if (ImGui::CollapsingHeader("Wireframe", ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::Checkbox("Wireframe On", &mRenderer.mWireframeOn);

@@ -25,8 +25,9 @@ constexpr uint32_t MaxShadowMapsPerType = 50;
 constexpr uint32_t MaxSsaoKernelSamples = 128;
 constexpr uint32_t SsaoNoiseTextureSize = 4;
 constexpr uint32_t PerClusterCapacity = 32;
+constexpr VkSampleCountFlagBits SampleCount = VK_SAMPLE_COUNT_4_BIT;
 
-struct TransparentNode;
+struct TransparentMesh;
 struct LightIconRenderData;
 struct Cluster;
 enum class Tonemap;
@@ -59,27 +60,26 @@ public:
     void deleteSpotLight(uuid32_t id);
 
 private:
-    void executeDirShadowRenderpass(VkCommandBuffer commandBuffer); // check
-    void executePointShadowRenderpass(VkCommandBuffer commandBuffer); // check
-    void executeSpotShadowRenderpass(VkCommandBuffer commandBuffer); // check --
+    void executeDirShadowRenderpass(VkCommandBuffer commandBuffer);
+    void executePointShadowRenderpass(VkCommandBuffer commandBuffer);
+    void executeSpotShadowRenderpass(VkCommandBuffer commandBuffer);
     void executePrepass(VkCommandBuffer commandBuffer);
-    void executeSkyboxRenderpass(VkCommandBuffer commandBuffer); // check
+    void executeSkyboxRenderpass(VkCommandBuffer commandBuffer);
+    void executeSsaoResourcesRenderpass(VkCommandBuffer commandBuffer);
     void executeSsaoRenderpass(VkCommandBuffer commandBuffer);
-    void executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer); // check
-    void executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer); // check
-    void executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBuffer); // check
-    void executeForwardRenderpass(VkCommandBuffer commandBuffer); // --
-    void executeBloomRenderpass(VkCommandBuffer commandBuffer); // check
-    void executePostProcessingRenderpass(VkCommandBuffer commandBuffer); // check
-    void executeWireframeRenderpass(VkCommandBuffer commandBuffer); // check
-    void executeGridRenderpass(VkCommandBuffer commandBuffer); // check
-    void executeLightIconRenderpass(VkCommandBuffer commandBuffer); // check
+    void executeSsaoBlurRenderpass(VkCommandBuffer commandBuffer);
+    void executeGenFrustumClustersRenderpass(VkCommandBuffer commandBuffer);
+    void executeAssignLightsToClustersRenderpass(VkCommandBuffer commandBuffer);
+    void executeForwardRenderpass(VkCommandBuffer commandBuffer);
+    void executeBloomRenderpass(VkCommandBuffer commandBuffer);
+    void executePostProcessingRenderpass(VkCommandBuffer commandBuffer);
+    void executeWireframeRenderpass(VkCommandBuffer commandBuffer);
+    void executeGridRenderpass(VkCommandBuffer commandBuffer);
+    void executeLightIconRenderpass(VkCommandBuffer commandBuffer);
     void setViewport(VkCommandBuffer commandBuffer);
-    void renderOpaque(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
-    void renderTransparent(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
-    void renderAll(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t matDsIndex);
     void updateCameraUBO();
     void getLightIconRenderData();
+    void sortTransparentMeshes();
     void bindTexture(VkCommandBuffer commandBuffer,
                      VkPipelineLayout pipelineLayout,
                      const VulkanTexture& texture,
@@ -94,10 +94,10 @@ private:
     void updatePointLightNode(GraphNode* node);
     void updateSpotLightNode(GraphNode* node);
 
-    void createColorTexture32F();
+    void createColorTexture32MS();
     void createColorTexture8U();
-    void createDepthTexture();
-    void createPosTexture();
+    void createDepthTextures();
+    void createViewPosTexture();
     void createNormalTexture();
     void createSsaoTextures();
 
@@ -161,6 +161,9 @@ private:
     void createSsaoKernelSSBO();
     void updateSsaoKernelSSBO();
     void createSsaoNoiseTexture();
+    void createSsaoResourcesRenderpass();
+    void createSsaoResourcesFramebuffer();
+    void createSsaoResourcesPipeline();
     void createSsaoRenderpass();
     void createSsaoFramebuffer();
     void createSsaoBlurRenderpass();
@@ -168,16 +171,10 @@ private:
     void createSsaoPipeline();
     void createSsaoBlurPipeline();
 
-    void createOitTextures();
-    void createOitBuffers();
-    void createOitResourcesDs();
-    void updateOitResourcesDs();
     void createForwardRenderpass();
     void createForwardFramebuffer();
     void createOpaqueForwardPassPipeline();
-    void createOitTransparentCollectionPipeline();
-    void createOitTransparencyResolutionPipeline();
-    void createForwardPassBlendPipeline();
+    void createTransparentForwardPassPipeline();
 
     void createPostProcessingRenderpass();
     void createPostProcessingFramebuffer();
@@ -243,7 +240,6 @@ private:
     void createCameraDs();
     void createSingleImageDescriptorSets();
     void createSsaoDs();
-    void createColor32FInputDs();
     void createLightsDs();
     void createFrustumClusterGenDs();
     void createAssignLightsToClustersDs();
@@ -264,19 +260,13 @@ private:
     Camera mCamera;
     VulkanBuffer mCameraUBO;
 
-    // oit
-    VulkanImage mTransparentNodeIndexStorageImage;
-    VulkanBuffer mOitLinkedListInfoSSBO;
-    VulkanBuffer mOitLinkedListSSBO;
-    VkDescriptorSet mOitResourcesDs{};
-    VkDescriptorSet mTransparentTexInputAttachmentDs{};
-
     // render targets
-    VulkanTexture mTransparencyTexture;
-    VulkanTexture mColorTexture32F;
+    VulkanTexture mColorTexture32MS;
+    VulkanTexture mColorResolve32;
+    VulkanTexture mDepthTextureMS;
     VulkanTexture mColorTexture8U;
     VulkanTexture mDepthTexture;
-    VulkanTexture mPosTexture;
+    VulkanTexture mViewPosTexture;
     VulkanTexture mNormalTexture;
     VulkanTexture mSsaoTexture;
     VulkanTexture mSsaoBlurTexture1;
@@ -285,6 +275,7 @@ private:
     // render passes
     VkRenderPass mPrepassRenderpass{};
     VkRenderPass mSkyboxRenderpass{};
+    VkRenderPass mSsaoResourcesRenderpass{};
     VkRenderPass mSsaoRenderpass{};
     VkRenderPass mSsaoBlurRenderpass{};
     VkRenderPass mForwardRenderpass{};
@@ -296,6 +287,7 @@ private:
     VkFramebuffer mPrepassFramebuffer{};
     VkFramebuffer mSkyboxFramebuffer{};
     VkFramebuffer mForwardPassFramebuffer{};
+    VkFramebuffer mSsaoResourcesFramebuffer{};
     VkFramebuffer mSsaoFramebuffer{};
     VkFramebuffer mSsaoBlurFramebuffer1{};
     VkFramebuffer mSsaoBlurFramebuffer2{};
@@ -307,12 +299,11 @@ private:
     VulkanGraphicsPipeline mPrepassPipeline;
     VulkanGraphicsPipeline mSkyboxPipeline;
     VulkanGraphicsPipeline mGridPipeline;
+    VulkanGraphicsPipeline mSsaoResourcesPipeline;
     VulkanGraphicsPipeline mSsaoPipeline;
     VulkanGraphicsPipeline mSsaoBlurPipeline;
-    VulkanGraphicsPipeline mTransparentCollectionPipeline;
-    VulkanGraphicsPipeline mTransparencyResolutionPipeline;
     VulkanGraphicsPipeline mOpaqueForwardPassPipeline;
-    VulkanGraphicsPipeline mForwardPassBlendPipeline;
+    VulkanGraphicsPipeline mTransparentForwardPassPipeline;
     VulkanGraphicsPipeline mPostProcessingPipeline;
     VulkanGraphicsPipeline mLightIconPipeline;
 
@@ -419,9 +410,8 @@ private:
     VkDescriptorSet mSsaoBlurTexture2Ds{};
     VkDescriptorSet mDepthDs{};
     VkDescriptorSet mSkyboxDs{};
-    VkDescriptorSet mColor32FDs{};
+    VkDescriptorSet mColorResolve32Ds{};
     VkDescriptorSet mColor8UDs{};
-    VkDescriptorSet mColor32FInputDs{};
     VkDescriptorSet mLightsDs{};
     VkDescriptorSet mFrustumClusterGenDs{};
     VkDescriptorSet mAssignLightsToClustersDs{};
@@ -443,6 +433,7 @@ private:
 
     // models
     std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
+    std::multiset<TransparentMesh> mSortedTransparentMeshes;
 
     // lights
     std::vector<DirectionalLight> mDirLights;
@@ -494,7 +485,6 @@ private:
     bool mRenderSkybox = false;
     bool mEnableIblLighting = false;
     bool mSsaoOn = false;
-    bool mOitOn = true;
     bool mBloomOn = false;
     bool mRenderGrid = true;
     bool mDebugNormals = false;
@@ -504,11 +494,17 @@ private:
     friend class Editor;
 };
 
-struct TransparentNode
+struct TransparentMesh
 {
-    alignas(16) glm::vec4 color;
-    alignas(4) float depth;
-    alignas(4) uint32_t next;
+    float distance;
+    uuid32_t modelID;
+    Mesh* mesh;
+    glm::mat4 model;
+
+    bool operator<(const TransparentMesh& other) const
+    {
+        return distance < other.distance;
+    }
 };
 
 struct LightIconRenderData

@@ -116,7 +116,57 @@ void InstancedMesh::render(VkCommandBuffer commandBuffer) const
     vkCmdDrawIndexed(commandBuffer, getIndexCount(mIndexBuffer), mInstanceCount, 0, 0, 0);
 }
 
+VkBuffer InstancedMesh::getVertexBuffer()
+{
+    return mVertexBuffer.getBuffer();
+}
+
+VkBuffer InstancedMesh::getIndexBuffer()
+{
+    return mIndexBuffer.getBuffer();
+}
+
+VkBuffer InstancedMesh::getInstanceBuffer()
+{
+    return mIndexBuffer.getBuffer();
+}
+
 std::vector<VkVertexInputBindingDescription> InstancedMesh::bindingDescriptions()
+{
+    VkVertexInputBindingDescription vertexBindingDescription {
+        .binding = 0,
+        .stride = sVertexSize,
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+    };
+
+    return {
+        vertexBindingDescription
+    };
+}
+
+std::vector<VkVertexInputAttributeDescription> InstancedMesh::attributeDescriptions()
+{
+    static auto vertAttrib = [] (uint32_t loc, uint32_t binding, VkFormat format, uint32_t offset) {
+        VkVertexInputAttributeDescription vertexInputAttributeDescription {
+            .location = loc,
+            .binding = binding,
+            .format = format,
+            .offset = offset
+        };
+
+        return vertexInputAttributeDescription;
+    };
+
+    return {
+        vertAttrib(0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, position)),
+        vertAttrib(1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, texCoords)),
+        vertAttrib(2, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal)),
+        vertAttrib(3, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, tangent)),
+        vertAttrib(4, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, bitangent))
+    };
+}
+
+std::vector<VkVertexInputBindingDescription> InstancedMesh::bindingDescriptionsInstanced()
 {
     VkVertexInputBindingDescription vertexBindingDescription {
         .binding = 0,
@@ -136,7 +186,7 @@ std::vector<VkVertexInputBindingDescription> InstancedMesh::bindingDescriptions(
     };
 }
 
-std::vector<VkVertexInputAttributeDescription> InstancedMesh::attributeDescriptions()
+std::vector<VkVertexInputAttributeDescription> InstancedMesh::attributeDescriptionsInstanced()
 {
     static auto vertAttrib = [] (uint32_t loc, uint32_t binding, VkFormat format, uint32_t offset) {
         VkVertexInputAttributeDescription vertexInputAttributeDescription {
@@ -178,4 +228,9 @@ void InstancedMesh::checkResize()
     newInstanceBuffer.swap(mInstanceBuffer);
 
     mInstanceBufferCapacity = newCapacity;
+}
+
+uint32_t InstancedMesh::indexCount()
+{
+    return getIndexCount(mIndexBuffer);
 }

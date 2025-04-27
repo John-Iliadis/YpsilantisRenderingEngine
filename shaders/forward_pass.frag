@@ -1,7 +1,5 @@
 #version 460 core
 
-
-
 #include "material.glsl"
 #include "lights.glsl"
 #include "rendering_equations.glsl"
@@ -212,7 +210,11 @@ void main()
     vec2 texCoords = vTexCoords * material.tiling + material.offset;
     vec2 screenSpaceTexCoords = gl_FragCoord.xy / vec2(float(screenWidth), float(screenHeight));
 
-    vec3 baseColor = texture(baseColorTex, texCoords).rgb * material.baseColorFactor.rgb;
+    vec4 baseColor = texture(baseColorTex, texCoords) * material.baseColorFactor;
+
+    if (material.alphaMask == 1 && baseColor.a < material.alphaCutoff)
+        discard;
+
     float metallic = texture(metallicTex, texCoords).b * material.metallicFactor;
     float roughness = texture(roughnessTex, texCoords).g * material.roughnessFactor;
     vec3 normalSample = normalize(texture(normalTex, texCoords).xyz * 2.0 - 1.0);
@@ -228,14 +230,14 @@ void main()
     vec3 R = reflect(-viewVec, normal);
 
     vec3 L_0 = vec3(0.0);
-    vec3 F_0 = mix(vec3(0.04), baseColor, metallic);
+    vec3 F_0 = mix(vec3(0.04), baseColor.xyz, metallic);
 
     for (uint i = 0; i < dirLightCount; ++i)
     {
         vec3 lightVec = -normalize(dirLights[i].direction.xyz);
         vec3 halfwayVec = normalize(viewVec + lightVec);
         vec3 lightRadiance = dirLights[i].color.rgb * dirLights[i].intensity;
-        vec3 lightContribution = specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
+        vec3 lightContribution = specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor.xyz, metallic, roughness);
 
         if (dirShadowData[i].shadowType != NoShadow)
         {
@@ -258,7 +260,7 @@ void main()
         vec3 lightVec = normalize(lightToPosVec);
         vec3 lightRadiance = pointLight.color.rgb * (pointLight.intensity * attenuation);
         vec3 halfwayVec = normalize(viewVec + lightVec);
-        vec3 lightContribution = specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
+        vec3 lightContribution = specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor.xyz, metallic, roughness);
 
         if (pointShadowData[i].shadowType != NoShadow)
         {
@@ -283,7 +285,7 @@ void main()
         float attenuation = calcAttenuation(dist, spotLights[i].range);
         vec3 lightRadiance = spotLights[i].color.rgb * (spotLights[i].intensity * intensity * attenuation);
         vec3 halfwayVec = normalize(lightVec + viewVec);
-        vec3 lightContribution = specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor, metallic, roughness);
+        vec3 lightContribution = specularContribution(lightVec, viewVec, normal, F_0, lightRadiance, baseColor.xyz, metallic, roughness);
 
         if (spotShadowData[i].shadowType != NoShadow)
         {
@@ -307,7 +309,7 @@ void main()
         vec3 b = textureLod(prefilterMap, R, lodc).rgb;
         vec3 reflection = mix(a, b, lod - lodf);
 
-        vec3 diffuse = irradiance * baseColor;
+        vec3 diffuse = irradiance * baseColor.xyz;
 
         vec3 F = F_SchlickR(max(dot(normal, viewVec), 0.0), F_0, roughness);
         vec3 specular = reflection * (F * brdf.x + brdf.y);
@@ -319,9 +321,9 @@ void main()
     }
     else
     {
-        ambient = vec3(0.1) * baseColor * ao;
+        ambient = vec3(0.1) * baseColor.xyz * ao;
     }
 
-    outFragColor = vec4(emission + L_0 + ambient, 1.0) * occlusionFactor * (1.0 - float(debugNormals)) +
-                   vec4(normal, 1.0) * float(debugNormals);
+    outFragColor = vec4(emission + L_0 + ambient, 1.0) * occlusionFactor;
+    outFragColor.a = baseColor.a;
 }

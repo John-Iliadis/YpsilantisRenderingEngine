@@ -36,9 +36,15 @@ public:
     void removeInstance(uuid32_t id);
     void setDebugName(const std::string& debugName);
     void render(VkCommandBuffer commandBuffer) const;
+    uint32_t indexCount();
+    VkBuffer getVertexBuffer();
+    VkBuffer getIndexBuffer();
+    VkBuffer getInstanceBuffer();
 
     static std::vector<VkVertexInputBindingDescription> bindingDescriptions();
     static std::vector<VkVertexInputAttributeDescription> attributeDescriptions();
+    static std::vector<VkVertexInputBindingDescription> bindingDescriptionsInstanced();
+    static std::vector<VkVertexInputAttributeDescription> attributeDescriptionsInstanced();
 
 private:
     void checkResize();

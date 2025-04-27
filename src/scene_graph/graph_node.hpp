@@ -32,7 +32,7 @@ public:
 
 public:
     GraphNode();
-    GraphNode(NodeType type, const std::string& name,
+    GraphNode(NodeType type, std::string  name,
               glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale,
               GraphNode* parent,
               std::optional<uuid32_t> modelID = {},

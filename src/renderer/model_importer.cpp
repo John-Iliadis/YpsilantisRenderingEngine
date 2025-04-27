@@ -100,15 +100,19 @@ void ModelLoader::loadMeshes(const aiScene& aiScene)
     for (uint32_t i = 0; i < aiScene.mNumMeshes; ++i)
     {
         const aiMesh& aiMesh = *aiScene.mMeshes[i];
+        const aiAABB& aabb = aiMesh.mAABB;
         const aiMaterial& aiMaterial = *aiScene.mMaterials[aiMesh.mMaterialIndex];
 
         debugLog(std::format("Loading mesh: {}", aiMesh.mName.data));
+
+        auto center = (aabb.mMin + aabb.mMax) / 2.f;
 
         MeshData meshData {
             .name = aiMesh.mName.data,
             .vertexStagingBuffer = loadVertexData(aiMesh),
             .indexStagingBuffer = loadIndexData(aiMesh),
             .materialIndex = aiMesh.mMaterialIndex,
+            .center = glm::make_vec3(&center.x),
             .opaque = isOpaque(aiMaterial)
         };
 
@@ -616,6 +620,7 @@ void ModelImporter::addMeshes(VkCommandBuffer commandBuffer, Model &model, const
             .name = meshData.name,
             .mesh {mRenderDevice, std::move(vertexBuffer), std::move(indexBuffer)},
             .materialIndex = meshData.materialIndex,
+            .center = meshData.center,
             .opaque = meshData.opaque
         };
 

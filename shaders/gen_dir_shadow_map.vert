@@ -1,6 +1,6 @@
 #version 460 core
 
-#include "vertex_input.glsl"
+#include "vertex_input_instanced.glsl"
 
 layout (push_constant) uniform PushConstants
 {

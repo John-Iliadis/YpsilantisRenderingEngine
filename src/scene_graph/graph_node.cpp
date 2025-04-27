@@ -4,10 +4,12 @@
 
 #include "graph_node.hpp"
 
+#include <utility>
+
 GraphNode::GraphNode()
     : mID(UUIDRegistry::generateSceneNodeID())
     , mType(NodeType::Empty)
-    , mName("")
+    , mName()
     , localT()
     , localR()
     , localS(1.f)
@@ -16,14 +18,14 @@ GraphNode::GraphNode()
 {
 }
 
-GraphNode::GraphNode(NodeType type, const std::string& name,
+GraphNode::GraphNode(NodeType type, std::string  name,
                      glm::vec3 translation, glm::vec3 rotation, glm::vec3 scale,
                      GraphNode* parent,
                      std::optional<uuid32_t> modelID,
                      std::vector<uuid32_t> meshIDs)
     : mID(UUIDRegistry::generateSceneNodeID())
     , mType(type)
-    , mName(name)
+    , mName(std::move(name))
     , mModelID(modelID)
     , mMeshIDs(std::move(meshIDs))
     , localT(translation)

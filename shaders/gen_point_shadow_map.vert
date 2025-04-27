@@ -1,6 +1,6 @@
 #version 460 core
 
-#include "vertex_input.glsl"
+#include "vertex_input_instanced.glsl"
 
 layout (location = 0) out vec3 vFragPosWorldSpace;
 

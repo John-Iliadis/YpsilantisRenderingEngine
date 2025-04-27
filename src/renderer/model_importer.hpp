@@ -32,6 +32,7 @@ struct MeshData
     VulkanBuffer vertexStagingBuffer;
     VulkanBuffer indexStagingBuffer;
     uint32_t materialIndex;
+    glm::vec3 center;
     bool opaque;
 };
 
