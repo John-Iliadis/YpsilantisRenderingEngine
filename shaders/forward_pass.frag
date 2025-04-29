@@ -326,4 +326,9 @@ void main()
 
     outFragColor = vec4(emission + L_0 + ambient, 1.0) * occlusionFactor;
     outFragColor.a = baseColor.a;
+
+    if (debugNormals == 1)
+    {
+        outFragColor = vec4(normal, 1.0);
+    }
 }

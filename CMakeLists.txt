@@ -6,7 +6,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
 set(DEPENDENCY_DIR ${CMAKE_SOURCE_DIR}/dependencies)
 
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    message(FATAL_ERROR "MinGW compiler required")
+    message(FATAL_ERROR "Use Clion and MinGW. This project has not been configured for Visual studio and MSVC.")
 endif()
 
 file(GLOB INCLUDE_DIRS ${DEPENDENCY_DIR}/*/include)

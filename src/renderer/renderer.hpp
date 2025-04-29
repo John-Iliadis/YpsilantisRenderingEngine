@@ -468,7 +468,6 @@ private:
 
     // render data
     glm::vec4 mClearColor = glm::vec4(0.251f, 0.235f, 0.235f, 1.f);
-    uint32_t mOitLinkedListLength = 8;
     std::vector<LightIconRenderData> mLightIconRenderData;
 
     bool mHDROn = false;
