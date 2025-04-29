@@ -703,6 +703,12 @@ void Editor::modelInspector(uuid32_t modelID)
             if (ImGui::SliderFloat("Roughness", &mat.roughnessFactor, 0.f, 1.f))
                 matNeedsUpdate = true;
 
+            if (ImGui::SliderFloat("Occlusion Strength", &mat.occlusionStrength, 0.f, 1.f))
+                matNeedsUpdate = true;
+
+            ImGui::SameLine();
+            helpMarker("Applies only to the AO texture, if one is available. Doesn't effect SSAO.");
+
             if (ImGui::DragFloat("Emission Factor", &mat.emissionFactor, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp))
                 matNeedsUpdate = true;
 

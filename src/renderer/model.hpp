@@ -30,7 +30,6 @@ struct Mesh
     InstancedMesh mesh;
     uint32_t materialIndex;
     glm::vec3 center;
-    bool opaque;
 };
 
 struct Texture

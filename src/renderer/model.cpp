@@ -207,7 +207,8 @@ void Model::bindTextures(VkCommandBuffer commandBuffer, VkPipelineLayout pipelin
 
 bool Model::drawOpaque(const Mesh &mesh)
 {
-    return mesh.opaque && materials.at(mesh.materialIndex).baseColorFactor.a == 1.f;
+    const Material& mat = materials.at(mesh.materialIndex);
+    return mat.alphaMode == AlphaMode::Opaque && mat.baseColorFactor.a == 1.f;
 }
 
 const char* toStr(VkCullModeFlags cullMode)

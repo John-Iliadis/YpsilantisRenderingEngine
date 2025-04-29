@@ -33,7 +33,6 @@ struct MeshData
     VulkanBuffer indexStagingBuffer;
     uint32_t materialIndex;
     glm::vec3 center;
-    bool opaque;
 };
 
 struct ImageData
@@ -94,7 +93,7 @@ private:
     float getRoughnessFactor(const aiMaterial& aiMaterial);
     float getAlphaMask(const aiMaterial& aiMaterial);
     float getAlphaCutoff(const aiMaterial& aiMaterial);
-    bool isOpaque(const aiMaterial& aiMaterial);
+    AlphaMode getAlphaMode(const aiMaterial& aiMaterial);
 
     glm::mat4 assimpToGlmMat4(const aiMatrix4x4 &mat);
 

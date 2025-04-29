@@ -212,13 +212,13 @@ void main()
 
     vec4 baseColor = texture(baseColorTex, texCoords) * material.baseColorFactor;
 
-    if (material.alphaMask == 1 && baseColor.a < material.alphaCutoff)
+    if (material.alphaMode == AlphaModeMask && baseColor.a < material.alphaCutoff)
         discard;
 
     float metallic = texture(metallicTex, texCoords).b * material.metallicFactor;
     float roughness = texture(roughnessTex, texCoords).g * material.roughnessFactor;
     vec3 normalSample = normalize(texture(normalTex, texCoords).xyz * 2.0 - 1.0);
-    float ao = texture(aoTex, texCoords).r;
+    float ao = 1.0 + material.occlusionStrength * (texture(aoTex, texCoords).r - 1.0);
     vec3 emission = texture(emissionTex, texCoords).rgb * material.emissionColor.rgb * material.emissionFactor;
     float occlusionFactor = texture(ssaoTexture, screenSpaceTexCoords).r;
     vec3 viewPos = texture(viewPosTexture, screenSpaceTexCoords).xyz;

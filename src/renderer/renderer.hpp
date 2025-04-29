@@ -25,7 +25,7 @@ constexpr uint32_t MaxShadowMapsPerType = 50;
 constexpr uint32_t MaxSsaoKernelSamples = 128;
 constexpr uint32_t SsaoNoiseTextureSize = 4;
 constexpr uint32_t PerClusterCapacity = 32;
-constexpr VkSampleCountFlagBits SampleCount = VK_SAMPLE_COUNT_4_BIT;
+constexpr VkSampleCountFlagBits SampleCount = VK_SAMPLE_COUNT_8_BIT;
 
 struct TransparentMesh;
 struct LightIconRenderData;

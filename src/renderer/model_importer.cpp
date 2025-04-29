@@ -112,8 +112,7 @@ void ModelLoader::loadMeshes(const aiScene& aiScene)
             .vertexStagingBuffer = loadVertexData(aiMesh),
             .indexStagingBuffer = loadIndexData(aiMesh),
             .materialIndex = aiMesh.mMaterialIndex,
-            .center = glm::make_vec3(&center.x),
-            .opaque = isOpaque(aiMaterial)
+            .center = glm::make_vec3(&center.x)
         };
 
         meshes.push_back(std::move(meshData));
@@ -395,9 +394,10 @@ Material ModelLoader::loadMaterial(const aiMaterial &aiMaterial)
         .emissionTexIndex = getTexIndex(aiTextureType_EMISSIVE),
         .metallicFactor = getMetallicFactor(aiMaterial),
         .roughnessFactor = getRoughnessFactor(aiMaterial),
+        .occlusionStrength = 1.f,
         .emissionFactor = 1.f,
-        .alphaMask = getAlphaMask(aiMaterial),
         .alphaCutoff = getAlphaCutoff(aiMaterial),
+        .alphaMode = getAlphaMode(aiMaterial),
         .baseColorFactor = getBaseColorFactor(aiMaterial),
         .emissionColor = getEmissionFactor(aiMaterial),
         .tiling = glm::vec4(1.f),
@@ -482,19 +482,18 @@ float ModelLoader::getAlphaCutoff(const aiMaterial &aiMaterial)
     return defaultAlphaCutoff;
 }
 
-bool ModelLoader::isOpaque(const aiMaterial &aiMaterial)
+AlphaMode ModelLoader::getAlphaMode(const aiMaterial &aiMaterial)
 {
-    float opacity;
-    if (aiMaterial.Get(AI_MATKEY_OPACITY, opacity) != AI_SUCCESS)
-        if (opacity < 1.f)
-            return false;
-
     aiString alphaMode;
     if (aiMaterial.Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) == AI_SUCCESS)
-        if (!strcmp(alphaMode.C_Str(), "BLEND") || !strcmp(alphaMode.C_Str(), "MASK"))
-            return false;
+    {
+        if (!strcmp(alphaMode.C_Str(), "MASK"))
+            return AlphaMode::Mask;
+        else if (!strcmp(alphaMode.C_Str(), "BLEND"))
+            return AlphaMode::Blend;
+    }
 
-    return true;
+    return AlphaMode::Opaque;
 }
 
 ModelImporter::ModelImporter(const VulkanRenderDevice &renderDevice)
@@ -620,8 +619,7 @@ void ModelImporter::addMeshes(VkCommandBuffer commandBuffer, Model &model, const
             .name = meshData.name,
             .mesh {mRenderDevice, std::move(vertexBuffer), std::move(indexBuffer)},
             .materialIndex = meshData.materialIndex,
-            .center = meshData.center,
-            .opaque = meshData.opaque
+            .center = meshData.center
         };
 
         model.meshes.push_back(std::move(mesh));
