@@ -1528,10 +1528,10 @@ void Renderer::executeLightIconRenderpass(VkCommandBuffer commandBuffer)
                             0, 1, &mCameraDs,
                             0, nullptr);
 
-    bindTexture(commandBuffer, mLightIconPipeline, mDepthTexture, 1, 1);
+    bindTexture(commandBuffer, mLightIconPipeline, mDepthTexture, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, 1, 1);
     for (const auto& renderData : mLightIconRenderData)
     {
-        bindTexture(commandBuffer, mLightIconPipeline, *renderData.icon, 0, 1);
+        bindTexture(commandBuffer, mLightIconPipeline, *renderData.icon, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, 1);
         vkCmdPushConstants(commandBuffer,
                            mLightIconPipeline,
                            VK_SHADER_STAGE_VERTEX_BIT,
@@ -1628,10 +1628,11 @@ void Renderer::sortTransparentMeshes()
 void Renderer::bindTexture(VkCommandBuffer commandBuffer,
                            VkPipelineLayout pipelineLayout,
                            const VulkanTexture &texture,
+                           VkImageLayout layout,
                            uint32_t binding,
                            uint32_t set)
 {
-    VkDescriptorImageInfo imageInfo(texture.vulkanSampler.sampler, texture.imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    VkDescriptorImageInfo imageInfo(texture.vulkanSampler.sampler, texture.imageView, layout);
 
     VkWriteDescriptorSet writeDescriptorSet {
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -3423,7 +3424,7 @@ void Renderer::createSsaoResourcesRenderpass()
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
     };
 
     std::array<VkAttachmentDescription, 3> attachments {{
@@ -4119,8 +4120,8 @@ void Renderer::createWireframeRenderpass()
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
     };
 
     std::array<VkAttachmentDescription, 2> attachments {
@@ -4265,8 +4266,8 @@ void Renderer::createGridRenderpass()
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
     };
 
     std::array<VkAttachmentDescription, 2> attachments {{
@@ -5641,7 +5642,7 @@ void Renderer::createCaptureBrightPixelsPipeline()
     PipelineSpecification specification {
         .shaderStages = {
             .vertShaderPath = "shaders/fullscreen_render.vert.spv",
-            .fragShaderPath = "shaders/capture_bright_pixels.frag.spv"
+            .fragShaderPath = "shaders/bloom_prefilter.frag.spv"
         },
         .inputAssembly = {
             .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST

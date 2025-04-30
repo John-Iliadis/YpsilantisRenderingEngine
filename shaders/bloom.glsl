@@ -1,6 +1,4 @@
 
-const float Epsilon = 1.0e-4;
-
 vec3 downsample13(sampler2D tex, vec2 uv, vec2 texelSize)
 {
     // Center

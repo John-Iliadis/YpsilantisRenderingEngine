@@ -80,6 +80,7 @@ private:
     void bindTexture(VkCommandBuffer commandBuffer,
                      VkPipelineLayout pipelineLayout,
                      const VulkanTexture& texture,
+                     VkImageLayout layout,
                      uint32_t binding,
                      uint32_t set);
 
