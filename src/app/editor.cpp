@@ -274,6 +274,13 @@ void Editor::rendererPanel()
                          "%.3f",
                          ImGuiSliderFlags_AlwaysClamp);
 
+        ImGui::DragFloat("Knee",
+                         &mRenderer.mKnee,
+                         0.001f,
+                         0.f, FLT_MAX,
+                         "%.3f",
+                         ImGuiSliderFlags_AlwaysClamp);
+
         ImGui::DragFloat("Filter Radius",
                          &mRenderer.mFilterRadius,
                          0.0001f,

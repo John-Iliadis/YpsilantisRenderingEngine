@@ -378,6 +378,7 @@ private:
     float mBrightnessThreshold = 1.2f;
     float mFilterRadius = 0.005f;
     float mBloomStrength = 1.f;
+    float mKnee = 1.f;
     std::array<VulkanTexture, BloomMipChainSize> mBloomMipChain;
     VkRenderPass mCaptureBrightPixelsRenderpass{};
     VkFramebuffer mCaptureBrightPixelsFramebuffer{};
