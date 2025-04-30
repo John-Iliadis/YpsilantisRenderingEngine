@@ -5,7 +5,6 @@
 #ifndef VULKANRENDERINGENGINE_SCENE_GRAPH_HPP
 #define VULKANRENDERINGENGINE_SCENE_GRAPH_HPP
 
-#include "../app/simple_notification_service.hpp"
 #include "graph_node.hpp"
 
 class SceneGraph

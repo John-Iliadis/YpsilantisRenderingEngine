@@ -10,7 +10,6 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include "../app/uuid_registry.hpp"
-#include "../app/simple_notification_service.hpp"
 #include "../renderer/instanced_mesh.hpp"
 #include "../utils/utils.hpp"
 

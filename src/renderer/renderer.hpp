@@ -6,8 +6,6 @@
 #define VULKANRENDERINGENGINE_RENDERER_HPP
 
 #include "../utils/utils.hpp"
-#include "../utils/timer.hpp"
-#include "../utils/main_thread_task_queue.hpp"
 #include "../app/save_data.hpp"
 #include "../vk/vulkan_pipeline.hpp"
 #include "../scene_graph/scene_graph.hpp"
@@ -32,7 +30,7 @@ struct LightIconRenderData;
 struct Cluster;
 enum class Tonemap;
 
-class Renderer : public SubscriberSNS
+class Renderer
 {
 public:
     Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData);
@@ -44,7 +42,6 @@ public:
     void importModel(const ModelImportData& importData);
     void importEnvMap(const std::string& path);
     void resize(uint32_t width, uint32_t height);
-    void notify(const Message &message) override;
 
     void addDirLight(uuid32_t id, const DirectionalLight& light);
     void addPointLight(uuid32_t id, const PointLight& light);
@@ -85,6 +82,11 @@ private:
                      const VulkanTexture& texture,
                      uint32_t binding,
                      uint32_t set);
+
+    void updateImports();
+    void addModel(ModelLoader& modelData);
+    void addMeshes(Model& model, ModelLoader& modelData);
+    void addTextures(Model& model, ModelLoader& modelData);
 
     void updateSceneGraph();
     void updateGraphNode(NodeType type, GraphNode* node);
@@ -432,7 +434,8 @@ private:
     VkDescriptorSet mLocalIconDs{};
 
     // models
-    std::unordered_map<uuid32_t, std::shared_ptr<Model>> mModels;
+    std::vector<std::future<ModelLoader>> mModelDataFutures;
+    std::unordered_map<uuid32_t, Model> mModels;
     std::multiset<TransparentMesh> mSortedTransparentMeshes;
 
     // lights

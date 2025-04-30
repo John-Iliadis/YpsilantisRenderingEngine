@@ -7,7 +7,6 @@
 
 #include "../window/window.hpp"
 #include "../renderer/renderer.hpp"
-#include "../renderer/model_importer.hpp"
 #include "../vk/vulkan_instance.hpp"
 #include "../vk/vulkan_render_device.hpp"
 #include "../vk/vulkan_swapchain.hpp"
@@ -39,7 +38,6 @@ private:
     VulkanImGui mVulkanImGui;
     Renderer mRenderer;
     Editor mEditor;
-    ModelImporter mModelImporter;
 };
 
 #endif //VULKANRENDERINGENGINE_APPLICATION_HPP

@@ -56,8 +56,6 @@ add_executable(${PROJECT_NAME}
         src/renderer/model.hpp
         src/renderer/model.cpp
         src/app/types.hpp
-        src/app/simple_notification_service.hpp
-        src/app/simple_notification_service.cpp
         src/app/uuid_registry.hpp
         src/app/uuid_registry.cpp
         src/app/editor.cpp

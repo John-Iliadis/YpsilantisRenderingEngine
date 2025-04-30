@@ -58,15 +58,17 @@ public:
     std::vector<std::string> materialNames;
 
 public:
-    ModelLoader(const VulkanRenderDevice& renderDevice, const ModelImportData& importData);
+    ModelLoader() = default;
+    ModelLoader(const ModelImportData& importData);
     ~ModelLoader() = default;
 
     ModelLoader(const ModelLoader& other) = delete;
     ModelLoader& operator=(const ModelLoader& other) = delete;
 
-    ModelLoader(ModelLoader&& other) noexcept = delete;
-    ModelLoader& operator=(ModelLoader&& other) noexcept = delete;
+    ModelLoader(ModelLoader&& other) noexcept;
+    ModelLoader& operator=(ModelLoader&& other) noexcept;
 
+    void swap(ModelLoader& other) noexcept;
     bool success() const;
 
 private:
@@ -97,32 +99,9 @@ private:
     glm::mat4 assimpToGlmMat4(const aiMatrix4x4 &mat);
 
 private:
-    const VulkanRenderDevice& mRenderDevice;
     std::unordered_set<std::string> mTextureNames;
     std::unordered_map<std::string, int32_t> mInsertedTexIndex;
-    bool mSuccess;
-};
-
-class ModelImporter : public SubscriberSNS
-{
-public:
-    ModelImporter(const VulkanRenderDevice& renderDevice);
-    ~ModelImporter() = default;
-
-    void update();
-    void notify(const Message &message) override;
-
-private:
-    void addModel(std::unique_ptr<ModelLoader>& modelData);
-    void addMeshes(Model& model, const ModelLoader& modelData);
-    void addTextures(Model& model, const ModelLoader& modelData);
-
-public:
-    const VulkanRenderDevice& mRenderDevice;
-
-    std::unordered_map<std::filesystem::path, std::future<std::unique_ptr<ModelLoader>>> mModelDataFutures;
-    std::unordered_map<std::filesystem::path, std::unique_ptr<ModelLoader>> mModelData;
-    std::unordered_map<std::filesystem::path, std::shared_ptr<Model>> mModels;
+    bool mSuccess {};
 };
 
 #endif //VULKANRENDERINGENGINE_MODEL_IMPORTER_HPP

@@ -126,7 +126,7 @@ void Editor::assetPanel()
 
     for (const auto& [modelID, model] : mRenderer.mModels)
     {
-        ImGui::Selectable(model->name.c_str(), mSelectedObjectID == modelID);
+        ImGui::Selectable(model.name.c_str(), mSelectedObjectID == modelID);
         lastItemClicked(modelID);
         modelDragDropSource();
     }
@@ -603,7 +603,7 @@ void Editor::duplicateNode(GraphNode *node)
 
 void Editor::modelInspector(uuid32_t modelID)
 {
-    auto& model = *mRenderer.mModels.at(modelID);
+    auto& model = mRenderer.mModels.at(modelID);
 
     ImGui::Text("Asset Type: Model");
     ImGui::Text("Name: %s", model.name.c_str());
@@ -790,7 +790,7 @@ void Editor::emptyNodeInspector(GraphNode *node)
     {
         if (ImGui::CollapsingHeader("Info##emptyNodeInspector", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            const auto& model = *mRenderer.mModels.at(*node->modelID());
+            const auto& model = mRenderer.mModels.at(*node->modelID());
             ImGui::Text("Associated Model: %s", model.name.c_str());
         }
     }
@@ -805,7 +805,7 @@ void Editor::meshNodeInspector(GraphNode *node)
 
     if (ImGui::CollapsingHeader("Info##meshNodeInspector", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        auto &model = *mRenderer.mModels.at(node->modelID().value());
+        auto &model = mRenderer.mModels.at(node->modelID().value());
 
         std::vector<Mesh *> meshes;
         for (uuid32_t meshID: node->meshIDs())
@@ -1229,10 +1229,12 @@ void Editor::deleteNode(GraphNode *node)
 
     if (node->type() == NodeType::Mesh)
     {
+        Model& model = mRenderer.mModels.at(node->modelID().value());
+
         for (uuid32_t meshID : node->meshIDs())
         {
-            Message msg = Message::RemoveMeshInstance(meshID, node->id());
-            SNS::publishMessage(Topic::Type::SceneGraph, msg);
+            InstancedMesh& mesh = model.getMesh(meshID)->mesh;
+            mesh.removeInstance(node->id());
         }
     }
 
@@ -1322,7 +1324,7 @@ void Editor::modelDragDropSource()
     if (ImGui::BeginDragDropSource())
     {
         ImGui::SetDragDropPayload("Model", &mSelectedObjectID, sizeof(uuid32_t));
-        ImGui::Text("%s (Model)", mRenderer.mModels.at(mSelectedObjectID)->name.c_str());
+        ImGui::Text("%s (Model)", mRenderer.mModels.at(mSelectedObjectID).name.c_str());
         ImGui::EndDragDropSource();
     }
 }
@@ -1340,7 +1342,7 @@ void Editor::modelDragDropTargetWholeWindow()
             if (payload->IsDelivery())
             {
                 uuid32_t modelID = *(uuid32_t*)payload->Data;
-                Model& model = *mRenderer.mModels.at(modelID);
+                Model& model = mRenderer.mModels.at(modelID);
                 createModelGraph(model);
             }
         }
@@ -1393,7 +1395,7 @@ void Editor::assetPanelPopup()
 
             if (newName)
             {
-                Model& model = *mRenderer.mModels.at(mSelectedObjectID);
+                Model& model = mRenderer.mModels.at(mSelectedObjectID);
                 model.name = newName.value();
                 ImGui::CloseCurrentPopup();
             }
@@ -1482,7 +1484,7 @@ void Editor::sceneGraphPopup()
 
             if (modelID.has_value())
             {
-                auto& model = *mRenderer.mModels.at(*modelID);
+                auto& model = mRenderer.mModels.at(*modelID);
                 createModelGraph(model);
                 ImGui::CloseCurrentPopup();
             }
@@ -1973,7 +1975,7 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
         }
         case NodeType::Mesh:
         {
-            Model& model = *mRenderer.mModels.at(*node->modelID());
+            Model& model = mRenderer.mModels.at(*node->modelID());
 
             newNode = new GraphNode(node->type(),
                                     node->name(),
@@ -2024,7 +2026,7 @@ std::optional<uuid32_t> Editor::selectModel()
 
     for (const auto& [modelID, model] : mRenderer.mModels)
     {
-        if (ImGui::MenuItem(model->name.c_str()))
+        if (ImGui::MenuItem(model.name.c_str()))
             return modelID;
     }
 

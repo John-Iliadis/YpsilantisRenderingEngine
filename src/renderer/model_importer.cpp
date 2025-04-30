@@ -36,10 +36,9 @@ static constexpr int sRemovePrimitives
     aiPrimitiveType_LINE
 };
 
-ModelLoader::ModelLoader(const VulkanRenderDevice& renderDevice, const ModelImportData& importData)
+ModelLoader::ModelLoader(const ModelImportData& importData)
     : path(importData.path)
     , root()
-    , mRenderDevice(renderDevice)
     , mSuccess()
 {
     debugLog("Loading model: " + path.string());
@@ -83,6 +82,32 @@ ModelLoader::ModelLoader(const VulkanRenderDevice& renderDevice, const ModelImpo
     debugLog("Successfully loaded: " + path.string());
 
     stbi_set_flip_vertically_on_load(false);
+}
+
+ModelLoader::ModelLoader(ModelLoader &&other) noexcept
+    : ModelLoader()
+{
+    swap(other);
+}
+
+ModelLoader &ModelLoader::operator=(ModelLoader &&other) noexcept
+{
+    if (this != &other)
+        swap(other);
+    return *this;
+}
+
+void ModelLoader::swap(ModelLoader &other) noexcept
+{
+    std::swap(path, other.path);
+    std::swap(root, other.root);
+    std::swap(meshes, other.meshes);
+    std::swap(images, other.images);
+    std::swap(materials, other.materials);
+    std::swap(materialNames, other.materialNames);
+    std::swap(mTextureNames, other.mTextureNames);
+    std::swap(mInsertedTexIndex, other.mInsertedTexIndex);
+    std::swap(mSuccess, other.mSuccess);
 }
 
 bool ModelLoader::success() const
@@ -479,122 +504,4 @@ AlphaMode ModelLoader::getAlphaMode(const aiMaterial &aiMaterial)
     }
 
     return AlphaMode::Opaque;
-}
-
-ModelImporter::ModelImporter(const VulkanRenderDevice &renderDevice)
-    : SubscriberSNS({Topic::Type::Renderer})
-    , mRenderDevice(renderDevice)
-{
-}
-
-void ModelImporter::update()
-{
-    for (auto itr = mModelDataFutures.begin(); itr != mModelDataFutures.end();)
-    {
-        if (itr->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-        {
-            std::unique_ptr<ModelLoader> modelData = itr->second.get();
-
-            if (modelData->success())
-            {
-                addModel(modelData);
-                auto model = mModels.at(itr->first);
-                SNS::publishMessage(Topic::Type::Resource, Message::modelLoaded(model));
-            }
-
-            mModelData.erase(itr->first);
-            mModels.erase(itr->first);
-
-            itr = mModelDataFutures.erase(itr);
-        }
-        else
-            ++itr;
-    }
-}
-
-void ModelImporter::notify(const Message &message)
-{
-    if (const auto m = message.getIf<Message::LoadModel>())
-    {
-        ModelImportData importData {
-            .path = m->path.string(),
-            .normalize = m->normalize,
-            .flipUVs = m->flipUVs
-        };
-
-        auto future = std::async(std::launch::async, [this, importData] () {
-            return std::make_unique<ModelLoader>(mRenderDevice, importData);
-        });
-
-        mModelDataFutures.emplace(m->path, std::move(future));
-    }
-}
-
-void ModelImporter::addModel(std::unique_ptr<ModelLoader>& modelData)
-{
-    auto model = std::make_shared<Model>(mRenderDevice);
-
-    model->id = UUIDRegistry::generateModelID();
-    model->name = modelData->path.filename().string();
-    model->path = modelData->path;
-    model->root = std::move(modelData->root);
-    model->materials = std::move(modelData->materials);
-    model->materialNames = std::move(modelData->materialNames);
-
-    addMeshes(*model, *modelData);
-    addTextures(*model, *modelData);
-
-    mModelData.emplace(model->path, std::move(modelData));
-    mModels.emplace(model->path, model);
-}
-
-void ModelImporter::addMeshes(Model &model, const ModelLoader &modelData)
-{
-    for (const auto& meshData : modelData.meshes)
-    {
-        Mesh mesh {
-            .meshID = UUIDRegistry::generateMeshID(),
-            .name = meshData.name,
-            .mesh {mRenderDevice, meshData.vertices, meshData.indices},
-            .materialIndex = meshData.materialIndex,
-            .center = meshData.center
-        };
-
-        model.meshes.push_back(std::move(mesh));
-    }
-}
-
-void ModelImporter::addTextures(Model &model, const ModelLoader &modelData)
-{
-    for (const auto& imageData : modelData.images)
-    {
-        TextureSpecification textureSpecification {
-            .format = VK_FORMAT_R8G8B8A8_UNORM,
-            .width = static_cast<uint32_t>(imageData.width),
-            .height = static_cast<uint32_t>(imageData.height),
-            .layerCount = 1,
-            .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
-            .imageUsage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                VK_IMAGE_USAGE_SAMPLED_BIT,
-            .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .magFilter = imageData.magFilter,
-            .minFilter = imageData.minFilter,
-            .wrapS = imageData.wrapModeS,
-            .wrapT = imageData.wrapModeT,
-            .wrapR = imageData.wrapModeT,
-            .generateMipMaps = true
-        };
-
-        VulkanTexture texture(mRenderDevice, textureSpecification, imageData.imageData.get());
-        texture.setDebugName(imageData.name);
-
-        Texture tex {
-            .name = imageData.name,
-            .vulkanTexture = std::move(texture)
-        };
-
-        model.textures.push_back(std::move(tex));
-    }
 }

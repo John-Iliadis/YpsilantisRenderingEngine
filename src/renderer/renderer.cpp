@@ -10,8 +10,7 @@ namespace ImGuizmo
 }
 
 Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
-    : SubscriberSNS({Topic::Type::Resource})
-    , mRenderDevice(renderDevice)
+    : mRenderDevice(renderDevice)
     , mSaveData(saveData)
     , mSceneGraph(std::make_shared<SceneGraph>())
     , mWidth(InitialViewportWidth)
@@ -227,6 +226,7 @@ Renderer::~Renderer()
 
 void Renderer::update()
 {
+    updateImports();
     updateCameraUBO();
     updateSceneGraph();
     updateDirShadowsMaps();
@@ -257,7 +257,7 @@ void Renderer::render(VkCommandBuffer commandBuffer)
 void Renderer::importModel(const ModelImportData& importData)
 {
     bool loaded = std::find_if(mModels.begin(), mModels.end(), [&importData] (const auto& pair) {
-        return importData.path == pair.second->path;
+        return importData.path == pair.second.path;
     }) != mModels.end();
 
     if (loaded)
@@ -266,10 +266,11 @@ void Renderer::importModel(const ModelImportData& importData)
         return;
     }
 
-    SNS::publishMessage(Topic::Type::Renderer,
-                        Message::loadModel(importData.path,
-                                           importData.normalize,
-                                           importData.flipUVs));
+    auto future = std::async(std::launch::async, [importData] () {
+        return ModelLoader(importData);
+    });
+
+    mModelDataFutures.push_back(std::move(future));
 }
 
 void Renderer::importEnvMap(const std::string& path)
@@ -333,19 +334,6 @@ void Renderer::resize(uint32_t width, uint32_t height)
     updateForwardShadingDs();
     createBloomMipChainDs();
     createPostProcessingDs();
-}
-
-void Renderer::notify(const Message &message)
-{
-    if (const auto m = message.getIf<Message::ModelLoaded>())
-    {
-        auto model = m->model;
-
-        mModels.emplace(model->id, model);
-
-        model->createMaterialsUBO();
-        model->createTextureDescriptorSets(mSingleImageDsLayout);
-    }
 }
 
 void Renderer::addDirLight(uuid32_t id, const DirectionalLight &light)
@@ -489,10 +477,10 @@ void Renderer::executeDirShadowRenderpass(VkCommandBuffer commandBuffer)
             {
                 // cull front face to prevent peter panning
                 pfnCmdSetCullModeEXT(commandBuffer, VK_CULL_MODE_FRONT_BIT);
-                pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+                pfnCmdSetFrontFaceEXT(commandBuffer, model.frontFace);
 
-                for (const auto& mesh : model->meshes)
-                    if (model->drawOpaque(mesh))
+                for (const auto& mesh : model.meshes)
+                    if (model.drawOpaque(mesh))
                         mesh.mesh.render(commandBuffer);
             }
 
@@ -584,10 +572,10 @@ void Renderer::executePointShadowRenderpass(VkCommandBuffer commandBuffer)
             {
                 // cull front face to prevent peter panning
                 pfnCmdSetCullModeEXT(commandBuffer, VK_CULL_MODE_FRONT_BIT);
-                pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+                pfnCmdSetFrontFaceEXT(commandBuffer, model.frontFace);
 
-                for (const auto& mesh : model->meshes)
-                    if (model->drawOpaque(mesh))
+                for (const auto& mesh : model.meshes)
+                    if (model.drawOpaque(mesh))
                         mesh.mesh.render(commandBuffer);
             }
 
@@ -657,10 +645,10 @@ void Renderer::executeSpotShadowRenderpass(VkCommandBuffer commandBuffer)
         {
             // cull front face to prevent peter panning
             pfnCmdSetCullModeEXT(commandBuffer, VK_CULL_MODE_FRONT_BIT);
-            pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+            pfnCmdSetFrontFaceEXT(commandBuffer, model.frontFace);
 
-            for (const auto& mesh : model->meshes)
-                if (model->drawOpaque(mesh))
+            for (const auto& mesh : model.meshes)
+                if (model.drawOpaque(mesh))
                     mesh.mesh.render(commandBuffer);
         }
 
@@ -699,12 +687,12 @@ void Renderer::executePrepass(VkCommandBuffer commandBuffer)
 
     for (const auto& [id, model] : mModels)
     {
-        pfnCmdSetCullModeEXT(commandBuffer, model->cullMode);
-        pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+        pfnCmdSetCullModeEXT(commandBuffer, model.cullMode);
+        pfnCmdSetFrontFaceEXT(commandBuffer, model.frontFace);
 
-        for (const auto& mesh : model->meshes)
+        for (const auto& mesh : model.meshes)
         {
-            if (model->drawOpaque(mesh))
+            if (model.drawOpaque(mesh))
                 mesh.mesh.render(commandBuffer);
         }
     }
@@ -804,12 +792,12 @@ void Renderer::executeSsaoResourcesRenderpass(VkCommandBuffer commandBuffer)
 
     for (const auto& [id, model] : mModels)
     {
-        pfnCmdSetCullModeEXT(commandBuffer, model->cullMode);
-        pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+        pfnCmdSetCullModeEXT(commandBuffer, model.cullMode);
+        pfnCmdSetFrontFaceEXT(commandBuffer, model.frontFace);
 
-        for (const auto& mesh : model->meshes)
+        for (const auto& mesh : model.meshes)
         {
-            if (model->drawOpaque(mesh))
+            if (model.drawOpaque(mesh))
                 mesh.mesh.render(commandBuffer);
         }
     }
@@ -1097,17 +1085,17 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
 
         for (const auto& [id, model] : mModels)
         {
-            pfnCmdSetCullModeEXT(commandBuffer, model->cullMode);
-            pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+            pfnCmdSetCullModeEXT(commandBuffer, model.cullMode);
+            pfnCmdSetFrontFaceEXT(commandBuffer, model.frontFace);
 
-            for (const auto& mesh : model->meshes)
+            for (const auto& mesh : model.meshes)
             {
-                if (model->drawOpaque(mesh))
+                if (model.drawOpaque(mesh))
                 {
                     uint32_t materialIndex = mesh.materialIndex;
 
-                    model->bindMaterialUBO(commandBuffer, mOpaqueForwardPassPipeline, materialIndex, 3);
-                    model->bindTextures(commandBuffer, mOpaqueForwardPassPipeline, materialIndex, 3);
+                    model.bindMaterialUBO(commandBuffer, mOpaqueForwardPassPipeline, materialIndex, 3);
+                    model.bindTextures(commandBuffer, mOpaqueForwardPassPipeline, materialIndex, 3);
 
                     mesh.mesh.render(commandBuffer);
                 }
@@ -1142,8 +1130,8 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
                                sizeof(glm::mat4), sizeof(glm::mat4),
                                glm::value_ptr(transparentMesh.model));
 
-            mModels.at(transparentMesh.modelID)->bindMaterialUBO(commandBuffer, mTransparentForwardPassPipeline, transparentMesh.mesh->materialIndex, 3);
-            mModels.at(transparentMesh.modelID)->bindTextures(commandBuffer, mTransparentForwardPassPipeline, transparentMesh.mesh->materialIndex, 3);
+            mModels.at(transparentMesh.modelID).bindMaterialUBO(commandBuffer, mTransparentForwardPassPipeline, transparentMesh.mesh->materialIndex, 3);
+            mModels.at(transparentMesh.modelID).bindTextures(commandBuffer, mTransparentForwardPassPipeline, transparentMesh.mesh->materialIndex, 3);
 
             VkDeviceSize offset = 0;
             VkBuffer vertexBuffer = transparentMesh.mesh->mesh.getVertexBuffer();
@@ -1462,11 +1450,11 @@ void Renderer::executeWireframeRenderpass(VkCommandBuffer commandBuffer)
 
     for (const auto& [id, model] : mModels)
     {
-        pfnCmdSetCullModeEXT(commandBuffer, model->cullMode);
-        pfnCmdSetFrontFaceEXT(commandBuffer, model->frontFace);
+        pfnCmdSetCullModeEXT(commandBuffer, model.cullMode);
+        pfnCmdSetFrontFaceEXT(commandBuffer, model.frontFace);
 
-        for (const auto& mesh : model->meshes)
-            if (model->drawOpaque(mesh))
+        for (const auto& mesh : model.meshes)
+            if (model.drawOpaque(mesh))
                 mesh.mesh.render(commandBuffer);
     }
 
@@ -1474,8 +1462,6 @@ void Renderer::executeWireframeRenderpass(VkCommandBuffer commandBuffer)
     endDebugLabel(commandBuffer);
 }
 
-// for the grid to work correctly with transparent geometry,
-// you need to apply the linked list algorithm to it.
 void Renderer::executeGridRenderpass(VkCommandBuffer commandBuffer)
 {
     VkRenderPassBeginInfo renderPassBeginInfo {
@@ -1624,9 +1610,9 @@ void Renderer::sortTransparentMeshes()
         if (modelID.has_value() && !node->meshIDs().empty())
         {
             uuid32_t meshID = node->meshIDs().front();
-            Mesh* mesh = mModels.at(*modelID)->getMesh(meshID);
+            Mesh* mesh = mModels.at(*modelID).getMesh(meshID);
 
-            if (mModels.at(*modelID)->drawOpaque(*mesh))
+            if (mModels.at(*modelID).drawOpaque(*mesh))
                 continue;
 
             glm::vec4 center = glm::vec4(mesh->center, 1.f);
@@ -1664,6 +1650,92 @@ void Renderer::bindTexture(VkCommandBuffer commandBuffer,
                             1, &writeDescriptorSet);
 }
 
+void Renderer::updateImports()
+{
+    for (auto itr = mModelDataFutures.begin(); itr != mModelDataFutures.end();)
+    {
+        if (itr->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+        {
+            ModelLoader modelData = itr->get();
+            addModel(modelData);
+            itr = mModelDataFutures.erase(itr);
+        }
+        else
+            ++itr;
+    }
+}
+
+void Renderer::addModel(ModelLoader &modelData)
+{
+    Model model(mRenderDevice);
+
+    model.id = UUIDRegistry::generateModelID();
+    model.name = modelData.path.filename().string();
+    model.path = modelData.path;
+    model.root = std::move(modelData.root);
+    model.materials = std::move(modelData.materials);
+    model.materialNames = std::move(modelData.materialNames);
+
+    addMeshes(model, modelData);
+    addTextures(model, modelData);
+
+    model.createMaterialsUBO();
+    model.createTextureDescriptorSets(mSingleImageDsLayout);
+
+    mModels.emplace(model.id, std::move(model));
+}
+
+void Renderer::addMeshes(Model &model, ModelLoader &modelData)
+{
+    for (const auto& meshData : modelData.meshes)
+    {
+        Mesh mesh {
+            .meshID = UUIDRegistry::generateMeshID(),
+            .name = meshData.name,
+            .mesh {mRenderDevice, meshData.vertices, meshData.indices},
+            .materialIndex = meshData.materialIndex,
+            .center = meshData.center
+        };
+
+        model.meshes.push_back(std::move(mesh));
+    }
+}
+
+void Renderer::addTextures(Model &model, ModelLoader &modelData)
+{
+    for (const auto& imageData : modelData.images)
+    {
+        TextureSpecification textureSpecification {
+            .format = VK_FORMAT_R8G8B8A8_UNORM,
+            .width = static_cast<uint32_t>(imageData.width),
+            .height = static_cast<uint32_t>(imageData.height),
+            .layerCount = 1,
+            .imageViewType = VK_IMAGE_VIEW_TYPE_2D,
+            .imageUsage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_SAMPLED_BIT,
+            .imageAspect = VK_IMAGE_ASPECT_COLOR_BIT,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .magFilter = imageData.magFilter,
+            .minFilter = imageData.minFilter,
+            .wrapS = imageData.wrapModeS,
+            .wrapT = imageData.wrapModeT,
+            .wrapR = imageData.wrapModeT,
+            .generateMipMaps = true
+        };
+
+        VulkanTexture texture(mRenderDevice, textureSpecification, imageData.imageData.get());
+        texture.setDebugName(imageData.name);
+
+        Texture tex {
+            .name = imageData.name,
+            .vulkanTexture = std::move(texture)
+        };
+
+        model.textures.push_back(std::move(tex));
+    }
+}
+
 void Renderer::updateSceneGraph()
 {
     updateGraphNode(mSceneGraph->root()->type(), mSceneGraph->root());
@@ -1695,10 +1767,12 @@ void Renderer::updateMeshNode(GraphNode *node)
 {
     if (node->updateGlobalTransform())
     {
+        Model& model = mModels.at(node->modelID().value());
+
         for (uint32_t meshID : node->meshIDs())
         {
-            Message message = Message::meshInstanceUpdate(meshID, node->id(), node->globalTransform());
-            SNS::publishMessage(Topic::Type::SceneGraph, message);
+            InstancedMesh& mesh = model.getMesh(meshID)->mesh;
+            mesh.updateInstance(node->id(), node->globalTransform());
         }
     }
 }

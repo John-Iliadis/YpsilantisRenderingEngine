@@ -4,9 +4,17 @@
 
 #include "model.hpp"
 
+Model::Model()
+    : mRenderDevice()
+    , id()
+    , cullMode()
+    , frontFace()
+{
+}
+
 Model::Model(const VulkanRenderDevice& renderDevice)
-    : SubscriberSNS({Topic::Type::SceneGraph})
-    , mRenderDevice(renderDevice)
+    : mRenderDevice(&renderDevice)
+    , id()
     , cullMode(VK_CULL_MODE_BACK_BIT)
     , frontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
 {
@@ -16,36 +24,49 @@ Model::~Model()
 {
     for (auto& texture : textures)
     {
-        vkFreeDescriptorSets(mRenderDevice.device,
-                             mRenderDevice.descriptorPool,
+        vkFreeDescriptorSets(mRenderDevice->device,
+                             mRenderDevice->descriptorPool,
                              1, &texture.descriptorSet);
     }
 }
 
+Model::Model(Model &&other) noexcept
+    : Model()
+{
+    swap(other);
+}
+
+Model &Model::operator=(Model &&other) noexcept
+{
+    if (this != &other)
+        swap(other);
+    return *this;
+}
+
 void Model::createMaterialsUBO()
 {
-    mMaterialsUBO = VulkanBuffer(mRenderDevice,
+    mMaterialsUBO = VulkanBuffer(*mRenderDevice,
                                  sizeof(Material) * materials.size(),
                                  BufferType::Uniform,
                                  MemoryType::HostCoherent,
                                  materials.data());
     mMaterialsUBO.setDebugName(name + " Material UBO");
 
-    readBufferToVector<Material>(mRenderDevice.device, mMaterialsUBO.getMemory(), sizeof(Material));
+    readBufferToVector<Material>(mRenderDevice->device, mMaterialsUBO.getMemory(), sizeof(Material));
 }
 
 void Model::createTextureDescriptorSets(VkDescriptorSetLayout dsLayout)
 {
     VkDescriptorSetAllocateInfo dsAllocateInfo {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = mRenderDevice.descriptorPool,
+        .descriptorPool = mRenderDevice->descriptorPool,
         .descriptorSetCount = 1,
         .pSetLayouts = &dsLayout
     };
 
     for (auto& texture : textures)
     {
-        VkResult result = vkAllocateDescriptorSets(mRenderDevice.device, &dsAllocateInfo, &texture.descriptorSet);
+        VkResult result = vkAllocateDescriptorSets(mRenderDevice->device, &dsAllocateInfo, &texture.descriptorSet);
         vulkanCheck(result, "Failed to allocate texture descriptor set.");
 
         VkDescriptorImageInfo imageInfo {
@@ -64,7 +85,7 @@ void Model::createTextureDescriptorSets(VkDescriptorSetLayout dsLayout)
             .pImageInfo = &imageInfo
         };
 
-        vkUpdateDescriptorSets(mRenderDevice.device, 1, &dsWrite, 0, nullptr);
+        vkUpdateDescriptorSets(mRenderDevice->device, 1, &dsWrite, 0, nullptr);
     }
 }
 
@@ -77,28 +98,25 @@ Mesh* Model::getMesh(uuid32_t meshID)
     return nullptr;
 }
 
+void Model::swap(Model &other)
+{
+    std::swap(id, other.id);
+    std::swap(name, other.name);
+    std::swap(path, other.path);
+    std::swap(root, other.root);
+    std::swap(textures, other.textures);
+    std::swap(materials, other.materials);
+    std::swap(materialNames, other.materialNames);
+    std::swap(meshes, other.meshes);
+    std::swap(cullMode, other.cullMode);
+    std::swap(frontFace, other.frontFace);
+    std::swap(mRenderDevice, other.mRenderDevice);
+    std::swap(mMaterialsUBO, other.mMaterialsUBO);
+}
+
 void Model::updateMaterial(index_t matIndex)
 {
     mMaterialsUBO.mapBufferMemory(matIndex * sizeof(Material), sizeof(Material), &materials.at(matIndex));
-}
-
-void Model::notify(const Message &message)
-{
-    if (const auto m = message.getIf<Message::MeshInstanceUpdate>())
-    {
-        if (auto mesh = getMesh(m->meshID))
-        {
-            mesh->mesh.updateInstance(m->objectID, m->transformation);
-        }
-    }
-
-    if (const auto m = message.getIf<Message::RemoveMeshInstance>())
-    {
-        if (auto mesh = getMesh(m->meshID))
-        {
-            mesh->mesh.removeInstance(m->objectID);
-        }
-    }
 }
 
 void Model::bindMaterialUBO(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t materialIndex, uint32_t matDsIndex) const
@@ -205,7 +223,7 @@ void Model::bindTextures(VkCommandBuffer commandBuffer, VkPipelineLayout pipelin
                             descriptorWrites.data());
 }
 
-bool Model::drawOpaque(const Mesh &mesh)
+bool Model::drawOpaque(const Mesh &mesh) const
 {
     const Material& mat = materials.at(mesh.materialIndex);
     return mat.alphaMode == AlphaMode::Opaque && mat.baseColorFactor.a == 1.f;

@@ -6,7 +6,6 @@
 #define VULKANRENDERINGENGINE_MODEL_HPP
 
 #include <glm/glm.hpp>
-#include "../app/simple_notification_service.hpp"
 #include "../app/uuid_registry.hpp"
 #include "../vk/vulkan_texture.hpp"
 #include "../vk/vulkan_descriptor.hpp"
@@ -39,7 +38,7 @@ struct Texture
     VkDescriptorSet descriptorSet;
 };
 
-class Model : public SubscriberSNS
+class Model
 {
 public:
     uuid32_t id;
@@ -56,12 +55,17 @@ public:
     VkFrontFace frontFace;
 
 public:
+    Model();
     Model(const VulkanRenderDevice& renderDevice);
     ~Model();
 
-    void updateMaterial(index_t matIndex);
+    Model(const Model&) = delete;
+    Model& operator=(const Model&) = delete;
 
-    void notify(const Message &message) override;
+    Model(Model&& other) noexcept;
+    Model& operator=(Model&& other) noexcept;
+
+    void updateMaterial(index_t matIndex);
 
     void createMaterialsUBO();
     void createTextureDescriptorSets(VkDescriptorSetLayout dsLayout);
@@ -69,11 +73,12 @@ public:
     void bindMaterialUBO(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t materialIndex, uint32_t matDsIndex) const;
     void bindTextures(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t materialIndex, uint32_t matDsIndex) const;
 
-    bool drawOpaque(const Mesh& mesh);
+    bool drawOpaque(const Mesh& mesh) const;
     Mesh* getMesh(uuid32_t meshID);
+    void swap(Model& other);
 
 private:
-    const VulkanRenderDevice& mRenderDevice;
+    const VulkanRenderDevice* mRenderDevice;
     VulkanBuffer mMaterialsUBO;
 };
 
