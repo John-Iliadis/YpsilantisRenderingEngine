@@ -27,18 +27,6 @@ InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice,
 {
 }
 
-InstancedMesh::InstancedMesh(const VulkanRenderDevice &renderDevice,
-                             VulkanBuffer&& vertexBuffer,
-                             VulkanBuffer&& indexBuffer)
-    : mRenderDevice(&renderDevice)
-    , mVertexBuffer(std::move(vertexBuffer))
-    , mIndexBuffer(std::move(indexBuffer))
-    , mInstanceBuffer(renderDevice, sInitialInstanceBufferCapacity * sInstanceSize, BufferType::Vertex, MemoryType::HostCoherent)
-    , mInstanceCount()
-    , mInstanceBufferCapacity(sInitialInstanceBufferCapacity)
-{
-}
-
 void InstancedMesh::addInstance(uuid32_t id)
 {
     checkResize();

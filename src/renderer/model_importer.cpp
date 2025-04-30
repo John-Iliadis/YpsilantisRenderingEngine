@@ -109,8 +109,8 @@ void ModelLoader::loadMeshes(const aiScene& aiScene)
 
         MeshData meshData {
             .name = aiMesh.mName.data,
-            .vertexStagingBuffer = loadVertexData(aiMesh),
-            .indexStagingBuffer = loadIndexData(aiMesh),
+            .vertices = loadMeshVertices(aiMesh),
+            .indices = loadMeshIndices(aiMesh),
             .materialIndex = aiMesh.mMaterialIndex,
             .center = glm::make_vec3(&center.x)
         };
@@ -226,7 +226,7 @@ glm::mat4 ModelLoader::assimpToGlmMat4(const aiMatrix4x4 &mat)
     };
 }
 
-VulkanBuffer ModelLoader::loadVertexData(const aiMesh &aiMesh)
+std::vector<Vertex> ModelLoader::loadMeshVertices(const aiMesh &aiMesh)
 {
     std::vector<Vertex> vertices(aiMesh.mNumVertices);
 
@@ -254,14 +254,10 @@ VulkanBuffer ModelLoader::loadVertexData(const aiMesh &aiMesh)
         }
     }
 
-    return {mRenderDevice,
-            vertices.size() * sizeof(Vertex),
-            BufferType::Staging,
-            MemoryType::HostCached,
-            vertices.data()};
+    return vertices;
 }
 
-VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
+std::vector<uint32_t> ModelLoader::loadMeshIndices(const aiMesh &aiMesh)
 {
     std::vector<uint32_t> indices;
 
@@ -279,11 +275,7 @@ VulkanBuffer ModelLoader::loadIndexData(const aiMesh &aiMesh)
         }
     }
 
-    return {mRenderDevice,
-            indices.size() * sizeof(uint32_t),
-            BufferType::Staging,
-            MemoryType::HostCached,
-            indices.data()};
+    return indices;
 }
 
 std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
@@ -300,16 +292,13 @@ std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
         return std::nullopt;
     }
 
-    int32_t texWidth = loadedImage.width();
-    int32_t texHeight = loadedImage.height();
-
-    VkDeviceSize deviceSize = texWidth * texHeight * formatSize(loadedImage.format());
+    uint8_t* data = reinterpret_cast<uint8_t*>(loadedImage.getOrphanedData());
 
     return ImageData {
         .width = loadedImage.width(),
         .height = loadedImage.height(),
         .name = texPath.filename().string(),
-        .stagingBuffer {mRenderDevice, deviceSize, BufferType::Staging, MemoryType::HostCached, loadedImage.data()},
+        .imageData {data, [] (uint8_t* d) { stbi_image_free(d); }},
         .magFilter = TextureMagFilter::Linear,
         .minFilter = TextureMinFilter::Linear,
         .wrapModeS = TextureWrap::Repeat,
@@ -319,34 +308,41 @@ std::optional<ImageData> ModelLoader::loadImageData(const std::string &texName)
 
 std::optional<ImageData> ModelLoader::loadEmbeddedImageData(const aiScene& aiScene, const std::string& texName)
 {
-    const aiTexture& aiTexture = *aiScene.GetEmbeddedTexture(texName.data());
+    aiTexture& aiTex = const_cast<aiTexture &>(*aiScene.GetEmbeddedTexture(texName.data()));
 
     debugLog("Loading embedded image: " + texName);
 
     ImageData imageData {
-        .name = aiTexture.mFilename.length? aiTexture.mFilename.data : "Embedded Texture",
+        .name = aiTex.mFilename.length? aiTex.mFilename.data : "Embedded Texture",
         .magFilter = TextureMagFilter::Linear,
         .minFilter = TextureMinFilter::Linear,
         .wrapModeS = TextureWrap::Repeat,
         .wrapModeT = TextureWrap::Repeat,
     };
 
-    const void* data = nullptr;
-    if (aiTexture.mHeight == 0)
+    uint8_t* data;
+    std::function<void(uint8_t*)> deleter;
+    if (aiTex.mHeight == 0)
     {
         data = stbi_load_from_memory(
-            reinterpret_cast<uint8_t*>(aiTexture.pcData),
-            aiTexture.mWidth,
+            reinterpret_cast<uint8_t*>(aiTex.pcData),
+            aiTex.mWidth,
             &imageData.width,
             &imageData.height,
             nullptr, 4);
+
+        deleter = [] (uint8_t* d) { stbi_image_free(d); };
     }
     else
     {
-        imageData.width = aiTexture.mWidth;
-        imageData.height = aiTexture.mHeight;
+        imageData.width = aiTex.mWidth;
+        imageData.height = aiTex.mHeight;
 
-        data = aiTexture.pcData;
+        data = reinterpret_cast<uint8_t*>(aiTex.pcData);
+
+        aiTex.pcData = nullptr;
+
+        deleter = [] (uint8_t* d) { delete[] d; };
     }
 
     if (!data)
@@ -355,9 +351,7 @@ std::optional<ImageData> ModelLoader::loadEmbeddedImageData(const aiScene& aiSce
         return std::nullopt;
     }
 
-    VkDeviceSize deviceSize = imageMemoryDeviceSize(imageData.width, imageData.height, VK_FORMAT_R8G8B8A8_UNORM);
-
-    imageData.stagingBuffer = VulkanBuffer(mRenderDevice, deviceSize, BufferType::Staging, MemoryType::HostCached, data);
+    imageData.imageData = {data, deleter};
 
     return imageData;
 }
@@ -462,15 +456,6 @@ float ModelLoader::getRoughnessFactor(const aiMaterial &aiMaterial)
     return defaultRoughnessFactor;
 }
 
-float ModelLoader::getAlphaMask(const aiMaterial &aiMaterial)
-{
-    aiString alphaMode;
-    if (aiMaterial.Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) == AI_SUCCESS)
-        if (!strcmp(alphaMode.C_Str(), "MASK"))
-            return 1.f;
-    return 0.f;
-}
-
 float ModelLoader::getAlphaCutoff(const aiMaterial &aiMaterial)
 {
     static constexpr float defaultAlphaCutoff = 0.5f;
@@ -511,27 +496,16 @@ void ModelImporter::update()
             std::unique_ptr<ModelLoader> modelData = itr->second.get();
 
             if (modelData->success())
+            {
                 addModel(modelData);
-
-            itr = mModelDataFutures.erase(itr);
-        }
-        else
-            ++itr;
-    }
-
-    for (auto itr = mFences.begin(); itr != mFences.end();)
-    {
-        if (vkGetFenceStatus(mRenderDevice.device, itr->second) == VK_SUCCESS)
-        {
-            auto model = mModels.at(itr->first);
-            SNS::publishMessage(Topic::Type::Resource, Message::modelLoaded(model));
+                auto model = mModels.at(itr->first);
+                SNS::publishMessage(Topic::Type::Resource, Message::modelLoaded(model));
+            }
 
             mModelData.erase(itr->first);
             mModels.erase(itr->first);
 
-            vkDestroyFence(mRenderDevice.device, itr->second, nullptr);
-
-            itr = mFences.erase(itr);
+            itr = mModelDataFutures.erase(itr);
         }
         else
             ++itr;
@@ -567,57 +541,21 @@ void ModelImporter::addModel(std::unique_ptr<ModelLoader>& modelData)
     model->materials = std::move(modelData->materials);
     model->materialNames = std::move(modelData->materialNames);
 
-    VkCommandBuffer commandBuffer;
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = mRenderDevice.commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1
-    };
-
-    VkResult result = vkAllocateCommandBuffers(mRenderDevice.device, &commandBufferAllocateInfo, &commandBuffer);
-    vulkanCheck(result, "Failed to allocate command buffer.");
-
-    VkCommandBufferBeginInfo commandBufferBeginInfo {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-    };
-
-    vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
-    addMeshes(commandBuffer, *model, *modelData);
-    addTextures(commandBuffer, *model, *modelData);
-    vkEndCommandBuffer(commandBuffer);
-
-    VkSubmitInfo submitInfo {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &commandBuffer
-    };
-
-    VkFence fence = createFence(mRenderDevice);
-
-    result = vkQueueSubmit(mRenderDevice.graphicsQueue, 1, &submitInfo, fence);
-    vulkanCheck(result, "Failed queue submission.");
+    addMeshes(*model, *modelData);
+    addTextures(*model, *modelData);
 
     mModelData.emplace(model->path, std::move(modelData));
     mModels.emplace(model->path, model);
-    mFences.emplace(model->path, fence);
 }
 
-void ModelImporter::addMeshes(VkCommandBuffer commandBuffer, Model &model, const ModelLoader &modelData)
+void ModelImporter::addMeshes(Model &model, const ModelLoader &modelData)
 {
     for (const auto& meshData : modelData.meshes)
     {
-        VulkanBuffer vertexBuffer(mRenderDevice, meshData.vertexStagingBuffer.getSize(), BufferType::Vertex, MemoryType::Device);
-        VulkanBuffer indexBuffer(mRenderDevice, meshData.indexStagingBuffer.getSize(), BufferType::Index, MemoryType::Device);
-
-        vertexBuffer.copyBuffer(commandBuffer, meshData.vertexStagingBuffer, 0, 0, vertexBuffer.getSize());
-        indexBuffer.copyBuffer(commandBuffer, meshData.indexStagingBuffer, 0, 0, indexBuffer.getSize());
-
         Mesh mesh {
             .meshID = UUIDRegistry::generateMeshID(),
             .name = meshData.name,
-            .mesh {mRenderDevice, std::move(vertexBuffer), std::move(indexBuffer)},
+            .mesh {mRenderDevice, meshData.vertices, meshData.indices},
             .materialIndex = meshData.materialIndex,
             .center = meshData.center
         };
@@ -626,7 +564,7 @@ void ModelImporter::addMeshes(VkCommandBuffer commandBuffer, Model &model, const
     }
 }
 
-void ModelImporter::addTextures(VkCommandBuffer commandBuffer, Model &model, const ModelLoader &modelData)
+void ModelImporter::addTextures(Model &model, const ModelLoader &modelData)
 {
     for (const auto& imageData : modelData.images)
     {
@@ -649,36 +587,7 @@ void ModelImporter::addTextures(VkCommandBuffer commandBuffer, Model &model, con
             .generateMipMaps = true
         };
 
-        VulkanTexture texture(mRenderDevice, textureSpecification);
-
-        texture.transitionLayout(commandBuffer,
-                                 VK_IMAGE_LAYOUT_UNDEFINED,
-                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 0,
-                                 VK_ACCESS_TRANSFER_WRITE_BIT);
-
-        texture.copyBuffer(commandBuffer, imageData.stagingBuffer);
-
-        texture.transitionLayout(commandBuffer,
-                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 VK_ACCESS_TRANSFER_WRITE_BIT,
-                                 VK_ACCESS_TRANSFER_READ_BIT);
-
-        texture.generateMipMaps(commandBuffer);
-
-        texture.transitionLayout(commandBuffer,
-                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                 VK_ACCESS_TRANSFER_READ_BIT,
-                                 VK_ACCESS_SHADER_READ_BIT);
-
+        VulkanTexture texture(mRenderDevice, textureSpecification, imageData.imageData.get());
         texture.setDebugName(imageData.name);
 
         Texture tex {

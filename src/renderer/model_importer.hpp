@@ -29,8 +29,8 @@ struct ModelImportData
 struct MeshData
 {
     std::string name;
-    VulkanBuffer vertexStagingBuffer;
-    VulkanBuffer indexStagingBuffer;
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
     uint32_t materialIndex;
     glm::vec3 center;
 };
@@ -40,7 +40,7 @@ struct ImageData
     int32_t width;
     int32_t height;
     std::string name;
-    VulkanBuffer stagingBuffer;
+    std::unique_ptr<uint8_t, std::function<void(uint8_t*)>> imageData;
     TextureMagFilter magFilter;
     TextureMinFilter minFilter;
     TextureWrap wrapModeS;
@@ -78,8 +78,8 @@ private:
 
     SceneNode createRootSceneNode(const aiScene& aiScene, const aiNode& aiNode);
 
-    VulkanBuffer loadVertexData(const aiMesh& aiMesh);
-    VulkanBuffer loadIndexData(const aiMesh& aiMesh);
+    std::vector<Vertex> loadMeshVertices(const aiMesh& aiMesh);
+    std::vector<uint32_t> loadMeshIndices(const aiMesh& aiMesh);
 
     std::optional<ImageData> loadImageData(const std::string& texName);
     std::optional<ImageData> loadEmbeddedImageData(const aiScene& aiScene, const std::string& texName);
@@ -91,7 +91,6 @@ private:
     glm::vec4 getEmissionFactor(const aiMaterial& aiMaterial);
     float getMetallicFactor(const aiMaterial& aiMaterial);
     float getRoughnessFactor(const aiMaterial& aiMaterial);
-    float getAlphaMask(const aiMaterial& aiMaterial);
     float getAlphaCutoff(const aiMaterial& aiMaterial);
     AlphaMode getAlphaMode(const aiMaterial& aiMaterial);
 
@@ -115,8 +114,8 @@ public:
 
 private:
     void addModel(std::unique_ptr<ModelLoader>& modelData);
-    void addMeshes(VkCommandBuffer commandBuffer, Model& model, const ModelLoader& modelData);
-    void addTextures(VkCommandBuffer commandBuffer, Model& model, const ModelLoader& modelData);
+    void addMeshes(Model& model, const ModelLoader& modelData);
+    void addTextures(Model& model, const ModelLoader& modelData);
 
 public:
     const VulkanRenderDevice& mRenderDevice;
@@ -124,7 +123,6 @@ public:
     std::unordered_map<std::filesystem::path, std::future<std::unique_ptr<ModelLoader>>> mModelDataFutures;
     std::unordered_map<std::filesystem::path, std::unique_ptr<ModelLoader>> mModelData;
     std::unordered_map<std::filesystem::path, std::shared_ptr<Model>> mModels;
-    std::unordered_map<std::filesystem::path, VkFence> mFences;
 };
 
 #endif //VULKANRENDERINGENGINE_MODEL_IMPORTER_HPP
