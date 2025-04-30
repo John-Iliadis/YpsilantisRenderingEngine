@@ -1185,11 +1185,6 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
         }
     };
 
-    float pushConsts[2] {
-        mBrightnessThreshold,
-        mKnee
-    };
-
     beginDebugLabel(commandBuffer, "Capture Bright Pixels Pass");
     vkCmdBeginRenderPass(commandBuffer, &captureBrightPixelsRenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport_);
@@ -1203,8 +1198,8 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
     vkCmdPushConstants(commandBuffer,
                        mCaptureBrightPixelsPipeline,
                        VK_SHADER_STAGE_FRAGMENT_BIT,
-                       0, sizeof(pushConsts),
-                       pushConsts);
+                       0, sizeof(float),
+                       &mThreshold);
     if (mBloomOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -5676,7 +5671,7 @@ void Renderer::createCaptureBrightPixelsPipeline()
                 {
                     .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                     .offset = 0,
-                    .size = sizeof(float) * 2
+                    .size = sizeof(float)
                 }
             }
         },

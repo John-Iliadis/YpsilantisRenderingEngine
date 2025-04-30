@@ -267,8 +267,8 @@ void Editor::rendererPanel()
                          "%.2f",
                          ImGuiSliderFlags_AlwaysClamp);
 
-        ImGui::DragFloat("Brightness Threshold",
-                         &mRenderer.mBrightnessThreshold,
+        ImGui::DragFloat("Threshold",
+                         &mRenderer.mThreshold,
                          0.001f,
                          0.f, FLT_MAX,
                          "%.3f",
@@ -283,9 +283,9 @@ void Editor::rendererPanel()
 
         ImGui::DragFloat("Filter Radius",
                          &mRenderer.mFilterRadius,
-                         0.0001f,
+                         0.01f,
                          0.f, FLT_MAX,
-                         "%.4f",
+                         "%.2f",
                          ImGuiSliderFlags_AlwaysClamp);
     }
 

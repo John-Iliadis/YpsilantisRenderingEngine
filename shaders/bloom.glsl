@@ -52,12 +52,3 @@ vec3 upsample9(sampler2D tex, vec2 uv, vec2 texelSize, float radius)
 
     return result * (1.0f / 16.0f);
 }
-
-vec3 quadraticThreshold(vec3 color, float threshold, vec3 curve)
-{
-    float brightness = max(max(color.r, color.g), color.b);
-    float rq = clamp(brightness - curve.x, 0.0, curve.y);
-    rq = (rq * rq) * curve.z;
-    color *= max(rq, brightness - threshold) / max(brightness, Epsilon);
-    return color;
-}
