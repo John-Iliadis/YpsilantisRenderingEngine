@@ -18,7 +18,8 @@ static constexpr uint32_t sImportFlags
     aiProcess_SortByPType |
     aiProcess_GenUVCoords |
     aiProcess_ValidateDataStructure |
-    aiProcess_PreTransformVertices
+    aiProcess_PreTransformVertices |
+    aiProcess_GenBoundingBoxes
 };
 
 static constexpr int sRemoveComponents
@@ -126,9 +127,6 @@ void ModelLoader::loadMeshes(const aiScene& aiScene)
     {
         const aiMesh& aiMesh = *aiScene.mMeshes[i];
         const aiAABB& aabb = aiMesh.mAABB;
-        const aiMaterial& aiMaterial = *aiScene.mMaterials[aiMesh.mMaterialIndex];
-
-        debugLog(std::format("Loading mesh: {}", aiMesh.mName.data));
 
         auto center = (aabb.mMin + aabb.mMax) / 2.f;
 
