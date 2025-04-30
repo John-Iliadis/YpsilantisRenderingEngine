@@ -106,7 +106,7 @@ void Editor::cameraPanel()
     ImGui::DragFloat("Rotate Sensitivity", mRenderer.mCamera.rotateSensitivity(), 0.1f, -FLT_MAX, FLT_MAX, "%.0f", ImGuiSliderFlags_AlwaysClamp);
 
     if (cameraState == Camera::State::VIEW_MODE || cameraState == Camera::State::EDITOR_MODE)
-        ImGui::DragFloat("Zoom Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::DragFloat("Scroll Zoom Offset", mRenderer.mCamera.zScrollOffset(), 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
     if (cameraState == Camera::State::VIEW_MODE)
         ImGui::DragFloat("Pan Speed", mRenderer.mCamera.panSpeed(), 0.1f, 0.f, FLT_MAX, "%.0f", ImGuiSliderFlags_AlwaysClamp);
@@ -262,23 +262,16 @@ void Editor::rendererPanel()
 
         ImGui::DragFloat("Intensity##Bloom",
                          &mRenderer.mBloomStrength,
-                         0.01f,
+                         0.001f,
                          0.f, FLT_MAX,
-                         "%.2f",
+                         "%.3f",
                          ImGuiSliderFlags_AlwaysClamp);
 
         ImGui::DragFloat("Threshold",
                          &mRenderer.mThreshold,
-                         0.001f,
+                         0.01f,
                          0.f, FLT_MAX,
-                         "%.3f",
-                         ImGuiSliderFlags_AlwaysClamp);
-
-        ImGui::DragFloat("Knee",
-                         &mRenderer.mKnee,
-                         0.001f,
-                         0.f, FLT_MAX,
-                         "%.3f",
+                         "%.2f",
                          ImGuiSliderFlags_AlwaysClamp);
 
         ImGui::DragFloat("Filter Radius",
@@ -721,10 +714,10 @@ void Editor::modelInspector(uuid32_t modelID)
 
             ImGui::SeparatorText("Texture Coordinates");
 
-            if (ImGui::DragFloat2("Tiling", glm::value_ptr(mat.tiling), 0.01f))
+            if (ImGui::DragFloat2("Tiling", glm::value_ptr(mat.tiling), 0.001f))
                 matNeedsUpdate = true;
 
-            if (ImGui::DragFloat2("Offset", glm::value_ptr(mat.offset), 0.01f))
+            if (ImGui::DragFloat2("Offset", glm::value_ptr(mat.offset), 0.001f))
                 matNeedsUpdate = true;
 
             if (matNeedsUpdate)
@@ -929,8 +922,8 @@ void Editor::dirLightInspector(GraphNode *node)
             }
 
             ImGui::SliderFloat("Strength##dirLight", &options.strength, 0.f, 1.f);
-            ImGui::DragFloat("Bias Slope##dirLight", &options.biasSlope, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui::DragFloat("Bias Constant##dirLight", &options.biasConstant, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat("Bias Slope##dirLight", &options.biasSlope, 0.0001f, 0.f, FLT_MAX, "%.4f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat("Bias Constant##dirLight", &options.biasConstant, 0.0001f, 0.f, FLT_MAX, "%.4f", ImGuiSliderFlags_AlwaysClamp);
             ImGui::DragFloat("Depth Scalar##dirLight", &options.zScalar, 0.01f, 0.f, FLT_MAX, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 
             if (options.shadowType == ShadowType::SoftShadow)
@@ -1025,10 +1018,10 @@ void Editor::pointLightInspector(GraphNode *node)
             if (ImGui::SliderFloat("Strength##pointLight", &options.strength, 0.f, 1.f))
                 modifiedShadowData = true;
 
-            if (ImGui::DragFloat("Bias Slope##pointLight", &options.biasSlope, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp))
+            if (ImGui::DragFloat("Bias Slope##pointLight", &options.biasSlope, 0.0001f, 0.f, FLT_MAX, "%.4f", ImGuiSliderFlags_AlwaysClamp))
                 modifiedShadowData = true;
 
-            if (ImGui::DragFloat("Bias Constant##pointLight", &options.biasConstant, 0.000001f, 0.f, FLT_MAX, "%.6f", ImGuiSliderFlags_AlwaysClamp))
+            if (ImGui::DragFloat("Bias Constant##pointLight", &options.biasConstant, 0.0001f, 0.f, FLT_MAX, "%.4f", ImGuiSliderFlags_AlwaysClamp))
                 modifiedShadowData = true;
 
             if (options.shadowType == ShadowType::SoftShadow)

@@ -4627,7 +4627,7 @@ void Renderer::createGizmoIconResources()
 
 void Renderer::createIrradianceMap()
 {
-    uint32_t irradianceMapSize = 64;
+    uint32_t irradianceMapSize = 100;
 
     TextureSpecification specification {
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
@@ -4654,7 +4654,7 @@ void Renderer::createIrradianceMap()
 
 void Renderer::createPrefilterMap()
 {
-    uint32_t prefilterMapSize = 512;
+    uint32_t prefilterMapSize = 1024;
 
     TextureSpecification specification {
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,

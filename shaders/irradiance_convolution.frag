@@ -16,7 +16,7 @@ void main()
     up = normalize(cross(normal, right));
 
     vec3 irradiance = vec3(0.0);
-    float angleDt = 0.05;
+    float angleDt = 0.015;
     float sampleCount = 0.0;
 
     const float twoPi = 2.0 * PI;
