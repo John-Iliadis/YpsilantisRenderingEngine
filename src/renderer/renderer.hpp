@@ -251,6 +251,8 @@ private:
     void updateForwardShadingDs();
     void createPostProcessingDs();
 
+    void importModels();
+
 private:
     const VulkanRenderDevice& mRenderDevice;
     std::shared_ptr<SceneGraph> mSceneGraph;

@@ -133,7 +133,7 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createIrradianceConvolutionFramebuffer();
     createPrefilterFramebuffers();
     createBrdfLutFramebuffer();
-    importEnvMap("../assets/cubemaps/test.hdr");
+    importEnvMap("assets/cubemaps/puresky.hdr");
 
     createBloomMipChain();
     createCaptureBrightPixelsRenderpass();
@@ -156,6 +156,8 @@ Renderer::Renderer(const VulkanRenderDevice& renderDevice, SaveData& saveData)
     createForwardShadingDs();
     updateForwardShadingDs();
     createPostProcessingDs();
+
+    importModels();
 }
 
 Renderer::~Renderer()
@@ -1673,7 +1675,12 @@ void Renderer::updateImports()
         if (itr->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
         {
             ModelLoader modelData = itr->get();
-            addModel(modelData);
+
+            if (modelData.success())
+            {
+                addModel(modelData);
+            }
+
             itr = mModelDataFutures.erase(itr);
         }
         else
@@ -4420,9 +4427,9 @@ void Renderer::createLightBuffers()
 void Renderer::createLightIconTextures()
 {
     stbi_set_flip_vertically_on_load(true);
-    LoadedImage dirLightIcon("../assets/textures/lights/directional3.png");
-    LoadedImage pointLightIcon("../assets/textures/lights/lightbulb4.png");
-    LoadedImage spotLightIcon("../assets/textures/lights/spotlight2.png");
+    LoadedImage dirLightIcon("assets/textures/lights/directional3.png");
+    LoadedImage pointLightIcon("assets/textures/lights/lightbulb4.png");
+    LoadedImage spotLightIcon("assets/textures/lights/spotlight2.png");
     stbi_set_flip_vertically_on_load(false);
 
     assert(dirLightIcon.success());
@@ -4588,11 +4595,11 @@ void Renderer::createLightIconPipeline()
 
 void Renderer::createGizmoIconResources()
 {
-    LoadedImage translationIcon("../assets/textures/gizmo/move.png");
-    LoadedImage rotationIcon("../assets/textures/gizmo/rotate.png");
-    LoadedImage scaleIcon("../assets/textures/gizmo/scale.png");
-    LoadedImage globalIcon("../assets/textures/gizmo/global.png");
-    LoadedImage localIcon("../assets/textures/gizmo/local.png");
+    LoadedImage translationIcon("assets/textures/gizmo/move.png");
+    LoadedImage rotationIcon("assets/textures/gizmo/rotate.png");
+    LoadedImage scaleIcon("assets/textures/gizmo/scale.png");
+    LoadedImage globalIcon("assets/textures/gizmo/global.png");
+    LoadedImage localIcon("assets/textures/gizmo/local.png");
 
     assert(translationIcon.success());
     assert(rotationIcon.success());
@@ -6532,4 +6539,37 @@ void Renderer::createPostProcessingDs()
     dsWrites.at(1).pImageInfo = &bloomImageInfo;
 
     vkUpdateDescriptorSets(mRenderDevice.device, dsWrites.size(), dsWrites.data(), 0, nullptr);
+}
+
+void Renderer::importModels()
+{
+    {
+        ModelImportData importData {
+            .path = "assets/models/damaged_helmet/DamagedHelmet.gltf",
+            .normalize = false,
+            .flipUVs = true
+        };
+
+        importModel(importData);
+    }
+
+    {
+        ModelImportData importData {
+            .path = "assets/models/chess/chess.gltf",
+            .normalize = true,
+            .flipUVs = true
+        };
+
+        importModel(importData);
+    }
+
+    {
+        ModelImportData importData {
+            .path = "assets/models/cerberus/cerberus.gltf",
+            .normalize = true,
+            .flipUVs = true
+        };
+
+        importModel(importData);
+    }
 }

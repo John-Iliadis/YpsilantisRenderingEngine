@@ -37,11 +37,15 @@ static constexpr int sRemovePrimitives
     aiPrimitiveType_LINE
 };
 
+static std::mutex sMutex; // keep due to stb state change
+
 ModelLoader::ModelLoader(const ModelImportData& importData)
     : path(importData.path)
     , root()
     , mSuccess()
 {
+    std::lock_guard<std::mutex> lock(sMutex);
+
     debugLog("Loading model: " + path.string());
 
     Assimp::Importer importer;
