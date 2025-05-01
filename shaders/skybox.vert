@@ -26,8 +26,5 @@ void main()
 
     vTexCoords = position;
 
-    mat4 viewNoTranslation = mat4(mat3(view));
-
-    vec4 viewProjPos = proj * viewNoTranslation * vec4(position, 1.0);
-    gl_Position = viewProjPos.xyww;
+    gl_Position = (proj * mat4(mat3(view)) * vec4(position, 1.0)).xyww;
 }

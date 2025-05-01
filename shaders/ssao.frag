@@ -32,7 +32,7 @@ layout (set = 1, binding = 3) readonly buffer KernelSSBO { vec4 ssaoKernel[]; };
 void main()
 {
     vec4 position = texture(posTexture, vTexCoords);
-    vec3 normal = texture(normalTexture, vTexCoords).xyz;
+    vec3 normal = normalize(texture(normalTexture, vTexCoords).xyz);
     vec3 randomVec = texture(noiseTexture, vTexCoords * screenSize / noiseTextureSize).xyz;
 
     vec3 tangent = normalize(randomVec - normal * dot(randomVec, normal));
@@ -46,8 +46,8 @@ void main()
         vec3 offsetPos = position.xyz + TBN * ssaoKernel[i].xyz * radius;
 
         vec4 offsetPosSS = projection * vec4(offsetPos, 1.0);
-        offsetPosSS.xyz /= offsetPosSS.w;
-        offsetPosSS.xyz = offsetPosSS.xyz * 0.5 + 0.5;
+        offsetPosSS.xy /= offsetPosSS.w;
+        offsetPosSS.xy = offsetPosSS.xy * 0.5 + 0.5;
 
         float currentDepth = texture(posTexture, offsetPosSS.xy).z;
 

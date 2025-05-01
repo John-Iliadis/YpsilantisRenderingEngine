@@ -1150,8 +1150,11 @@ void Renderer::executeForwardRenderpass(VkCommandBuffer commandBuffer)
 
 void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
 {
-    // 1. capture bright pixels
+    // 1. prefilter
     VkClearValue clearValue = {.color = {0.f, 0.f, 0.f, 0.f}};
+
+    uint32_t w = mBloomMipChain.at(0).width;
+    uint32_t h = mBloomMipChain.at(0).height;
 
     VkRenderPassBeginInfo captureBrightPixelsRenderPassBeginInfo {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -1160,8 +1163,8 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
         .renderArea = {
             .offset = {.x = 0, .y = 0},
             .extent = {
-                .width = mBloomMipChain.at(0).width,
-                .height = mBloomMipChain.at(0).height
+                .width = w,
+                .height = h
             }
         },
         .clearValueCount = 1,
@@ -1171,8 +1174,8 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
     VkViewport viewport_ {
         .x = 0.f,
         .y = 0.f,
-        .width = static_cast<float>(mBloomMipChain.at(0).width),
-        .height = static_cast<float>(mBloomMipChain.at(0).height),
+        .width = static_cast<float>(w),
+        .height = static_cast<float>(h),
         .minDepth = 0.f,
         .maxDepth = 1.f
     };
@@ -1180,9 +1183,17 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
     VkRect2D scissor_ {
         .offset = {.x = 0, .y = 0},
         .extent = {
-            .width = mBloomMipChain.at(0).width,
-            .height = mBloomMipChain.at(0).height
+            .width = w,
+            .height = h
         }
+    };
+
+    struct {
+        glm::vec2 texelSize;
+        float threshold;
+    } pushConstants1 {
+        glm::vec2(1.f / static_cast<float>(w), 1.f / static_cast<float>(h)),
+        mThreshold
     };
 
     beginDebugLabel(commandBuffer, "Capture Bright Pixels Pass");
@@ -1198,8 +1209,8 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
     vkCmdPushConstants(commandBuffer,
                        mCaptureBrightPixelsPipeline,
                        VK_SHADER_STAGE_FRAGMENT_BIT,
-                       0, sizeof(float),
-                       &mThreshold);
+                       0, sizeof(pushConstants1),
+                       &pushConstants1);
     if (mBloomOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
     vkCmdEndRenderPass(commandBuffer);
     endDebugLabel(commandBuffer);
@@ -1244,9 +1255,11 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
             }
         };
 
-        std::array<uint32_t, 3> pushConstants {
-            width,
-            height,
+        struct {
+            glm::vec2 texelSize;
+            uint32_t mipLevel;
+        } pushConstants {
+            glm::vec2(1.f / static_cast<float>(width), 1.f / static_cast<float>(height)),
             i
         };
 
@@ -1263,7 +1276,7 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
                            mBloomDownsamplePipeline,
                            VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(pushConstants),
-                           pushConstants.data());
+                           &pushConstants);
         if (mBloomOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
         vkCmdEndRenderPass(commandBuffer);
     }
@@ -1310,10 +1323,12 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
             }
         };
 
-        float pushConstants[3] {
-            mFilterRadius,
-            static_cast<float>(mWidth),
-            static_cast<float>(mHeight)
+        struct {
+            glm::vec2 texelSize;
+            float radius;
+        } pushConstants {
+            glm::vec2(1.f / static_cast<float>(width), 1.f / static_cast<float>(height)),
+            mFilterRadius
         };
 
         vkCmdBeginRenderPass(commandBuffer, &mipChainUpsampleRenderpassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -1329,7 +1344,7 @@ void Renderer::executeBloomRenderpass(VkCommandBuffer commandBuffer)
                            mBloomUpsamplePipeline,
                            VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(pushConstants),
-                           pushConstants);
+                           &pushConstants);
         if (mBloomOn) vkCmdDraw(commandBuffer, 3, 1, 0, 0);
         vkCmdEndRenderPass(commandBuffer);
     }
@@ -5672,7 +5687,7 @@ void Renderer::createCaptureBrightPixelsPipeline()
                 {
                     .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                     .offset = 0,
-                    .size = sizeof(float)
+                    .size = sizeof(float) * 3
                 }
             }
         },

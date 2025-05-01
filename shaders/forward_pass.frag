@@ -83,7 +83,7 @@ uint getClusterIndex(vec3 viewPos)
 
 float dirShadowCalculation(uint index, vec3 viewPos, vec3 normal, vec3 lightDir)
 {
-    float depth = abs(viewPos.z);
+    float depth = -viewPos.z;
 
     uint layer = dirShadowData[index].cascadeCount - 1;
     for (uint i = 0; i < dirShadowData[index].cascadeCount; ++i)
