@@ -360,7 +360,7 @@ void main()
     if (enableIblLighting == 1)
     {
         float dotNV = max(dot(normal, viewVec), 0.0);
-        vec2 brdf = texture(brdfLut, vec2(dotNV, roughness) * vec2(flipX, flipY)).rg;
+        vec2 brdf = texture(brdfLut, vec2(dotNV, roughness)).rg;
         vec3 reflection = prefilteredReflection(R, roughness);
         vec3 irradiance = texture(irradianceMap, normal).rgb;
         vec3 diffuse = irradiance * baseColor.xyz;
