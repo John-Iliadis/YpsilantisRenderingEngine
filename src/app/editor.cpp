@@ -189,7 +189,7 @@ void Editor::rendererPanel()
         ImGui::Checkbox("Render Skybox##IBL", &mRenderer.mRenderSkybox);
         ImGui::Checkbox("Enable IBL Lighting", &mRenderer.mEnableIblLighting);
 
-        ImGui::SliderFloat("Skybox Field of View", &mRenderer.mSkyboxFov, 1.f, 145.f, "%0.f");
+        ImGui::SliderFloat("Skybox FOV", &mRenderer.mSkyboxFov, 1.f, 145.f, "%0.f");
 
         if (ImGui::Button("Import New"))
         {
