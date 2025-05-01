@@ -378,9 +378,9 @@ private:
 
     // Bloom
     static constexpr uint32_t BloomMipChainSize = 6;
-    float mThreshold = 1.2f;
+    float mThreshold = 5.0f;
     float mFilterRadius = 1.f;
-    float mBloomStrength = 1.f;
+    float mBloomStrength = 0.45f;
     std::array<VulkanTexture, BloomMipChainSize> mBloomMipChain;
     VkRenderPass mCaptureBrightPixelsRenderpass{};
     VkFramebuffer mCaptureBrightPixelsFramebuffer{};
@@ -479,7 +479,7 @@ private:
     bool mHDROn = false;
     Tonemap mTonemap;
     float mExposure = 1.f;
-    float mMaxWhite = 4.f;
+    float mMaxWhite = 10.f;
 
     struct GridData
     {

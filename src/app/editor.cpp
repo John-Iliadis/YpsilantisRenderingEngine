@@ -26,8 +26,6 @@ void Editor::update(float dt)
 {
     mDt = dt;
 
-    ImGui::ShowDemoWindow();
-
     countFPS();
     updateFrametimeStats();
     keyboardShortcuts();
@@ -262,9 +260,9 @@ void Editor::rendererPanel()
 
         ImGui::DragFloat("Intensity##Bloom",
                          &mRenderer.mBloomStrength,
-                         0.001f,
+                         0.0001f,
                          0.f, FLT_MAX,
-                         "%.3f",
+                         "%.4f",
                          ImGuiSliderFlags_AlwaysClamp);
 
         ImGui::DragFloat("Threshold",
