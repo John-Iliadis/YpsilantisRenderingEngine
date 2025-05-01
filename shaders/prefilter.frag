@@ -11,7 +11,7 @@ layout (push_constant) uniform PushConstants
 
 layout (set = 0, binding = 1) uniform samplerCube envMap;
 
-const uint sampleCount = 128;
+const uint sampleCount = 32;
 const float PI = 3.1415926536;
 
 float random(vec2 co)

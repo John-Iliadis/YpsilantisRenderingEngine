@@ -72,6 +72,9 @@ const float MAX_REFLECTION_LOD = 5.0;
 
 float D_GGX(float dotNH, float roughness)
 {
+    dotNH = clamp(dotNH, 0.05, 0.995);
+    roughness = clamp(roughness, 0.05, 0.95);
+
     float alpha = roughness * roughness;
     float alpha2 = alpha * alpha;
     float denom = dotNH * dotNH * (alpha2 - 1.0) + 1.0;
