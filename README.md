@@ -1,13 +1,9 @@
 # Vulkan Rendering Engine
 
----
-
 A physically based forward+ rendering engine made with C++ using the Vulkan API.
 
 
 ## Features
-
----
 
 Implementation of a variety of rendering techniques:
 - Physically based rendering using the metallic workflow
@@ -38,14 +34,10 @@ Implementation of an editor:
 
 ## Download
 
----
-
 The built project binaries can be found in the Releases section. Download the zip and run the executable.
 
 
 ## Build
-
----
 
 - To build the project from scratch, use Clion and mingw. The project has not been configured for Visual Studio and MSVC.
 - The Vulkan SDK needs to be installed. All other dependencies are included in the project.
@@ -53,8 +45,6 @@ The built project binaries can be found in the Releases section. Download the zi
 
 
 ## How to Use
-
----
 
 - The built binaries includes some sample models. To render a model, drag and drop it into the "Scene" panel. 
 - The build binaries also include a loaded environment map for image based lighting. For that, click "Render Skybox" and
@@ -95,8 +85,6 @@ Use the following options to manipulate the node hierarchy of the scene graph:
 
 
 ## Preview Photos
-
----
 
 ### PBR + Image Based Lighting
 
