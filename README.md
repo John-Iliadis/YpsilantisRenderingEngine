@@ -90,8 +90,6 @@ Use the following options to manipulate the node hierarchy of the scene graph:
 
 ![](img/IBL2_gizmo_bloom.png)
 
-![](img/IBL1.png)
-
 
 ### Bloom Effect
 
@@ -102,20 +100,8 @@ Use the following options to manipulate the node hierarchy of the scene graph:
 
 ### Screen Space Ambient Occlusion (SSAO)
 
-SSAO On:
-
-![](img/ssao1.png)
-
-SSAO Off:
-
-![](img/ssao2.png)
-
+![](img/ssao.png)
 
 ### Shadow Mapping
 
 ![](img/shadow_mapping.png)
-
-
-### Scene Graph + Gizmos
-
-![](img/scene_graph_gizmo.png)
