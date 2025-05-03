@@ -380,7 +380,7 @@ private:
     static constexpr uint32_t BloomMipChainSize = 6;
     float mThreshold = 5.0f;
     float mFilterRadius = 1.f;
-    float mBloomStrength = 0.45f;
+    float mBloomStrength = 0.5f;
     std::array<VulkanTexture, BloomMipChainSize> mBloomMipChain;
     VkRenderPass mCaptureBrightPixelsRenderpass{};
     VkFramebuffer mCaptureBrightPixelsFramebuffer{};

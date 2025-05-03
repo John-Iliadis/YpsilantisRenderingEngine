@@ -24,7 +24,7 @@ Optimizations techniques:
 - Depth prepass + early depth test
 
 Implementation of an editor:
-- Functional scene graph that contains node creation, drag and drop, copy-pasting, renaming, and deleting.
+- Functional scene graph that contains node creation, drag and drop, copy-pasting, renaming, and deleting
 - Infinite grid
 - Transform gizmos
 - Coordinate system gizmo

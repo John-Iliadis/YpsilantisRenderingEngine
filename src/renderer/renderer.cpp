@@ -6555,7 +6555,7 @@ void Renderer::importModels()
 
     {
         ModelImportData importData {
-            .path = "assets/models/chess/chess.gltf",
+            .path = "assets/models/egyptian_cat_statue/egyptian_cat.gltf",
             .normalize = true,
             .flipUVs = true
         };

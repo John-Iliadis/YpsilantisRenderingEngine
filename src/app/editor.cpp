@@ -282,7 +282,7 @@ void Editor::rendererPanel()
 
     if (ImGui::CollapsingHeader("Wireframe", ImGuiTreeNodeFlags_DefaultOpen))
     {
-        ImGui::Checkbox("Wireframe On", &mRenderer.mWireframeOn);
+        ImGui::Checkbox("Enable##wireframe", &mRenderer.mWireframeOn);
         ImGui::Separator();
 
         ImGui::ColorEdit3("Wireframe Color", glm::value_ptr(mRenderer.mWireframeColor));
