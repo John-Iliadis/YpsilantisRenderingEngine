@@ -6565,7 +6565,7 @@ void Renderer::importModels()
 
     {
         ModelImportData importData {
-            .path = "assets/models/cerberus/cerberus.gltf",
+            .path = "assets/models/skull/skull.gltf",
             .normalize = true,
             .flipUVs = true
         };
