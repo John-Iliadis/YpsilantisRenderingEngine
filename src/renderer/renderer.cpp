@@ -338,22 +338,22 @@ void Renderer::resize(uint32_t width, uint32_t height)
     createPostProcessingDs();
 }
 
-void Renderer::addDirLight(uuid32_t id, const DirectionalLight &light)
+void Renderer::addDirLight(uuid32_t id, const DirectionalLight& light, const DirShadowData& shadowData)
 {
     addLight(mUuidToDirLightIndex, mDirLights, mDirLightSSBO, id, light);
-    addDirShadowMap();
+    addDirShadowMap(shadowData);
 }
 
-void Renderer::addPointLight(uuid32_t id, const PointLight &light)
+void Renderer::addPointLight(uuid32_t id, const PointLight& light, const PointShadowData& shadowData)
 {
     addLight(mUuidToPointLightIndex, mPointLights, mPointLightSSBO, id, light);
-    addPointShadowMap();
+    addPointShadowMap(shadowData);
 }
 
-void Renderer::addSpotLight(uuid32_t id, const SpotLight &light)
+void Renderer::addSpotLight(uuid32_t id, const SpotLight& light, const SpotShadowData& shadowData)
 {
     addLight(mUuidToSpotLightIndex, mSpotLights, mSpotLightSSBO, id, light);
-    addSpotShadowMap();
+    addSpotShadowMap(shadowData);
 }
 
 DirectionalLight &Renderer::getDirLight(uuid32_t id)
@@ -2190,10 +2190,10 @@ void Renderer::createPostProcessingDsLayout()
     mPostProcessingDsLayout = {mRenderDevice, specification};
 }
 
-void Renderer::addDirShadowMap()
+void Renderer::addDirShadowMap(const DirShadowData& shadowData)
 {
     // add resources
-    mDirShadowData.emplace_back();
+    mDirShadowData.emplace_back(shadowData);
     mDirShadowMaps.emplace_back();
     createDirShadowMap(mDirShadowMaps.back(), mDirLights.size() - 1);
 
@@ -2359,10 +2359,10 @@ DirShadowMap &Renderer::getDirShadowMap(uuid32_t id)
     return mDirShadowMaps.at(i);
 }
 
-void Renderer::addPointShadowMap()
+void Renderer::addPointShadowMap(const PointShadowData& shadowData)
 {
     // add resources
-    mPointShadowData.emplace_back();
+    mPointShadowData.emplace_back(shadowData);
     mPointShadowMaps.emplace_back();
     createPointShadowMap(mPointShadowMaps.back(), mPointLights.size() - 1, mPointShadowData.back().resolution);
 
@@ -2503,10 +2503,10 @@ PointShadowMap &Renderer::getPointShadowMap(uuid32_t id)
     return mPointShadowMaps.at(i);
 }
 
-void Renderer::addSpotShadowMap()
+void Renderer::addSpotShadowMap(const SpotShadowData& shadowData)
 {
     // add resources
-    mSpotShadowData.emplace_back();
+    mSpotShadowData.emplace_back(shadowData);
     mSpotShadowMaps.emplace_back();
     createSpotShadowMap(mSpotShadowMaps.back(), mSpotLights.size() - 1, mSpotShadowData.back().resolution);
 

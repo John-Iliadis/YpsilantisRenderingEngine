@@ -43,9 +43,9 @@ public:
     void importEnvMap(const std::string& path);
     void resize(uint32_t width, uint32_t height);
 
-    void addDirLight(uuid32_t id, const DirectionalLight& light);
-    void addPointLight(uuid32_t id, const PointLight& light);
-    void addSpotLight(uuid32_t id, const SpotLight& light);
+    void addDirLight(uuid32_t id, const DirectionalLight& light, const DirShadowData& shadowData);
+    void addPointLight(uuid32_t id, const PointLight& light, const PointShadowData& shadowData);
+    void addSpotLight(uuid32_t id, const SpotLight& light, const SpotShadowData& shadowData);
     DirectionalLight& getDirLight(uuid32_t id);
     PointLight& getPointLight(uuid32_t id);
     SpotLight& getSpotLight(uuid32_t id);
@@ -116,21 +116,21 @@ private:
     void createForwardShadingDsLayout();
     void createPostProcessingDsLayout();
 
-    void addDirShadowMap(); // Dir shadows
+    void addDirShadowMap(const DirShadowData& shadowData); // Dir shadows
     void updateDirShadowsMaps();
     void updateDirShadowMapImage(uuid32_t id);
     void createDirShadowMap(DirShadowMap& shadowMap, index_t index);
     void deleteDirShadowMap(uuid32_t id);
     DirShadowData& getDirShadowData(uuid32_t id);
     DirShadowMap& getDirShadowMap(uuid32_t id);
-    void addPointShadowMap(); // point shadows
+    void addPointShadowMap(const PointShadowData& shadowData); // point shadows
     void updatePointShadowMapData(uuid32_t id);
     void updatePointShadowMapImage(uuid32_t id);
     void createPointShadowMap(PointShadowMap& shadowMap, index_t index, uint32_t resolution);
     void deletePointShadowMap(uuid32_t id);
     PointShadowData& getPointShadowData(uuid32_t id);
     PointShadowMap& getPointShadowMap(uuid32_t id);
-    void addSpotShadowMap(); // spot shadows
+    void addSpotShadowMap(const SpotShadowData& shadowData); // spot shadows
     void updateSpotShadowMapData(uuid32_t id);
     void updateSpotShadowMapImage(uuid32_t id);
     void createSpotShadowMap(SpotShadowMap& shadowMap, index_t index, uint32_t resolution);

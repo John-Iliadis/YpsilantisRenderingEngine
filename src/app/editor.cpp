@@ -509,7 +509,7 @@ void Editor::addDirLight()
                                          nullptr);
 
     mSceneGraph->addNode(lightNode);
-    mRenderer.addDirLight(lightNode->id(), dirLight);
+    mRenderer.addDirLight(lightNode->id(), dirLight, {});
 }
 
 void Editor::addPointLight()
@@ -529,7 +529,7 @@ void Editor::addPointLight()
                                          nullptr);
 
     mSceneGraph->addNode(lightNode);
-    mRenderer.addPointLight(lightNode->id(), pointLight);
+    mRenderer.addPointLight(lightNode->id(), pointLight, {});
 }
 
 void Editor::addSpotLight()
@@ -554,7 +554,7 @@ void Editor::addSpotLight()
                                          nullptr);
 
     mSceneGraph->addNode(lightNode);
-    mRenderer.addSpotLight(lightNode->id(), spotLight);
+    mRenderer.addSpotLight(lightNode->id(), spotLight, {});
 }
 
 void Editor::copyNode(uuid32_t nodeID)
@@ -1946,7 +1946,7 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
                                     node->localR,
                                     node->localS,
                                     node->parent());
-            mRenderer.addDirLight(newNode->id(), mRenderer.getDirLight(node->id()));
+            mRenderer.addDirLight(newNode->id(), mRenderer.getDirLight(node->id()), mRenderer.getDirShadowData(node->id()));
             break;
         }
         case NodeType::SpotLight:
@@ -1957,7 +1957,7 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
                                     node->localR,
                                     node->localS,
                                     node->parent());
-            mRenderer.addSpotLight(newNode->id(), mRenderer.getSpotLight(node->id()));
+            mRenderer.addSpotLight(newNode->id(), mRenderer.getSpotLight(node->id()), mRenderer.getSpotShadowData(node->id()));
             break;
         }
         case NodeType::PointLight:
@@ -1968,7 +1968,7 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
                                     node->localR,
                                     node->localS,
                                     node->parent());
-            mRenderer.addPointLight(newNode->id(), mRenderer.getPointLight(node->id()));
+            mRenderer.addPointLight(newNode->id(), mRenderer.getPointLight(node->id()), mRenderer.getPointShadowData(node->id()));
             break;
         }
         case NodeType::Mesh:
