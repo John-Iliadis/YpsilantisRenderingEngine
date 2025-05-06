@@ -96,11 +96,13 @@ void Application::render()
                                            VK_NULL_HANDLE,
                                            &swapchainImageIndex);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
         recreateSwapchain();
         return;
     }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        check(false, "Failed to acquire swapchain image.");
 
     fillCommandBuffer(swapchainImageIndex);
 
@@ -132,7 +134,12 @@ void Application::render()
     result = vkQueuePresentKHR(mRenderDevice.graphicsQueue, &presentInfo);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    {
         recreateSwapchain();
+        return;
+    }
+    else if (result != VK_SUCCESS)
+        check(false, "Failed to present swapchain image");
 
     vkWaitForFences(mRenderDevice.device, 1, &mSwapchain.inFlightFence, VK_TRUE, UINT64_MAX);
     vkResetCommandBuffer(mSwapchain.commandBuffer, 0);
