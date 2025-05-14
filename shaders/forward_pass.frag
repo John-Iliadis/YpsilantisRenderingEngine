@@ -315,7 +315,8 @@ void main()
     Cluster cluster = clusters[clusterIndex];
     for (uint i = 0; i < cluster.lightCount; ++i)
     {
-        PointLight pointLight = pointLights[cluster.lightIndices[i]];
+        uint clusterLightIndex = cluster.lightIndices[i];
+        PointLight pointLight = pointLights[clusterLightIndex];
 
         vec3 lightToPosVec = pointLight.position.xyz - vFragWorldPos;
         float dist = length(lightToPosVec);
@@ -325,10 +326,10 @@ void main()
         vec3 halfwayVec = normalize(viewVec + lightVec);
         vec3 lightContribution = renderingEquation(lightVec, viewVec, normal, F_0, lightRadiance, baseColor.xyz, metallic, roughness);
 
-        if (pointShadowData[i].shadowType != NoShadow)
+        if (pointShadowData[clusterLightIndex].shadowType != NoShadow)
         {
-            float shadow = pointShadowCalculation(i, normal, lightVec);
-            lightContribution *= 1 - (shadow * pointShadowData[i].strength);
+            float shadow = pointShadowCalculation(clusterLightIndex, normal, lightVec);
+            lightContribution *= 1 - (shadow * pointShadowData[clusterLightIndex].strength);
         }
 
         L_0 += lightContribution;
