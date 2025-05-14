@@ -578,13 +578,28 @@ void Editor::pasteNode(GraphNode *parent)
         if (mCopyFlag == CopyFlags::Copy)
         {
             GraphNode* newNode = copyGraphNode(copiedNode);
+
+            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(newNode->globalTransform()),
+                                                  glm::value_ptr(newNode->localT),
+                                                  glm::value_ptr(newNode->localR),
+                                                  glm::value_ptr(newNode->localS));
+
             newNode->orphan();
+            newNode->markDirty();
+
             parent->addChild(newNode);
         }
 
         if (mCopyFlag == CopyFlags::Cut && !mSceneGraph->hasDescendant(copiedNode, parent))
         {
+            ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(copiedNode->globalTransform()),
+                                                  glm::value_ptr(copiedNode->localT),
+                                                  glm::value_ptr(copiedNode->localR),
+                                                  glm::value_ptr(copiedNode->localS));
+
             copiedNode->orphan();
+            copiedNode->markDirty();
+
             parent->addChild(copiedNode);
         }
     }
@@ -1991,6 +2006,8 @@ GraphNode *Editor::copyGraphNode(GraphNode *node)
         }
         default: assert(false);
     }
+
+    newNode->updateGlobalTransform();
 
     // recursive case
     for (auto child : node->children())

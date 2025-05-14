@@ -36,7 +36,9 @@ public:
               GraphNode* parent,
               std::optional<uuid32_t> modelID = {},
               std::vector<uuid32_t> meshIds = {});
-    virtual ~GraphNode();
+    ~GraphNode();
+
+
 
     void setParent(GraphNode* parent);
     void addChild(GraphNode* child);
