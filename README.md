@@ -1,4 +1,4 @@
-# Vulkan Rendering Engine
+# Ypsilantis Rendering Engine
 
 A physically based forward+ rendering engine made with C++ using the Vulkan API.
 
