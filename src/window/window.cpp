@@ -12,7 +12,7 @@ Window::Window(uint32_t width, uint32_t height)
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    mWindow = glfwCreateWindow(mWidth, mHeight, "VulkanRenderer", nullptr, nullptr);
+    mWindow = glfwCreateWindow(mWidth, mHeight, "Ypsilantis", nullptr, nullptr);
     check(mWindow, "Failed to create GLFW window.");
 
     setHWND(glfwGetWin32Window(mWindow));
